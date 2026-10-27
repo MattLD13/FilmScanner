@@ -1,7 +1,7 @@
 # FRAME
 ## Complete product and engineering specification
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** October 27, 2026  
 **Status:** Implementation specification  
 **Primary hardware:** Pacific Image PrimeFilm PF1800 AFL  
@@ -636,6 +636,73 @@ User approval required before firmware flashing, novel motor commands on real ha
 
 **Done:** A user can complete this full workflow in a running app without the actual scanner.
 
+### M1.5: CyberView Reverse Engineering and Virtual Scanner Emulation
+
+**Initial registration status: PENDING.** Current execution status and evidence belong in `docs/progress.md`.
+
+#### Execution rules
+
+1. Finish M0 and M1, including their existing acceptance tests, before starting M1.5. Do not interrupt, restart, reprioritize, cancel, or redirect currently running M0/M1 work or agents.
+2. Once M1 passes its acceptance tests, automatically begin M1.5 without another user prompt or additional confirmation merely to start the approved research.
+3. Isolate reverse engineering from the production application under separate research directories, using a Git worktree where useful. Preserve the existing scanner simulator; experimental USB emulation must not replace it.
+4. Use one primary reverse engineering agent and at most one optional research agent. Preferred assignments are `gpt-6.1-sol` / `xhigh` and `gpt-6-luna` / `medium`, respectively, subject to the supported models and fallbacks in section11.
+5. Continue M2 independently when resources permit. Reverse engineering must not block image processing or other software features. Preserve every existing milestone and requirement; after M1.5, continue the existing roadmap.
+
+#### 1. Obtain original software
+
+* Locate and download the official Pacific Image PF1800 AFL Windows v1.3 installer from the manufacturer's archive. Record the actual source, redirects, retrieval date, and any identity/version discrepancy rather than relabeling a different package.
+* Preserve the original installer and calculate its SHA256 hash.
+* Extract without executing untrusted legacy components. Inventory executables, DLLs, TWAIN components, driver files, configuration files, firmware candidates, versions, dependencies, and hashes.
+
+#### 2. Reverse engineer CyberView
+
+* Use Reverse Engineer Anything (REA), Ghidra, and other appropriate analysis tools.
+* Identify USB vendor/product IDs if present and investigate initialization and device detection.
+* Trace film transport/positioning, autofocus, calibration, image acquisition/transfer, and any evidenced exposure, gain, or sensor controls.
+* Examine firmware update routines and determine whether firmware data is included.
+* Record functions, addresses, supporting artifacts and analysis-tool versions. Separate verified static findings, observed guest interactions, hypotheses, and unknowns; static evidence alone does not verify physical behavior.
+
+#### 3. Build a virtual USB scanner
+
+* Investigate QEMU USB device emulation and Python USB/IP; select an appropriate isolated environment.
+* Implement a simulated PF1800 AFL device only to the extent supported by recovered evidence: known descriptors/endpoints, a command parser and simulated state machine.
+* Connect virtual operations to the existing FRAME simulator where practical through an optional research adapter, without modifying its production behavior.
+* Do not invent unsupported command formats to make an emulator appear functional. Reject or log unknown operations explicitly.
+
+#### 4. Test original CyberView against the emulator
+
+* Set up an isolated legacy Windows guest with reproducible instructions and a legitimately available licensed installation image.
+* Install original CyberView only inside the isolated environment; attempt virtual scanner recognition and capture all communication.
+* Reconstruct evidenced initialization responses; investigate calibration, film movement, prescan, and acquisition.
+* Return a sample image through original CyberView if sufficient protocol information exists. Prioritize observable, repeatable results; full CyberView scanning through the emulator is a stretch goal.
+
+#### 5. Prepare real hardware integration
+
+* Document the reconstructed USB protocol and provide reusable parsers/debugging tools.
+* Identify unknown commands requiring actual hardware and prepare bounded, safe experiments for scanner arrival.
+* Produce a virtual-versus-physical comparison checklist.
+* Keep every experimental USB command disabled in the production scanner backend until validated on the actual device under the existing safety rules.
+
+#### Required deliverables
+
+1. CyberView binary inventory with versions, hashes, and dependencies.
+2. Reverse engineering report with discovered functions, addresses, and evidence.
+3. USB protocol notebook distinguishing verified behavior from inferred behavior.
+4. Virtual PF1800 AFL emulator to the extent supported by available evidence.
+5. Isolated CyberView testing environment with reproducible setup instructions.
+6. Communication logs showing actual emulator interactions, clearly identifying harness-only versus original CyberView traffic.
+7. Firmware investigation report identifying available files and remaining unknowns.
+8. Real hardware testing plan ready for scanner arrival.
+
+#### Safety requirements
+
+* Do not install untrusted legacy kernel drivers on the main Windows installation.
+* Do not modify the physical scanner, flash firmware, or perform speculative motor operations.
+* Keep experimental work isolated. Successful emulation is never proof of physical hardware compatibility.
+* Do not infer permission for system-wide security changes, host driver installation, paid services, or firmware writing from approval to begin this research.
+
+**Done:** Original CyberView is extracted and analyzed; a meaningful communication map exists; an isolated virtual USB environment is implemented and tested; CyberView detection is attempted with results recorded; successfully emulated operations have repeatable tests; all unknowns and physical hardware dependencies are explicit; and the existing FRAME application/simulator tests still pass. If detection or acquisition requires missing real hardware traces, preserve the partial implementation and document the exact blocker. Missing prerequisites are reported as incomplete work, never as an executed guest experiment or a completed milestone.
+
 ### M2: Image processing and archival reliability
 
 * Import known negative sample images.
@@ -739,6 +806,8 @@ Measure scan speed and image quality rather than imposing unfounded performance 
 **Second pass:** Image engineer handles TIFF pipeline independently; main agent implements persistent developing sessions; interface engineer connects real event streams and mobile views.
 
 **Review pass:** Reviewer tests risky behavior, data durability, timer logic, network access, and errors. Fix evidence based bugs.
+
+**M1.5 after the M0/M1 acceptance gate:** Automatically activate one reverse engineer and at most one optional researcher for isolated CyberView analysis and evidence-based virtual USB experiments. Do not redirect active M0/M1 agents or replace the production simulator. M2 can continue independently; real scanner validation remains M3–M5.
 
 **When hardware arrives:** Activate reverse engineer for CD and USB traces; scanner engineer tests the vendor integration and updates verified capabilities. Do not delay user facing software on firmware research.
 

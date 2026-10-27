@@ -29,6 +29,25 @@ Updated 2026-10-27. FRAME_SPEC.md remains authoritative.
 
 M0 and the local simulated M1 vertical slice are implemented. Physical iPhone device access and scanner validation remain distinct, deferred work.
 
+## M1.5: CyberView Reverse Engineering and Virtual Scanner Emulation
+
+**Status: PENDING.** Registered on 2026-10-27 before starting any M1.5 research. M0/M1 work and completed agent assignments are preserved. Revalidate the existing acceptance gate, then begin automatically without another user prompt.
+
+- [ ] M0/M1 gate: core tests, client checks/build and existing complete simulated browser workflow pass.
+- [ ] Preserve official PF1800 AFL Windows v1.3 installer, source provenance and SHA256; extract without executing legacy code.
+- [ ] Inventory binary versions, hashes, dependencies, TWAIN/driver/configuration files and firmware candidates.
+- [ ] Analyze device detection, USB identity, initialization, transport, positioning, autofocus, calibration, image transfer, evidenced sensor controls and firmware paths using appropriate static tools.
+- [ ] Write an evidence-linked reverse engineering report and USB protocol notebook; separate static facts, actual observed interactions, hypotheses and unknowns.
+- [ ] Evaluate QEMU USB emulation and Python USB/IP; implement only evidenced descriptors/endpoints/commands in an isolated research environment.
+- [ ] Attempt original CyberView device detection inside an isolated licensed legacy Windows guest; retain actual communication logs and reproducible setup instructions.
+- [ ] Test every successfully emulated operation; optional sample-image acquisition is a stretch goal.
+- [ ] Deliver firmware findings, real hardware experiment plan and virtual-versus-physical checklist.
+- [ ] Revalidate existing FRAME application and simulator tests.
+
+Ownership: one primary reverse engineer (`gpt-6.1-sol`, `xhigh`) and one optional researcher (`gpt-6-luna`, `medium`). Configured roles alone are not claims of active execution. Research stays under `research/`; the production scanner backend and simulator remain unchanged. M2 may proceed independently when resources permit.
+
+Do not install legacy kernel drivers on the main Windows system, modify physical hardware, flash firmware or issue speculative motor commands. Report missing vendor software, analysis tools, licensed guest media, protocol evidence or device traces precisely; never manufacture successful detection or hardware compatibility.
+
 ## Executed validation
 
 - `python -m pytest -q`: **41 passed in21.04seconds**. Includes17scanner tests and7independent review regressions, a36-frame scan, jam17/recovery, cancellation, all simulator faults, authenticated HTTP/WebSocket access, originals/contact-sheet corruption rejection, and actual independent service-process restart. Restart preserves an active development timestamp, archived metadata and exact TIFF export bytes.
