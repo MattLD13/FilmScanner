@@ -1,6 +1,7 @@
 import hashlib
 from io import BytesIO
 import json
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageCms, ImageDraw, ImageOps
@@ -9,7 +10,9 @@ from services.api.store import atomic_write
 
 VERSION = 'frame-density-1'
 DEFAULT_EDIT = {'exposure': 0, 'contrast': 1, 'rotation': 0, 'invert': True}
-SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes()
+# A checked-in LittleCMS-generated profile avoids time-stamped ICC headers
+# changing otherwise reproducible exports between application restarts.
+SRGB = Path(__file__).with_name('sRGB.icc').read_bytes()
 
 
 def encode(image, format='TIFF'):

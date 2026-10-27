@@ -507,6 +507,11 @@ def create_app(data_dir=None):
         sheet_path = roll.get('contact_sheet_path')
         if not sheet_path or not store.path(sheet_path).is_file():
             raise HTTPException(409, 'Contact sheet is required')
+        try:
+            with Image.open(store.path(sheet_path)) as sheet_image:
+                sheet_image.verify()
+        except (OSError, ValueError):
+            raise HTTPException(409, 'Contact sheet is corrupt; regenerate it before archiving')
         roll.update(status='archived', archived_at=developing.now(), integrity_verified_at=developing.now())
         store.save('rolls', roll)
         store.backup()

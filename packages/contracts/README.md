@@ -5,6 +5,9 @@ GET /api/state -> {rolls: Roll[], frames: Frame[], development: DevelopmentSessi
 POST /api/rolls {stock,camera?,iso?,format?:'35mm'|'120',film_type?:'color_negative'|'bw_negative'|'positive',notes?,date?,tags?} -> Roll
 POST /api/development {roll_id, recipe_id:'demo-bw-v1', acknowledged:true, temperature:20} -> DevelopmentSession
 POST /api/development/{id}/transition -> session; only after deadline, each physical transition requires confirmation. POST .../abort.
+POST /api/development/{id}/review-clock {confirmed:true,actual_elapsed_seconds:number} -> session after explicit physical-step and clock review.
+POST /api/rolls/{id}/ready -> roll for already-developed film.
+POST /api/rolls/{id}/import {filename?,data_base64:string} -> frame, preserving imported bytes separately from simulated acquisitions.
 POST /api/scanner/connect -> scanner
 POST /api/scans {roll_id,frame_count:36,media:'uncut'|'strip',speed:'fast'|'realtime',fault?:'jam'|'calibration'|'disconnect'|'timeout'|'alignment'|'write',fault_frame?:17} -> ScanSession
 POST /api/scans/{id}/recover or /cancel -> session

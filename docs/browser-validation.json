@@ -1,0 +1,22 @@
+{
+  "result": "passed",
+  "frames": 36,
+  "development": "real elapsed rehearsal with reload",
+  "phone": "390x844 Chromium emulation; completed preview received during acquisition",
+  "reconnect": "authenticated current snapshot",
+  "exports": "TIFF checked",
+  "archive": "integrity verified through UI",
+  "javascript_exceptions": [],
+  "ui_controls": [
+    "create roll",
+    "start developing",
+    "confirm transitions",
+    "connect",
+    "scan",
+    "shuffle",
+    "search stock/date",
+    "edit",
+    "TIFF download",
+    "archive"
+  ]
+}

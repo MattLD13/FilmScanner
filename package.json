@@ -5,6 +5,7 @@
     "start": "python -m uvicorn services.api.main:app --host 127.0.0.1 --port 8765",
     "build": "npm --prefix apps/web run build",
     "test": "python -m pytest -q",
+    "test:e2e": "python tests/e2e/run_workflow.py",
     "lint": "npm --prefix apps/web run lint",
     "setup": "python -m pip install -r requirements.txt && npm --prefix apps/web install"
   }

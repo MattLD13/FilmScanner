@@ -156,6 +156,20 @@ def test_authenticated_websocket_snapshot(tmp_path):
             assert message['data']['scanner']['backend'] == 'simulated'
 
 
+def test_corrupt_contact_sheet_blocks_archive(tmp_path):
+    app = create_app(tmp_path)
+    with TestClient(app) as client:
+        login(client)
+        roll = new_roll(client)
+        ready(client, roll)
+        scan(client, roll, frame_count=1)
+        result = wait_scan(client)
+        assert result['scan']['status'] == 'complete'
+        stored_roll = app.state.store.get('rolls', roll['id'])
+        app.state.store.path(stored_roll['contact_sheet_path']).write_bytes(b'not an image')
+        assert client.post(f'/api/rolls/{roll["id"]}/archive').status_code == 409
+
+
 @pytest.mark.parametrize('fault', ['calibration', 'disconnect', 'timeout', 'alignment', 'write'])
 def test_faults_are_not_false_completion(tmp_path, fault):
     with TestClient(create_app(tmp_path)) as client:
