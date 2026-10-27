@@ -1,0 +1,536 @@
+import asyncio
+import base64
+from contextlib import asynccontextmanager
+import hashlib
+from io import BytesIO
+import json
+import os
+from pathlib import Path
+import secrets
+import time
+import uuid
+
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from PIL import Image
+from pydantic import BaseModel, Field
+
+from services.api import developing
+from services.api.store import Store, atomic_write
+from services.imaging import pipeline
+
+PROJECT = Path(__file__).resolve().parents[2]
+
+
+class RollInput(BaseModel):
+    stock: str = Field(min_length=1, max_length=120)
+    camera: str = Field(default='', max_length=120)
+    iso: int = Field(default=400, ge=1, le=25600)
+    format: str = '35mm'
+    film_type: str = 'color_negative'
+    notes: str = Field(default='', max_length=4000)
+    date: str = ''
+    tags: list[str] = Field(default_factory=list, max_length=30)
+
+
+class ScanInput(BaseModel):
+    roll_id: str
+    frame_count: int = Field(default=36, ge=1, le=72)
+    media: str = 'uncut'
+    speed: str = 'realtime'
+    fault: str | None = None
+    fault_frame: int = Field(default=17, ge=1, le=72)
+
+
+class DevelopInput(BaseModel):
+    roll_id: str
+    recipe_id: str = 'demo-bw-v1'
+    acknowledged: bool = False
+    temperature: float = Field(default=20, ge=0, le=60)
+
+
+class EditInput(BaseModel):
+    exposure: float = Field(default=0, ge=-4, le=4)
+    contrast: float = Field(default=1, ge=.1, le=3)
+    rotation: int = Field(default=0, ge=-360, le=360)
+    invert: bool = True
+
+
+def create_app(data_dir=None):
+    store = Store(Path(data_dir or os.environ.get('FRAME_DATA_DIR', PROJECT / 'data')))
+    clients = set()
+    clock_guard = developing.ClockGuard()
+    token = secrets.token_urlsafe(32)
+    runtime = {'backend': None, 'task': None, 'scan_id': None, 'connected': False, 'cancel_requested': False}
+    # Interrupted work is recoverable and never reported complete after a crash.
+    for item in store.all('scans'):
+        if item['status'] not in ('complete', 'error', 'cancelled', 'interrupted'):
+            item.update(status='interrupted', error='Application stopped during acquisition; reconnect and recover')
+            store.save('scans', item)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        yield
+        task = runtime['task']
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        store.db.close()
+
+    app = FastAPI(title='FRAME', lifespan=lifespan)
+    app.state.store = store
+    app.state.runtime = runtime
+
+    def get(kind, entity_id):
+        try:
+            return store.get(kind, entity_id)
+        except KeyError:
+            raise HTTPException(404, 'Record not found')
+
+    def scanner_info():
+        backend = runtime['backend']
+        return {'model': 'PrimeFilm PF1800 AFL simulator', 'backend': 'simulated',
+                'connected': bool(backend and backend.connected), 'status': backend.status if backend else 'disconnected',
+                'real_hardware_verified': False, 'capabilities': backend.capabilities() if backend else {},
+                'original_precision': '8-bit synthetic fixture', 'dpi': 1800}
+
+    def snapshot():
+        scans = store.all('scans')
+        sessions = []
+        for session in store.all('development'):
+            session = clock_guard.check(session)
+            store.save('development', session)
+            sessions.append(developing.view(session))
+        return {'rolls': store.all('rolls'), 'frames': store.all('frames'),
+                'development': sessions,
+                'scan': next((s for s in reversed(scans) if s['status'] not in ('complete', 'cancelled')), scans[-1] if scans else None),
+                'scanner': scanner_info(), 'recipes': [developing.DEMO_RECIPE], 'server_time': developing.now()}
+
+    async def publish(event):
+        event = dict(event, at=developing.now())
+        # Slow companions never hold up acquisition. Reconnect obtains a snapshot.
+        for queue in list(clients):
+            if queue.full():
+                queue.get_nowait()
+            queue.put_nowait(event)
+
+    @app.middleware('http')
+    async def access(request: Request, call_next):
+        host = request.url.hostname
+        if host not in ('127.0.0.1', 'localhost', '::1', 'testserver'):
+            return JSONResponse({'detail': 'Local host required'}, 403)
+        origin = request.headers.get('origin')
+        expected = f'{request.url.scheme}://{request.headers.get("host")}'
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and origin and origin != expected:
+            return JSONResponse({'detail': 'Same-origin requests required'}, 403)
+        protected = request.url.path.startswith(('/api/', '/media/')) and request.url.path not in ('/api/auth/local', '/api/health')
+        if protected and not secrets.compare_digest(request.cookies.get('frame_session', ''), token):
+            return JSONResponse({'detail': 'Authentication required'}, 401)
+        if request.headers.get('content-length', '0').isdigit() and int(request.headers.get('content-length', '0')) > 24_000_000:
+            return JSONResponse({'detail': 'Request too large'}, 413)
+        response = await call_next(request)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'same-origin'
+        response.headers['X-Frame-Options'] = 'DENY'
+        if protected:
+            response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    @app.post('/api/auth/local')
+    async def authenticate(request: Request):
+        if request.client and request.client.host not in ('127.0.0.1', '::1', 'testclient'):
+            raise HTTPException(403, 'Local pairing only; LAN companions are not enabled')
+        response = JSONResponse({'authenticated': True, 'scope': 'local-simulator'})
+        response.set_cookie('frame_session', token, httponly=True, samesite='strict')
+        return response
+
+    @app.get('/api/health')
+    async def health():
+        return {'status': 'ok', 'mode': 'simulator', 'version': '0.1.0'}
+
+    @app.get('/api/state')
+    async def state():
+        return snapshot()
+
+    @app.websocket('/api/events')
+    async def events(socket: WebSocket):
+        expected = f'http://{socket.headers.get("host")}'
+        if (socket.url.hostname not in ('127.0.0.1', 'localhost', 'testserver') or
+            not secrets.compare_digest(socket.cookies.get('frame_session', ''), token) or
+            socket.headers.get('origin') not in (expected, expected.replace('http:', 'https:'))):
+            await socket.close(code=1008)
+            return
+        await socket.accept()
+        queue = asyncio.Queue(maxsize=32)
+        clients.add(queue)
+        try:
+            await socket.send_json({'type': 'snapshot', 'data': snapshot()})
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), 15)
+                except asyncio.TimeoutError:
+                    event = {'type': 'heartbeat', 'server_time': developing.now()}
+                await socket.send_json(event)
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            clients.discard(queue)
+
+    @app.post('/api/rolls')
+    async def create_roll(body: RollInput):
+        if body.format not in ('35mm', '120') or body.film_type not in ('color_negative', 'bw_negative', 'positive'):
+            raise HTTPException(422, 'Unsupported film format or type')
+        item = body.model_dump() | {'id': uuid.uuid4().hex, 'status': 'awaiting_development', 'created_at': developing.now()}
+        store.save('rolls', item)
+        await publish({'type': 'roll_created', 'roll_id': item['id']})
+        return item
+
+    @app.post('/api/rolls/{roll_id}/ready')
+    async def ready(roll_id: str):
+        roll = get('rolls', roll_id)
+        if any(s['roll_id'] == roll_id and s['status'] not in ('completed', 'aborted') for s in store.all('development')):
+            raise HTTPException(409, 'Finish or abort the development session first')
+        roll['status'] = 'ready_to_scan'
+        return store.save('rolls', roll)
+
+    @app.post('/api/development')
+    async def start_development(body: DevelopInput):
+        roll = get('rolls', body.roll_id)
+        if not body.acknowledged or body.recipe_id != developing.DEMO_RECIPE['id']:
+            raise HTTPException(422, 'Verify recipe source and process settings; demo timings are for water only')
+        if any(s['roll_id'] == roll['id'] and s['status'] not in ('completed', 'aborted') for s in store.all('development')):
+            raise HTTPException(409, 'This roll already has an active development session')
+        if runtime['task'] and not runtime['task'].done() and get('scans', runtime['scan_id'])['roll_id'] == roll['id']:
+            raise HTTPException(409, 'Cannot develop a roll while it is being scanned')
+        session = developing.create_session(roll['id'], developing.DEMO_RECIPE, body.temperature)
+        clock_guard.check(session)
+        roll['status'] = 'developing'
+        store.save('rolls', roll)
+        store.save('development', session)
+        await publish({'type': 'development_started', 'session_id': session['id']})
+        return developing.view(session)
+
+    @app.post('/api/development/{session_id}/transition')
+    async def transition(session_id: str):
+        try:
+            checked = clock_guard.check(get('development', session_id))
+            store.save('development', checked)
+            session = developing.transition(checked)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        store.save('development', session)
+        if session['status'] == 'completed':
+            roll = get('rolls', session['roll_id'])
+            roll['status'] = 'ready_to_scan'
+            store.save('rolls', roll)
+        await publish({'type': 'development_transition', 'session_id': session_id})
+        return developing.view(session)
+
+    @app.post('/api/development/{session_id}/review-clock')
+    async def review_clock(session_id: str, body: dict):
+        session = get('development', session_id)
+        if session['status'] != 'interrupted' or body.get('confirmed') is not True:
+            raise HTTPException(409, 'Explicit clock and physical-step review required')
+        elapsed = body.get('actual_elapsed_seconds')
+        if isinstance(elapsed, bool) or not isinstance(elapsed, (float, int)) or not 0 <= elapsed <= 86_400:
+            raise HTTPException(422, 'Record actual elapsed seconds after reviewing the physical process')
+        stamp = developing.now()
+        session.update(status='running', step_started_at=stamp - round(elapsed * 1000), checkpoint_at=stamp)
+        session.pop('clock_warning', None)
+        session['events'].append({'type': 'confirmed_clock_review', 'at': stamp, 'actual_elapsed_seconds': elapsed})
+        clock_guard.observed.pop(session_id, None)
+        store.save('development', session)
+        return developing.view(session)
+
+    @app.post('/api/development/{session_id}/abort')
+    async def abort(session_id: str):
+        session = get('development', session_id)
+        if session['status'] in ('completed', 'aborted'):
+            raise HTTPException(409, 'Session has already ended')
+        session.update(status='aborted', completed_at=developing.now())
+        session['events'].append({'type': 'aborted', 'at': developing.now()})
+        store.save('development', session)
+        roll = get('rolls', session['roll_id'])
+        roll['status'] = 'awaiting_development'
+        store.save('rolls', roll)
+        return session
+
+    @app.get('/api/dilution')
+    async def dilution(total_ml: float = 500, parts_water: float = 9):
+        try:
+            return developing.dilution(total_ml, parts_water)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+
+    @app.post('/api/scanner/connect')
+    async def connect():
+        if runtime['task'] and not runtime['task'].done():
+            raise HTTPException(409, 'Scanner is busy')
+        from services.scanner_host.backend import SimulatedScannerBackend
+        backend = SimulatedScannerBackend()
+        await backend.connect()
+        runtime.update(backend=backend, connected=True)
+        await publish({'type': 'scanner_connected', 'simulated': True})
+        return scanner_info()
+
+    def frames_for(roll_id):
+        return sorted([f for f in store.all('frames') if f['roll_id'] == roll_id], key=lambda f: f['index'])
+
+    async def scan_worker(session_id, recovery=False):
+        from services.scanner_host.backend import SimulatedScannerBackend
+        session = get('scans', session_id)
+        roll = get('rolls', session['roll_id'])
+        backend = SimulatedScannerBackend(delay=.015 if session['speed'] == 'fast' else .3,
+                                          fault=None if recovery else session['fault'], fault_frame=session['fault_frame'])
+        runtime['backend'] = backend
+        async def on_event(event):
+            await publish(dict(event, type='scanner_event', scan_id=session_id))
+            log = store.path(f"{roll['id']}/logs/scanner_events.jsonl")
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with log.open('a', encoding='utf8') as stream:
+                stream.write(json.dumps(event, default=str) + '\n')
+        backend.subscribe(on_event)
+        try:
+            await backend.connect()
+            runtime['connected'] = True
+            for status, operation in [('initializing', backend.initialize), ('calibrating', backend.calibrate),
+                                      ('loading', lambda: backend.load(session['frame_count'], session['media'])), ('prescanning', backend.prescan)]:
+                session.update(status=status, updated_at=developing.now())
+                store.save('scans', session)
+                result = await operation()
+                if status == 'prescanning':
+                    session['positions'] = result
+            completed = {f['index'] for f in frames_for(roll['id'])}
+            session['completed_frames'] = len(completed)
+            store.save('scans', session)
+            for index in range(1, session['frame_count'] + 1):
+                if index in completed:
+                    continue
+                session.update(status='scanning', current_frame=index, updated_at=developing.now())
+                store.save('scans', session)
+                await publish({'type': 'scan_progress', 'scan': session})
+                await backend.position_frame(index)
+                pixels = await backend.acquire(index)
+                session['status'] = 'saving'
+                store.save('scans', session)
+                frame = pipeline.save_frame(store, roll, index, pixels, uuid.uuid4().hex)
+                store.save('frames', frame)
+                session['completed_frames'] = len(frames_for(roll['id']))
+                session['updated_at'] = developing.now()
+                elapsed = (session['updated_at'] - session['attempt_started_at']) / 1000
+                session['eta_seconds'] = elapsed / max(1, session['completed_frames'] - session['initial_completed']) * (session['frame_count'] - session['completed_frames'])
+                store.save('scans', session)
+                await publish({'type': 'frame_saved', 'frame': frame, 'scan': session})
+            sheet = pipeline.contact_sheet(store, roll['id'], frames_for(roll['id']), uuid.uuid4().hex)
+            roll.update(status='scanned', contact_sheet_path=sheet)
+            store.save('rolls', roll)
+            final_indexes = {f['index'] for f in frames_for(roll['id'])}
+            if final_indexes != set(range(1, session['frame_count'] + 1)):
+                raise ValueError('Saved frame indexes do not match the expected roll')
+            session.update(status='complete', completed_frames=len(final_indexes), error=None, completed_at=developing.now(), eta_seconds=0)
+            store.save('scans', session)
+            await publish({'type': 'scan_complete', 'scan': session})
+        except asyncio.CancelledError:
+            session.update(status='interrupted', error='Application stopped; recover to continue')
+            store.save('scans', session)
+            raise
+        except Exception as exc:
+            cancelled = runtime['cancel_requested']
+            session.update(status='cancelled' if cancelled else 'error', error=str(exc), updated_at=developing.now())
+            store.save('scans', session)
+            roll['status'] = 'ready_to_scan'
+            store.save('rolls', roll)
+            await publish({'type': 'scan_error', 'scan': session})
+
+    @app.post('/api/scans')
+    async def start_scan(body: ScanInput):
+        roll = get('rolls', body.roll_id)
+        if not runtime['backend'] or not runtime['backend'].connected:
+            raise HTTPException(409, 'Connect the simulator first')
+        if runtime['task'] and not runtime['task'].done():
+            raise HTTPException(409, 'Only one scanner command session may run at once')
+        if roll['format'] != '35mm' or body.media not in ('uncut', 'strip'):
+            raise HTTPException(422, 'Simulator scanning supports 35mm uncut rolls and strips only')
+        if body.speed not in ('fast', 'realtime') or body.fault not in (None, 'jam', 'calibration', 'disconnect', 'timeout', 'alignment', 'write'):
+            raise HTTPException(422, 'Invalid simulator settings')
+        if roll['status'] != 'ready_to_scan':
+            raise HTTPException(409, 'Complete development or mark an already-developed roll ready to scan')
+        if any(s['roll_id'] == roll['id'] for s in store.all('scans')):
+            raise HTTPException(409, 'This roll already has a scan session; recover that session')
+        if frames_for(roll['id']):
+            raise HTTPException(409, 'Roll already has frames; recover its existing session instead')
+        stamp = developing.now()
+        session = body.model_dump() | {'id': uuid.uuid4().hex, 'status': 'loading', 'current_frame': 0,
+                 'completed_frames': 0, 'initial_completed': 0, 'error': None, 'started_at': stamp,
+                 'attempt_started_at': stamp, 'updated_at': stamp, 'events': [], 'simulated': True}
+        store.save('scans', session)
+        roll['status'] = 'scanning'
+        store.save('rolls', roll)
+        runtime['scan_id'] = session['id']
+        runtime['cancel_requested'] = False
+        runtime['task'] = asyncio.create_task(scan_worker(session['id']))
+        return session
+
+    @app.post('/api/scans/{session_id}/recover')
+    async def recover(session_id: str):
+        session = get('scans', session_id)
+        if runtime['task'] and not runtime['task'].done():
+            raise HTTPException(409, 'Scanner is busy')
+        if session['status'] not in ('error', 'cancelled', 'interrupted'):
+            raise HTTPException(409, 'Only interrupted or failed scans may be recovered')
+        roll = get('rolls', session['roll_id'])
+        roll_scans = [s for s in store.all('scans') if s['roll_id'] == roll['id']]
+        if roll_scans[-1]['id'] != session_id or roll['status'] == 'archived':
+            raise HTTPException(409, 'This scan session has been superseded or archived')
+        if any(s['roll_id'] == roll['id'] and s['status'] not in ('completed', 'aborted') for s in store.all('development')):
+            raise HTTPException(409, 'Finish or abort development before scanner recovery')
+        for frame in frames_for(session['roll_id']):
+            if not pipeline.verify_frame(store, frame):
+                raise HTTPException(409, 'Existing original failed its integrity check')
+        count = len(frames_for(session['roll_id']))
+        session.update(status='loading', error=None, cancel_requested=False, attempt_started_at=developing.now(), initial_completed=count, completed_frames=count)
+        session['events'].append({'type': 'controlled_recovery', 'at': developing.now(), 'after_frame': session['completed_frames']})
+        store.save('scans', session)
+        roll['status'] = 'scanning'
+        store.save('rolls', roll)
+        runtime['scan_id'] = session_id
+        runtime['cancel_requested'] = False
+        runtime['task'] = asyncio.create_task(scan_worker(session_id, recovery=True))
+        return session
+
+    @app.post('/api/scans/{session_id}/cancel')
+    async def cancel(session_id: str):
+        session = get('scans', session_id)
+        if runtime['scan_id'] != session_id or not runtime['task'] or runtime['task'].done():
+            raise HTTPException(409, 'No active scan to cancel')
+        session['cancel_requested'] = True
+        runtime['cancel_requested'] = True
+        store.save('scans', session)
+        await runtime['backend'].cancel()
+        return get('scans', session_id)
+
+    @app.post('/api/rolls/{roll_id}/import')
+    async def import_image(roll_id: str, body: dict):
+        roll = get('rolls', roll_id)
+        if any(s['roll_id'] == roll_id and s['status'] != 'complete' for s in store.all('scans')):
+            raise HTTPException(409, 'Recover unfinished scanning before importing images')
+        if runtime['task'] and not runtime['task'].done() and runtime['scan_id'] and get('scans', runtime['scan_id'])['roll_id'] == roll_id:
+            raise HTTPException(409, 'Wait for scanning before importing')
+        try:
+            payload = body.get('data_base64', '').split(',')[-1]
+            if len(payload) > 23_000_000:
+                raise ValueError('Maximum image size is 16 MB')
+            data = base64.b64decode(payload, validate=True)
+            with Image.open(BytesIO(data)) as image:
+                if image.width * image.height > 32_000_000 or image.format not in ('JPEG', 'PNG', 'TIFF'):
+                    raise ValueError('Use JPEG, PNG or TIFF up to 32 megapixels')
+                image.verify()
+        except Exception as exc:
+            raise HTTPException(422, f'Invalid image: {exc}')
+        frame = pipeline.save_frame(store, roll, len(frames_for(roll_id)) + 1, None, uuid.uuid4().hex, synthetic=False, original_bytes=data)
+        store.save('frames', frame)
+        roll.update(status='scanned', contact_sheet_path=pipeline.contact_sheet(store, roll_id, frames_for(roll_id), uuid.uuid4().hex))
+        store.save('rolls', roll)
+        await publish({'type': 'frame_imported', 'frame': frame})
+        return frame
+
+    @app.post('/api/frames/{frame_id}/edit')
+    async def edit_frame(frame_id: str, body: EditInput):
+        frame = get('frames', frame_id)
+        if not pipeline.verify_frame(store, frame):
+            raise HTTPException(409, 'Original integrity check failed')
+        roll = get('rolls', frame['roll_id'])
+        revision = uuid.uuid4().hex
+        edit = body.model_dump()
+        image = pipeline.render(store.path(frame['original_path']).read_bytes(), edit, roll['film_type'])
+        image.thumbnail((1280, 1280))
+        path = f"{roll['id']}/previews/{frame_id}-{revision}.jpg"
+        atomic_write(store.path(path), pipeline.encode(image, 'JPEG'))
+        record = {'edit': edit, 'engine': pipeline.VERSION, 'at': developing.now(), 'original_sha256': frame['sha256']}
+        atomic_write(store.path(f"{roll['id']}/edits/{frame_id}-{revision}.json"), json.dumps(record).encode())
+        frame.update(edit=edit, preview_path=path, engine=pipeline.VERSION)
+        store.save('frames', frame)
+        roll['contact_sheet_path'] = pipeline.contact_sheet(store, roll['id'], frames_for(roll['id']), revision)
+        store.save('rolls', roll)
+        return frame
+
+    @app.post('/api/frames/{frame_id}/favorite')
+    async def favorite(frame_id: str):
+        frame = get('frames', frame_id)
+        frame['favorite'] = not frame['favorite']
+        return store.save('frames', frame)
+
+    @app.get('/api/frames/{frame_id}/export')
+    async def export(frame_id: str, format: str = 'jpeg'):
+        frame = get('frames', frame_id)
+        if not pipeline.verify_frame(store, frame):
+            raise HTTPException(409, 'Original integrity check failed')
+        if format == 'original':
+            return FileResponse(store.path(frame['original_path']), filename=f'frame-{frame["index"]}-original' + Path(frame['original_path']).suffix)
+        if format not in ('jpeg', 'tiff'):
+            raise HTTPException(422, 'Choose jpeg, tiff or original')
+        roll = get('rolls', frame['roll_id'])
+        rendered = pipeline.render(store.path(frame['original_path']).read_bytes(), frame['edit'], roll['film_type'])
+        data = pipeline.encode(rendered, 'JPEG' if format == 'jpeg' else 'TIFF')
+        signature = hashlib.sha256(json.dumps(frame['edit'], sort_keys=True).encode() + pipeline.VERSION.encode()).hexdigest()[:16]
+        path = f"{roll['id']}/exports/{frame_id}-{signature}.{format}"
+        if not store.path(path).exists():
+            atomic_write(store.path(path), data)
+        elif store.path(path).read_bytes() != data:
+            raise HTTPException(409, 'Existing export does not match reproducible rendering')
+        export_record = {'id': f'{frame_id}-{signature}-{format}', 'frame_id': frame_id, 'format': format,
+                         'path': path, 'sha256': hashlib.sha256(data).hexdigest(), 'engine': pipeline.VERSION,
+                         'color_space': 'sRGB', 'effective_bits': 8}
+        store.save('exports', export_record)
+        return FileResponse(store.path(path), media_type=f'image/{format}', filename=f'frame-{frame["index"]}.{format}')
+
+    @app.get('/api/rolls/{roll_id}/contact-sheet')
+    async def sheet(roll_id: str):
+        roll = get('rolls', roll_id)
+        if not roll.get('contact_sheet_path'):
+            raise HTTPException(404, 'No contact sheet yet')
+        return FileResponse(store.path(roll['contact_sheet_path']), media_type='image/jpeg')
+
+    @app.post('/api/rolls/{roll_id}/archive')
+    async def archive(roll_id: str):
+        roll = get('rolls', roll_id)
+        frames = frames_for(roll_id)
+        scans = [s for s in store.all('scans') if s['roll_id'] == roll_id]
+        if scans and scans[-1]['status'] != 'complete':
+            raise HTTPException(409, 'Complete or recover scanning before archiving')
+        if not frames or not all(pipeline.verify_frame(store, frame) for frame in frames):
+            raise HTTPException(409, 'Every original must exist and pass integrity checks')
+        sheet_path = roll.get('contact_sheet_path')
+        if not sheet_path or not store.path(sheet_path).is_file():
+            raise HTTPException(409, 'Contact sheet is required')
+        roll.update(status='archived', archived_at=developing.now(), integrity_verified_at=developing.now())
+        store.save('rolls', roll)
+        store.backup()
+        return roll
+
+    @app.get('/media/{relative:path}')
+    async def media(relative: str):
+        try:
+            path = store.path(relative)
+        except ValueError:
+            raise HTTPException(403, 'Invalid path')
+        allowed = {f['preview_path'] for f in store.all('frames')} | {r.get('contact_sheet_path') for r in store.all('rolls')}
+        if relative not in allowed or not path.is_file():
+            raise HTTPException(404, 'Preview not found')
+        return FileResponse(path)
+
+    dist = PROJECT / 'apps' / 'web' / 'dist'
+    if dist.exists():
+        app.mount('/', StaticFiles(directory=dist, html=True), name='web')
+    else:
+        @app.get('/')
+        async def building():
+            return Response('FRAME client is building. Run npm --prefix apps/web run build, then restart.', media_type='text/plain')
+    return app
+
+
+app = create_app()
