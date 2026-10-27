@@ -14,6 +14,7 @@ POST /api/scans/{id}/recover or /cancel -> session
 GET /api/rolls/{id}/contact-sheet -> image
 POST /api/rolls/{id}/archive -> Roll; verifies original hashes and contact sheet
 POST /api/frames/{id}/edit {exposure:0,contrast:1,rotation:0,invert:true} -> Frame
+The `frame-density-2` engine also accepts film_base:[R,G,B] with normalized transmission values(0,1]. Omitting it preserves the stored base for older clients. /api/state advertises imaging_engine. Frames report source_sample_bits separately from measured effective_bits (null for unmeasured imports). Processed TIFF exports contain16-bit samples and embedded rendering/source-precision metadata; JPEG remains8-bit. Output precision never changes the acquired-precision claim.
 GET /api/frames/{id}/export?format=jpeg|tiff|original -> file
 POST /api/frames/{id}/favorite -> Frame
 

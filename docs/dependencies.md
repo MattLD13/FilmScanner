@@ -8,6 +8,7 @@ FRAME uses Python for its local API, scanner simulator, and imaging, and React w
 | --- | --- | --- |
 | Local API | FastAPI served by Uvicorn | Uses the specification's flexible candidate-stack policy; the installed package metadata identifies FastAPI as MIT and Uvicorn as BSD-3-Clause. |
 | Image processing | NumPy and Pillow | Python array and image building blocks aligned with the imaging requirement; installed metadata identifies NumPy's bundled notices as BSD-3-Clause, 0BSD, MIT, Zlib, and CC0-1.0, and Pillow as MIT-CMU. Review upstream notices when redistributing bundled binaries. |
+| High-precision TIFF | tifffile | Version2026.10.15, BSD-3-Clause; preserves unsigned16-bit TIFF samples and writes processed16-bit RGB without an intermediate8-bit image. Optional imagecodecs dependencies are not installed. |
 | Local persistence | SQLite through `sqlite3` | Built into Python; avoids adding a separate ORM or server before the workflow needs one. |
 | Client | React, TypeScript, Vite | Fits the specified responsive React/TypeScript client and conventional local development/build workflow. npm registry metadata reports MIT for React, Apache-2.0 for TypeScript, and MIT for Vite; verify exact transitive licenses when dependencies are locked. |
 

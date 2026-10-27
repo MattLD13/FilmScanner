@@ -26,4 +26,6 @@ Create a roll in Rolls. Develop it using the acknowledged water-only rehearsal (
 
 Timings continue while the page reloads. Keep a reliable physical timer for real chemistry; the bundled demo must never be used for processing film. iOS may suspend web alarms. A clock discontinuity interrupts the session for explicit review instead of silently adjusting chemistry time.
 
+The `frame-density-2` imaging engine preserves supported unsigned16-bit TIFF samples and writes processed16-bit RGB TIFF; JPEG/previews are8-bit. Source sample width, measured acquired precision (unknown for unmeasured imports), and output width are distinct metadata. Unsupported high-precision formats/codecs are rejected with an explanation. Manual film-base values are normalized transmission settings, not measured stock profiles. Existing originals and earlier exports stay unchanged. An already running older service is not automatically restarted; new engine features load at its next normal restart.
+
 The responsive client can be reviewed with a 390px phone viewport. Actual iPhone LAN access is disabled until HTTPS and scoped device pairing are implemented. No router, firewall or security changes are made.

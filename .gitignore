@@ -9,3 +9,11 @@ test-results/
 .env
 .local/
 *.tsbuildinfo
+research/**/.artifacts/
+research/**/.venv/
+research/**/.tools/
+research/**/*.iso
+research/**/*.vdi
+research/**/*.vmdk
+research/**/*.qcow2
+research/**/*.ghidra/

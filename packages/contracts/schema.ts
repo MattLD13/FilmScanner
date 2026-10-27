@@ -8,11 +8,12 @@ export interface Roll {
 }
 export interface EditRecipe {
   exposure: number; contrast: number; rotation: number; invert: boolean;
+  film_base?: number[];
 }
 export interface Frame {
   id: string; roll_id: string; index: number; original_path: string; preview_path: string;
   sha256: string; synthetic: boolean; edit: EditRecipe; favorite: boolean;
-  effective_bits: number; engine: string; provenance: string;
+  effective_bits: number | null; source_sample_bits?: number; engine: string; provenance: string;
 }
 export interface DevelopmentStep {
   name: string; duration_seconds: number; agitation_seconds: number;

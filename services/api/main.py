@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import hashlib
 from io import BytesIO
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -14,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from services.api import developing
 from services.api.store import Store, atomic_write
@@ -55,6 +56,16 @@ class EditInput(BaseModel):
     contrast: float = Field(default=1, ge=.1, le=3)
     rotation: int = Field(default=0, ge=-360, le=360)
     invert: bool = True
+    film_base: list[float] | None = Field(default=None, min_length=3, max_length=3)
+
+    @field_validator('film_base')
+    @classmethod
+    def validate_film_base(cls, value):
+        if value is None:
+            return value
+        if any(not math.isfinite(channel) or not 0 < channel <= 1 for channel in value):
+            raise ValueError('Film base values must be finite, above zero and at most one')
+        return value
 
 
 def create_app(data_dir=None):
@@ -107,6 +118,7 @@ def create_app(data_dir=None):
             sessions.append(developing.view(session))
         return {'rolls': store.all('rolls'), 'frames': store.all('frames'),
                 'development': sessions,
+                'imaging_engine': pipeline.VERSION,
                 'scan': next((s for s in reversed(scans) if s['status'] not in ('complete', 'cancelled')), scans[-1] if scans else None),
                 'scanner': scanner_info(), 'recipes': [developing.DEMO_RECIPE], 'server_time': developing.now()}
 
@@ -431,7 +443,10 @@ def create_app(data_dir=None):
                 image.verify()
         except Exception as exc:
             raise HTTPException(422, f'Invalid image: {exc}')
-        frame = pipeline.save_frame(store, roll, len(frames_for(roll_id)) + 1, None, uuid.uuid4().hex, synthetic=False, original_bytes=data)
+        try:
+            frame = pipeline.save_frame(store, roll, len(frames_for(roll_id)) + 1, None, uuid.uuid4().hex, synthetic=False, original_bytes=data)
+        except (ValueError, OSError) as exc:
+            raise HTTPException(422, f'Cannot preserve processing precision for this image: {exc}')
         store.save('frames', frame)
         roll.update(status='scanned', contact_sheet_path=pipeline.contact_sheet(store, roll_id, frames_for(roll_id), uuid.uuid4().hex))
         store.save('rolls', roll)
@@ -445,7 +460,8 @@ def create_app(data_dir=None):
             raise HTTPException(409, 'Original integrity check failed')
         roll = get('rolls', frame['roll_id'])
         revision = uuid.uuid4().hex
-        edit = body.model_dump()
+        edit = body.model_dump(exclude_none=True)
+        edit.setdefault('film_base', frame['edit'].get('film_base', [1, 1, 1]))
         image = pipeline.render(store.path(frame['original_path']).read_bytes(), edit, roll['film_type'])
         image.thumbnail((1280, 1280))
         path = f"{roll['id']}/previews/{frame_id}-{revision}.jpg"
@@ -474,17 +490,28 @@ def create_app(data_dir=None):
         if format not in ('jpeg', 'tiff'):
             raise HTTPException(422, 'Choose jpeg, tiff or original')
         roll = get('rolls', frame['roll_id'])
-        rendered = pipeline.render(store.path(frame['original_path']).read_bytes(), frame['edit'], roll['film_type'])
-        data = pipeline.encode(rendered, 'JPEG' if format == 'jpeg' else 'TIFF')
+        original = store.path(frame['original_path']).read_bytes()
+        try:
+            if format == 'tiff':
+                data = pipeline.render_tiff16(original, frame['edit'], roll['film_type'], frame.get('effective_bits'))
+            else:
+                data = pipeline.encode(pipeline.render(original, frame['edit'], roll['film_type']), 'JPEG')
+        except (ValueError, OSError) as exc:
+            raise HTTPException(422, f'Image processing failed: {exc}')
         signature = hashlib.sha256(json.dumps(frame['edit'], sort_keys=True).encode() + pipeline.VERSION.encode()).hexdigest()[:16]
         path = f"{roll['id']}/exports/{frame_id}-{signature}.{format}"
-        if not store.path(path).exists():
-            atomic_write(store.path(path), data)
-        elif store.path(path).read_bytes() != data:
-            raise HTTPException(409, 'Existing export does not match reproducible rendering')
+        try:
+            if not store.path(path).exists():
+                atomic_write(store.path(path), data)
+            elif store.path(path).read_bytes() != data:
+                raise HTTPException(409, 'Existing export does not match reproducible rendering')
+        except OSError:
+            raise HTTPException(507, 'Export could not be published; the original and previous exports are unchanged')
         export_record = {'id': f'{frame_id}-{signature}-{format}', 'frame_id': frame_id, 'format': format,
                          'path': path, 'sha256': hashlib.sha256(data).hexdigest(), 'engine': pipeline.VERSION,
-                         'color_space': 'sRGB', 'effective_bits': 8}
+                         'color_space': 'sRGB', 'output_sample_bits': 16 if format == 'tiff' else 8,
+                         'acquired_effective_bits': frame.get('effective_bits'),
+                         'source_sample_bits': pipeline.source_info(original)['sample_bits']}
         store.save('exports', export_record)
         return FileResponse(store.path(path), media_type=f'image/{format}', filename=f'frame-{frame["index"]}.{format}')
 

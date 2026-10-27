@@ -13,6 +13,8 @@ import tempfile
 import time
 import urllib.request
 
+import tifffile
+
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -142,14 +144,20 @@ def run():
                         page.locator('.editor input[type=range]').first.press('ArrowRight')
                     page.locator('.editor input[type=range]').nth(1).press('ArrowRight')
                     page.locator('.editor select').select_option('90')
+                    page.get_by_label('FILM BASE R', exact=True).fill('0.95')
+                    page.get_by_label('FILM BASE G', exact=True).fill('0.9')
+                    page.get_by_label('FILM BASE B', exact=True).fill('0.85')
                     page.get_by_role('button', name='Save edits ↗', exact=True).click()
                     expect(page.get_by_role('button', name='Save edits ↗', exact=True)).to_be_enabled()
                     after_edit = desktop.request.get(URL + '/api/state').json()['frames'][0]
                     assert after_edit['sha256'] == first['sha256']
                     assert after_edit['edit']['rotation'] == 90
+                    assert after_edit['edit']['film_base'] == [.95, .9, .85]
                     with page.expect_download() as downloaded:
                         page.get_by_role('link', name='EXPORT TIFF ↗', exact=True).click()
                     assert downloaded.value.suggested_filename.endswith('.tiff')
+                    with tifffile.TiffFile(downloaded.value.path()) as output:
+                        assert output.pages[0].bitspersample == 16
                     page.get_by_role('button', name='Archive ↗', exact=True).click()
                     expect(page.locator('.roll-detail')).to_contain_text('archived')
                     page.reload()
@@ -165,7 +173,7 @@ def run():
                     assert not errors, errors
                     report = {'result': 'passed', 'frames': 36, 'development': 'real elapsed rehearsal with reload',
                               'phone': '390x844 Chromium emulation; completed preview received during acquisition',
-                              'reconnect': 'authenticated current snapshot', 'exports': 'TIFF checked',
+                              'reconnect': 'authenticated current snapshot', 'exports': '16-bit TIFF inspected',
                               'archive': 'integrity verified through UI', 'javascript_exceptions': errors,
                               'ui_controls': ['create roll', 'start developing', 'confirm transitions', 'connect', 'scan', 'shuffle', 'search stock/date', 'edit', 'TIFF download', 'archive']}
                     (ROOT / 'docs' / 'browser-validation.json').write_text(json.dumps(report, indent=2), encoding='utf8')

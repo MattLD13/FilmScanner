@@ -31,9 +31,9 @@ M0 and the local simulated M1 vertical slice are implemented. Physical iPhone de
 
 ## M1.5: CyberView Reverse Engineering and Virtual Scanner Emulation
 
-**Status: PENDING.** Registered on 2026-10-27 before starting any M1.5 research. M0/M1 work and completed agent assignments are preserved. Revalidate the existing acceptance gate, then begin automatically without another user prompt.
+**Status: IN PROGRESS.** Registered as **PENDING** in commit877fb23 before any M1.5 research. The M0/M1 gate then passed again on2026-10-27:41core tests in21.33seconds, TypeScript checks, production build and the full36-frame browser workflow. M1.5 began automatically under the approved instruction. No existing work or agent was interrupted, cancelled or redirected.
 
-- [ ] M0/M1 gate: core tests, client checks/build and existing complete simulated browser workflow pass.
+- [x] M0/M1 gate: core tests, client checks/build and existing complete simulated browser workflow pass.
 - [ ] Preserve official PF1800 AFL Windows v1.3 installer, source provenance and SHA256; extract without executing legacy code.
 - [ ] Inventory binary versions, hashes, dependencies, TWAIN/driver/configuration files and firmware candidates.
 - [ ] Analyze device detection, USB identity, initialization, transport, positioning, autofocus, calibration, image transfer, evidenced sensor controls and firmware paths using appropriate static tools.
@@ -47,6 +47,31 @@ M0 and the local simulated M1 vertical slice are implemented. Physical iPhone de
 Ownership: one primary reverse engineer (`gpt-6.1-sol`, `xhigh`) and one optional researcher (`gpt-6-luna`, `medium`). Configured roles alone are not claims of active execution. Research stays under `research/`; the production scanner backend and simulator remain unchanged. M2 may proceed independently when resources permit.
 
 Do not install legacy kernel drivers on the main Windows system, modify physical hardware, flash firmware or issue speculative motor commands. Report missing vendor software, analysis tools, licensed guest media, protocol evidence or device traces precisely; never manufacture successful detection or hardware compatibility.
+
+### M1.5 execution evidence so far
+
+- Official manufacturer-linked PF1800AFL package preserved locally:9,898,119bytes, SHA256 `EBCBE798FE577B9461DF22DB3BDE6240185E0553E65EB9B93D139D367F9109CF`. Vendor binaries remain ignored; provenance and inventory reports are tracked.
+- Reviewed source-built ISx and Unshield parsers extracted290payload files without executing vendor software. Embedded CyberView version1.30/build20110526 differs from individual PE resource versions; the report retains those distinctions.
+- One primary reverse engineer (Sol/xhigh) is tracing actualAFL dispatch in Ghidra. One optional researcher (Luna/medium) handles acquisition, extraction and official guest-media research. No additional M1.5 agents were created.
+- The generic PF1800U driver declares VID05E3/PID0120, but distinctAFL/U class evidence means that ID is not yet attributed to the physicalAFL unit.
+- Sixteen portable passive USB/USBIP parser/harness tests passed as part of a64-test run. Harness traffic is test-generated metadata, not originalCyberView traffic.
+- A diskless, stoppedQEMU/QMP smoke test has run; no vendor application or Windows guest is claimed from that test.
+- The user has no local licensed Windows image and asked to find one online. An official Microsoft Server2008Enterprise x86 evaluationVHD was located; its three parts are being acquired and inspected under the free evaluation conditions. Guest boot/detection remain pending. Host hypervisor/security settings are untouched.
+
+## M2: Image processing and archival reliability
+
+**Status: IN PROGRESS, independently of M1.5.**
+
+- [x] Preserve unsigned8/16-bit RGB/grayscale TIFF samples, including little/big endian and orientation handling.
+- [x] Keep floating-point samples through processing and export true16-bit RGB TIFF with original hash, edit/version, nominalsRGB profile and separate source/acquired/output precision metadata. JPEG/previews remain8-bit.
+- [x] Manual normalized film-base controls; older clients preserve an existing base when they omit that new setting.
+- [x] Reject unsupported high-precision input rather than silently discarding sample precision.
+- [x] Inject an export write failure and verify originals and prior exports remain byte-identical.
+- [x] Nine imaging tests, independent-process export reproduction and full browser workflow pass; browser test inspects actual16-bit TIFF tags and saves manualfilm-base settings.
+- [ ] Photographic negative reference comparisons and calibrated color validation.
+- [ ] Crop/curves, broader codecs, large-image memory benchmarks and portable restore acceptance.
+
+Latest combined run at this checkpoint: `python -m pytest -q` →64passed in21.63seconds (including16research tests); client checks/build and complete36-frame browser workflow passed. The already runningM1 service was not restarted. New service processes use `frame-density-2`; the client shows new film-base controls only when that engine is reported, preserving compatibility until the next normal service restart.
 
 ## Executed validation
 
@@ -72,4 +97,4 @@ No reverse-engineering or dedicated image subagent was activated. Configured age
 
 ## Remaining boundaries
 
-No physical scanner/driver/USB verification; no public service or LAN companion access. UI phone viewport testing is distinct from physical iPhone testing. PWA background alarms cannot be guaranteed. Simulator fixtures are 8-bit synthetic charts; image pipeline is an initial density inversion with 8-bit sRGB exports. Full M2 color calibration, 16-bit output, custom chemistry/batches, portable restore, full offline developing synchronization and Windows packaging remain backlog work.
+No physical scanner/driver/USB verification; no public service or LAN companion access. UI phone viewport testing is distinct from physical iPhone testing. PWA background alarms cannot be guaranteed. Simulator fixtures remain8-bit synthetic charts. The independentM2 engine now preserves supported16-bit TIFF input and renders16-bit processedTIFF; this never upgrades a claim about acquired precision. Full color calibration, custom chemistry/batches, portable restore, full offline developing synchronization and Windows packaging remain backlog work. M1.5 guest/vendor detection remains incomplete until genuinely executed and documented.
