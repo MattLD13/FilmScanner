@@ -158,6 +158,8 @@ def run():
                     mobile.wait_for_selector('main')
                     page.wait_for_timeout(600)
                     assert mobile.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
+                    page.evaluate('window.scrollTo(0, 0)')
+                    mobile.evaluate('window.scrollTo(0, 0)')
                     page.screenshot(path=str(evidence / 'desktop-home.png'), full_page=True)
                     mobile.screenshot(path=str(evidence / 'iphone-home.png'), full_page=True)
                     assert not errors, errors
