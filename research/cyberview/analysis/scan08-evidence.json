@@ -1,0 +1,1210 @@
+{
+  "evidence": "STATIC",
+  "payload_identities": {
+    "Resource_ENG/CyberViewX.ds": "50C9B359417CA61E555A743B8E7351DF43A22585822AA79C334140DD0EB6D64E",
+    "CyberViewX_SF/BeneScan.dll": "ACD215AA92EC45B79837A6DC0ECF4A008AAE772A6A6946C98A93B9570635C27C",
+    "CyberViewX_SF/LC.dll": "5486ACE5B00A6341CE0B8F8FE6AAC5F8BFF4041B5161A6D350E16B2AC92652AC",
+    "WXP_DLL/PF1800LC.Dll": "54AB511F96F7E27C14D8FAF1E4CE585869BFC28E0E9EB6FA3204FB6E4567CE5D",
+    "WXP_DLL/PWiaScnr.dll": "AC9B9ABD389A48F417A0097F95661078B47707267AB950B7A78ACA77374E0B07",
+    "system/SQ_SCAN.DLL": "55A865E7119608D0FBB9C0E7F8990ACB061149E77CDDB2C4A3DF09CDDA4F243F"
+  },
+  "payload_files_named_scan08_dll": [],
+  "benescan_model_table": [
+    {
+      "index": 0,
+      "model_code": 1,
+      "module": "RAWSCAN.dll",
+      "record_va": "0x100450d0",
+      "model_code_hex": "0x1",
+      "present_in_payload": [
+        "CyberViewX_SF/RawScan.dll"
+      ]
+    },
+    {
+      "index": 1,
+      "model_code": 34,
+      "module": "PF1800U.dll",
+      "record_va": "0x10045114",
+      "model_code_hex": "0x22",
+      "present_in_payload": [
+        "CyberViewX_SF/PF1800U.dll"
+      ]
+    },
+    {
+      "index": 2,
+      "model_code": 36,
+      "module": "RFS3600.dll",
+      "record_va": "0x10045158",
+      "model_code_hex": "0x24",
+      "present_in_payload": []
+    },
+    {
+      "index": 3,
+      "model_code": 37,
+      "module": "SCAN08.dll",
+      "record_va": "0x1004519c",
+      "model_code_hex": "0x25",
+      "present_in_payload": []
+    },
+    {
+      "index": 4,
+      "model_code": 38,
+      "module": "PF1800LAB.dll",
+      "record_va": "0x100451e0",
+      "model_code_hex": "0x26",
+      "present_in_payload": []
+    },
+    {
+      "index": 5,
+      "model_code": 39,
+      "module": "PF3600Pro.dll",
+      "record_va": "0x10045224",
+      "model_code_hex": "0x27",
+      "present_in_payload": []
+    },
+    {
+      "index": 6,
+      "model_code": 40,
+      "module": "PF2700.dll",
+      "record_va": "0x10045268",
+      "model_code_hex": "0x28",
+      "present_in_payload": [
+        "CyberViewX_SF/PF2700.dll"
+      ]
+    },
+    {
+      "index": 7,
+      "model_code": 50,
+      "module": "PF3610AFL.dll",
+      "record_va": "0x100452ac",
+      "model_code_hex": "0x32",
+      "present_in_payload": []
+    },
+    {
+      "index": 8,
+      "model_code": 42,
+      "module": "LC.dll",
+      "record_va": "0x100452f0",
+      "model_code_hex": "0x2a",
+      "present_in_payload": [
+        "CyberViewX_SF/LC.dll"
+      ]
+    },
+    {
+      "index": 9,
+      "model_code": 43,
+      "module": "PowSlide.dll",
+      "record_va": "0x10045334",
+      "model_code_hex": "0x2b",
+      "present_in_payload": []
+    },
+    {
+      "index": 10,
+      "model_code": 44,
+      "module": "ProDICE.dll",
+      "record_va": "0x10045378",
+      "model_code_hex": "0x2c",
+      "present_in_payload": []
+    },
+    {
+      "index": 11,
+      "model_code": 45,
+      "module": "PF3650LAB.dll",
+      "record_va": "0x100453bc",
+      "model_code_hex": "0x2d",
+      "present_in_payload": []
+    },
+    {
+      "index": 12,
+      "model_code": 46,
+      "module": "SS3600ICE.dll",
+      "record_va": "0x10045400",
+      "model_code_hex": "0x2e",
+      "present_in_payload": [
+        "CyberViewX_SF/SS3600ICE.dll"
+      ]
+    },
+    {
+      "index": 13,
+      "model_code": 47,
+      "module": "PS3650.dll",
+      "record_va": "0x10045444",
+      "model_code_hex": "0x2f",
+      "present_in_payload": []
+    },
+    {
+      "index": 14,
+      "model_code": 48,
+      "module": "PF7250U.dll",
+      "record_va": "0x10045488",
+      "model_code_hex": "0x30",
+      "present_in_payload": [
+        "CyberViewX_SF/PF7250U.dll"
+      ]
+    },
+    {
+      "index": 15,
+      "model_code": 49,
+      "module": "PF7250PRO3.dll",
+      "record_va": "0x100454cc",
+      "model_code_hex": "0x31",
+      "present_in_payload": []
+    },
+    {
+      "index": 16,
+      "model_code": 54,
+      "module": "PS7200.dll",
+      "record_va": "0x10045510",
+      "model_code_hex": "0x36",
+      "present_in_payload": [
+        "CyberViewX_SF/PS7200.dll"
+      ]
+    },
+    {
+      "index": 17,
+      "model_code": 58,
+      "module": "DD6000.dll",
+      "record_va": "0x10045554",
+      "model_code_hex": "0x3a",
+      "present_in_payload": []
+    },
+    {
+      "index": 18,
+      "model_code": 60,
+      "module": "MF5000.dll",
+      "record_va": "0x10045598",
+      "model_code_hex": "0x3c",
+      "present_in_payload": []
+    }
+  ],
+  "cyberviewx_class_bindings": [
+    {
+      "class": "CPfs1800AFL",
+      "vtable_va": "0x10129264",
+      "vtable_store_va": "0x100a8555",
+      "driver_name": "SCAN08",
+      "gamma_file": "37.GG",
+      "pushes": [
+        {
+          "va": "0x100a8548",
+          "string": "SCAN08"
+        },
+        {
+          "va": "0x100a859f",
+          "string": "37.GG"
+        }
+      ]
+    },
+    {
+      "class": "CPfs1800Lab",
+      "vtable_va": "0x10129434",
+      "vtable_store_va": "0x100a92b5",
+      "driver_name": "PF1800LAB",
+      "gamma_file": "38.GG",
+      "pushes": [
+        {
+          "va": "0x100a92a8",
+          "string": "PF1800LAB"
+        },
+        {
+          "va": "0x100a92ff",
+          "string": "38.GG"
+        }
+      ]
+    },
+    {
+      "class": "CPfs1800P",
+      "vtable_va": "0x1012960c",
+      "vtable_store_va": "0x100a9d65",
+      "driver_name": "LC",
+      "gamma_file": "42.GG",
+      "pushes": [
+        {
+          "va": "0x100a9d58",
+          "string": "LC"
+        },
+        {
+          "va": "0x100a9daf",
+          "string": "42.GG"
+        }
+      ]
+    },
+    {
+      "class": "CPfs1800U",
+      "vtable_va": "0x101297dc",
+      "vtable_store_va": "0x100aa015",
+      "driver_name": "PF1800U",
+      "gamma_file": "34.GG",
+      "pushes": [
+        {
+          "va": "0x100aa008",
+          "string": "PF1800U"
+        },
+        {
+          "va": "0x100aa05f",
+          "string": "34.GG"
+        }
+      ]
+    }
+  ],
+  "scan08_lineage_modules": {
+    "CyberViewX_SF/LC.dll": {
+      "timestamp": 1213663879,
+      "version_resources": {
+        "Comments": "SQ Scan08 ASIC",
+        "CompanyName": "PIE",
+        "FileDescription": "SCAN08 DLL",
+        "FileVersion": "1, 0, 9, 4",
+        "InternalName": "SCAN08",
+        "LegalCopyright": "Copyright (C) 2001",
+        "LegalTrademarks": "",
+        "OriginalFilename": "SCAN08.DLL",
+        "PrivateBuild": "",
+        "ProductName": "SCAN08 Dynamic Link Library",
+        "ProductVersion": "1, 0, 9, 4",
+        "SpecialBuild": ""
+      },
+      "export_directory_name": "LC.dll",
+      "exports": [
+        "ScannerDeviceIO"
+      ],
+      "imports": {
+        "SQ_Scan.dll": [
+          "CloseScanner",
+          "DrivingCapabilitySetting",
+          "GetAutoScanImage",
+          "GetStatus",
+          "MotorMoveNormal",
+          "OpenScanner",
+          "QuickInitialAutoScan",
+          "SafeInitialChip",
+          "SetADC",
+          "SetAutoScan",
+          "SetCCDPixelNumber",
+          "SetCCDTiming",
+          "SetGPIO",
+          "SetImageBufferRange",
+          "SetLamp",
+          "SetLineOffset",
+          "SetMotorType",
+          "SetPowerSave",
+          "SetScanAccDecFormula",
+          "StopAutoScan",
+          "WriteTable"
+        ],
+        "KERNEL32.dll": [
+          "CloseHandle",
+          "CreateFileA",
+          "CreateThread",
+          "DeleteCriticalSection",
+          "DeviceIoControl",
+          "EnterCriticalSection",
+          "ExitProcess",
+          "FlushFileBuffers",
+          "FreeEnvironmentStringsA",
+          "FreeEnvironmentStringsW",
+          "FreeLibrary",
+          "GetACP",
+          "GetCPInfo",
+          "GetCommandLineA",
+          "GetCurrentProcess",
+          "GetCurrentThread",
+          "GetCurrentThreadId",
+          "GetEnvironmentStrings",
+          "GetEnvironmentStringsW",
+          "GetEnvironmentVariableA",
+          "GetFileType",
+          "GetLastError",
+          "GetModuleFileNameA",
+          "GetModuleHandleA",
+          "GetOEMCP",
+          "GetPrivateProfileIntA",
+          "GetProcAddress",
+          "GetProcessVersion",
+          "GetStartupInfoA",
+          "GetStdHandle",
+          "GetStringTypeA",
+          "GetStringTypeW",
+          "GetSystemTimeAsFileTime",
+          "GetTempPathA",
+          "GetVersion",
+          "GetVersionExA",
+          "GetWindowsDirectoryA",
+          "GlobalAddAtomA",
+          "GlobalAlloc",
+          "GlobalDeleteAtom",
+          "GlobalFindAtomA",
+          "GlobalFlags",
+          "GlobalFree",
+          "GlobalGetAtomNameA",
+          "GlobalHandle",
+          "GlobalLock",
+          "GlobalReAlloc",
+          "GlobalUnlock",
+          "HeapAlloc",
+          "HeapCreate",
+          "HeapDestroy",
+          "HeapFree",
+          "HeapReAlloc",
+          "HeapSize",
+          "InitializeCriticalSection",
+          "InterlockedDecrement",
+          "InterlockedIncrement",
+          "IsBadCodePtr",
+          "IsBadReadPtr",
+          "IsBadWritePtr",
+          "LCMapStringA",
+          "LCMapStringW",
+          "LeaveCriticalSection",
+          "LoadLibraryA",
+          "LocalAlloc",
+          "LocalFree",
+          "LocalReAlloc",
+          "MultiByteToWideChar",
+          "RaiseException",
+          "ReadFile",
+          "ResumeThread",
+          "RtlUnwind",
+          "SetEndOfFile",
+          "SetErrorMode",
+          "SetFilePointer",
+          "SetHandleCount",
+          "SetLastError",
+          "SetPriorityClass",
+          "SetStdHandle",
+          "SetThreadPriority",
+          "SetUnhandledExceptionFilter",
+          "Sleep",
+          "TerminateProcess",
+          "TlsAlloc",
+          "TlsFree",
+          "TlsGetValue",
+          "TlsSetValue",
+          "VirtualAlloc",
+          "VirtualFree",
+          "WideCharToMultiByte",
+          "WriteFile",
+          "WritePrivateProfileStringA",
+          "lstrcatA",
+          "lstrcmpA",
+          "lstrcmpiA",
+          "lstrcpyA",
+          "lstrcpynA",
+          "lstrlenA"
+        ],
+        "USER32.dll": [
+          "AdjustWindowRectEx",
+          "CallNextHookEx",
+          "CallWindowProcA",
+          "CheckMenuItem",
+          "ClientToScreen",
+          "CopyRect",
+          "CreateWindowExA",
+          "DefWindowProcA",
+          "DestroyMenu",
+          "DestroyWindow",
+          "DispatchMessageA",
+          "DrawTextA",
+          "EnableMenuItem",
+          "EnableWindow",
+          "GetActiveWindow",
+          "GetCapture",
+          "GetClassInfoA",
+          "GetClassLongA",
+          "GetClassNameA",
+          "GetClientRect",
+          "GetCursorPos",
+          "GetDC",
+          "GetDlgCtrlID",
+          "GetDlgItem",
+          "GetFocus",
+          "GetForegroundWindow",
+          "GetKeyState",
+          "GetLastActivePopup",
+          "GetMenu",
+          "GetMenuCheckMarkDimensions",
+          "GetMenuItemCount",
+          "GetMenuItemID",
+          "GetMenuState",
+          "GetMessageA",
+          "GetMessagePos",
+          "GetMessageTime",
+          "GetNextDlgTabItem",
+          "GetParent",
+          "GetPropA",
+          "GetSubMenu",
+          "GetSysColor",
+          "GetSysColorBrush",
+          "GetSystemMetrics",
+          "GetTopWindow",
+          "GetWindow",
+          "GetWindowLongA",
+          "GetWindowPlacement",
+          "GetWindowRect",
+          "GetWindowTextA",
+          "GrayStringA",
+          "IsIconic",
+          "IsWindowEnabled",
+          "IsWindowVisible",
+          "LoadBitmapA",
+          "LoadCursorA",
+          "LoadIconA",
+          "LoadStringA",
+          "MapWindowPoints",
+          "MessageBoxA",
+          "ModifyMenuA",
+          "PeekMessageA",
+          "PostMessageA",
+          "PostQuitMessage",
+          "PtInRect",
+          "RegisterClassA",
+          "RegisterWindowMessageA",
+          "ReleaseDC",
+          "RemovePropA",
+          "SendMessageA",
+          "SetCursor",
+          "SetFocus",
+          "SetForegroundWindow",
+          "SetMenuItemBitmaps",
+          "SetPropA",
+          "SetWindowLongA",
+          "SetWindowPos",
+          "SetWindowTextA",
+          "SetWindowsHookExA",
+          "ShowWindow",
+          "SystemParametersInfoA",
+          "TabbedTextOutA",
+          "TranslateMessage",
+          "UnhookWindowsHookEx",
+          "UnregisterClassA",
+          "ValidateRect",
+          "WinHelpA",
+          "wsprintfA"
+        ],
+        "GDI32.dll": [
+          "CreateBitmap",
+          "DeleteDC",
+          "DeleteObject",
+          "Escape",
+          "ExtTextOutA",
+          "GetClipBox",
+          "GetDeviceCaps",
+          "GetObjectA",
+          "GetStockObject",
+          "OffsetViewportOrgEx",
+          "PtVisible",
+          "RectVisible",
+          "RestoreDC",
+          "SaveDC",
+          "ScaleViewportExtEx",
+          "ScaleWindowExtEx",
+          "SelectObject",
+          "SetBkColor",
+          "SetMapMode",
+          "SetTextColor",
+          "SetViewportExtEx",
+          "SetViewportOrgEx",
+          "SetWindowExtEx",
+          "TextOutA"
+        ],
+        "WINSPOOL.DRV": [
+          "ClosePrinter",
+          "DocumentPropertiesA",
+          "OpenPrinterA"
+        ],
+        "ADVAPI32.dll": [
+          "RegCloseKey",
+          "RegCreateKeyExA",
+          "RegOpenKeyExA",
+          "RegSetValueExA"
+        ],
+        "COMCTL32.dll": []
+      },
+      "usbscan_descriptor_checks": [
+        {
+          "ioctl_push_va": "0x10011677",
+          "accepted_vid_pid": [
+            "2770:011C"
+          ]
+        },
+        {
+          "ioctl_push_va": "0x100117f4",
+          "accepted_vid_pid": [
+            "2770:011C"
+          ]
+        },
+        {
+          "ioctl_push_va": "0x100118d3",
+          "accepted_vid_pid": [
+            "2770:011C"
+          ]
+        }
+      ]
+    },
+    "WXP_DLL/PF1800LC.Dll": {
+      "timestamp": 1036107885,
+      "version_resources": {
+        "CompanyName": "",
+        "FileDescription": "Scan08Dll DLL",
+        "FileVersion": "1, 0, 0, 1",
+        "InternalName": "Scan08Dll",
+        "LegalCopyright": "Copyright (C) 2001",
+        "LegalTrademarks": "",
+        "OriginalFilename": "Scan08Dll.DLL",
+        "ProductName": "Scan08Dll Dynamic Link Library",
+        "ProductVersion": "1, 0, 0, 1"
+      },
+      "export_directory_name": "Scan08.dll",
+      "exports": [
+        "ScannerDeviceIO"
+      ],
+      "imports": {
+        "KERNEL32.dll": [
+          "CloseHandle",
+          "CreateFileA",
+          "DeleteCriticalSection",
+          "DeviceIoControl",
+          "EnterCriticalSection",
+          "ExitProcess",
+          "FlushFileBuffers",
+          "FreeEnvironmentStringsA",
+          "FreeEnvironmentStringsW",
+          "FreeLibrary",
+          "GetACP",
+          "GetCPInfo",
+          "GetCommandLineA",
+          "GetCurrentProcess",
+          "GetCurrentThread",
+          "GetCurrentThreadId",
+          "GetEnvironmentStrings",
+          "GetEnvironmentStringsW",
+          "GetFileType",
+          "GetLastError",
+          "GetModuleFileNameA",
+          "GetModuleHandleA",
+          "GetOEMCP",
+          "GetProcAddress",
+          "GetProcessVersion",
+          "GetStartupInfoA",
+          "GetStdHandle",
+          "GetStringTypeA",
+          "GetStringTypeW",
+          "GetSystemDirectoryA",
+          "GetVersion",
+          "GlobalAddAtomA",
+          "GlobalAlloc",
+          "GlobalDeleteAtom",
+          "GlobalFindAtomA",
+          "GlobalFlags",
+          "GlobalFree",
+          "GlobalGetAtomNameA",
+          "GlobalHandle",
+          "GlobalLock",
+          "GlobalReAlloc",
+          "GlobalUnlock",
+          "HeapAlloc",
+          "HeapCreate",
+          "HeapDestroy",
+          "HeapFree",
+          "HeapReAlloc",
+          "HeapSize",
+          "InitializeCriticalSection",
+          "InterlockedDecrement",
+          "InterlockedIncrement",
+          "IsBadCodePtr",
+          "IsBadReadPtr",
+          "IsBadWritePtr",
+          "LCMapStringA",
+          "LCMapStringW",
+          "LeaveCriticalSection",
+          "LoadLibraryA",
+          "LocalAlloc",
+          "LocalFree",
+          "LocalReAlloc",
+          "MultiByteToWideChar",
+          "RaiseException",
+          "ReadFile",
+          "RtlUnwind",
+          "SetEndOfFile",
+          "SetErrorMode",
+          "SetFilePointer",
+          "SetHandleCount",
+          "SetLastError",
+          "SetStdHandle",
+          "SetUnhandledExceptionFilter",
+          "Sleep",
+          "TerminateProcess",
+          "TlsAlloc",
+          "TlsFree",
+          "TlsGetValue",
+          "TlsSetValue",
+          "VirtualAlloc",
+          "VirtualFree",
+          "WideCharToMultiByte",
+          "WriteFile",
+          "WritePrivateProfileStringA",
+          "lstrcatA",
+          "lstrcmpA",
+          "lstrcmpiA",
+          "lstrcpyA",
+          "lstrcpynA",
+          "lstrlenA"
+        ],
+        "USER32.dll": [
+          "AdjustWindowRectEx",
+          "CallNextHookEx",
+          "CallWindowProcA",
+          "CheckMenuItem",
+          "ClientToScreen",
+          "CopyRect",
+          "CreateWindowExA",
+          "DefWindowProcA",
+          "DestroyMenu",
+          "DestroyWindow",
+          "DispatchMessageA",
+          "DrawTextA",
+          "EnableMenuItem",
+          "EnableWindow",
+          "GetActiveWindow",
+          "GetCapture",
+          "GetClassInfoA",
+          "GetClassLongA",
+          "GetClassNameA",
+          "GetClientRect",
+          "GetCursorPos",
+          "GetDC",
+          "GetDlgCtrlID",
+          "GetDlgItem",
+          "GetFocus",
+          "GetForegroundWindow",
+          "GetKeyState",
+          "GetLastActivePopup",
+          "GetMenu",
+          "GetMenuCheckMarkDimensions",
+          "GetMenuItemCount",
+          "GetMenuItemID",
+          "GetMenuState",
+          "GetMessageA",
+          "GetMessagePos",
+          "GetMessageTime",
+          "GetNextDlgTabItem",
+          "GetParent",
+          "GetPropA",
+          "GetSubMenu",
+          "GetSysColor",
+          "GetSysColorBrush",
+          "GetSystemMetrics",
+          "GetTopWindow",
+          "GetWindow",
+          "GetWindowLongA",
+          "GetWindowPlacement",
+          "GetWindowRect",
+          "GetWindowTextA",
+          "GrayStringA",
+          "IsIconic",
+          "IsWindowEnabled",
+          "IsWindowVisible",
+          "LoadBitmapA",
+          "LoadCursorA",
+          "LoadIconA",
+          "LoadStringA",
+          "MapWindowPoints",
+          "MessageBoxA",
+          "ModifyMenuA",
+          "PeekMessageA",
+          "PostMessageA",
+          "PostQuitMessage",
+          "PtInRect",
+          "RegisterClassA",
+          "RegisterWindowMessageA",
+          "ReleaseDC",
+          "RemovePropA",
+          "SendMessageA",
+          "SetCursor",
+          "SetFocus",
+          "SetForegroundWindow",
+          "SetMenuItemBitmaps",
+          "SetPropA",
+          "SetWindowLongA",
+          "SetWindowPos",
+          "SetWindowTextA",
+          "SetWindowsHookExA",
+          "ShowWindow",
+          "SystemParametersInfoA",
+          "TabbedTextOutA",
+          "TranslateMessage",
+          "UnhookWindowsHookEx",
+          "UnregisterClassA",
+          "ValidateRect",
+          "WinHelpA",
+          "wsprintfA"
+        ],
+        "GDI32.dll": [
+          "CreateBitmap",
+          "DeleteDC",
+          "DeleteObject",
+          "Escape",
+          "ExtTextOutA",
+          "GetClipBox",
+          "GetDeviceCaps",
+          "GetObjectA",
+          "GetStockObject",
+          "OffsetViewportOrgEx",
+          "PtVisible",
+          "RectVisible",
+          "RestoreDC",
+          "SaveDC",
+          "ScaleViewportExtEx",
+          "ScaleWindowExtEx",
+          "SelectObject",
+          "SetBkColor",
+          "SetMapMode",
+          "SetTextColor",
+          "SetViewportExtEx",
+          "SetViewportOrgEx",
+          "SetWindowExtEx",
+          "TextOutA"
+        ],
+        "WINSPOOL.DRV": [
+          "ClosePrinter",
+          "DocumentPropertiesA",
+          "OpenPrinterA"
+        ],
+        "ADVAPI32.dll": [
+          "RegCloseKey",
+          "RegCreateKeyExA",
+          "RegOpenKeyExA",
+          "RegSetValueExA"
+        ],
+        "COMCTL32.dll": []
+      },
+      "usbscan_descriptor_checks": [
+        {
+          "ioctl_push_va": "0x10005d40",
+          "accepted_vid_pid": [
+            "0461:034A",
+            "2770:011C"
+          ]
+        }
+      ]
+    },
+    "system/SQ_SCAN.DLL": {
+      "timestamp": 1002869428,
+      "version_resources": {
+        "Comments": "SQ Low Level Driver API",
+        "CompanyName": "SQ Tech",
+        "FileDescription": "SQ_Scan DLL",
+        "FileVersion": "1, 0, 0, 1",
+        "InternalName": "SQ_Scan",
+        "LegalCopyright": "Copyright (C) 2000 SQ Tech",
+        "LegalTrademarks": "",
+        "OriginalFilename": "SQ_Scan.DLL",
+        "PrivateBuild": "",
+        "ProductName": "SQ_Scan Dynamic Link Library",
+        "ProductVersion": "1, 0, 0, 1",
+        "SpecialBuild": ""
+      },
+      "export_directory_name": "SQ_Scan.dll",
+      "exports": [
+        "CloseScanner",
+        "DrivingCapabilitySetting",
+        "FastInitialAutoScan",
+        "GetAutoScanImage",
+        "GetStatus",
+        "MotorBackAccDec",
+        "MotorBackNormal",
+        "MotorMoveNormal",
+        "OpenScanner",
+        "Quick1InitialAutoScan",
+        "QuickInitialAutoScan",
+        "RamRWBulk",
+        "RamRWByte",
+        "SafeInitialChip",
+        "SetADC",
+        "SetAutoScan",
+        "SetCCDPixelNumber",
+        "SetCCDTiming",
+        "SetGPIO",
+        "SetImageBufferRange",
+        "SetLamp",
+        "SetLineOffset",
+        "SetMotorAccDecFormula",
+        "SetMotorType",
+        "SetPowerSave",
+        "SetScanAccDecFormula",
+        "StopAutoScan",
+        "WriteTable"
+      ],
+      "imports": {
+        "IO_PORT.dll": [
+          "CloseTransferPort",
+          "GetIOPortVersion",
+          "OpenTransferPort",
+          "USB_UsbCleanBuffer",
+          "general_ReadLine",
+          "general_ReceiveData",
+          "general_SendData",
+          "general_WriteLine",
+          "general_WriteSPPDataPort"
+        ],
+        "KERNEL32.dll": [
+          "CloseHandle",
+          "DeleteCriticalSection",
+          "EnterCriticalSection",
+          "ExitProcess",
+          "FlushFileBuffers",
+          "FreeEnvironmentStringsA",
+          "FreeEnvironmentStringsW",
+          "FreeLibrary",
+          "GetACP",
+          "GetCPInfo",
+          "GetCommandLineA",
+          "GetCurrentProcess",
+          "GetCurrentThread",
+          "GetCurrentThreadId",
+          "GetEnvironmentStrings",
+          "GetEnvironmentStringsW",
+          "GetFileType",
+          "GetLastError",
+          "GetModuleFileNameA",
+          "GetModuleHandleA",
+          "GetOEMCP",
+          "GetProcAddress",
+          "GetProcessVersion",
+          "GetStartupInfoA",
+          "GetStdHandle",
+          "GetStringTypeA",
+          "GetStringTypeW",
+          "GetVersion",
+          "GlobalAddAtomA",
+          "GlobalAlloc",
+          "GlobalDeleteAtom",
+          "GlobalFindAtomA",
+          "GlobalFlags",
+          "GlobalFree",
+          "GlobalGetAtomNameA",
+          "GlobalHandle",
+          "GlobalLock",
+          "GlobalReAlloc",
+          "GlobalUnlock",
+          "HeapAlloc",
+          "HeapCreate",
+          "HeapDestroy",
+          "HeapFree",
+          "HeapReAlloc",
+          "HeapSize",
+          "InitializeCriticalSection",
+          "InterlockedDecrement",
+          "IsBadCodePtr",
+          "IsBadReadPtr",
+          "IsBadWritePtr",
+          "LCMapStringA",
+          "LCMapStringW",
+          "LeaveCriticalSection",
+          "LoadLibraryA",
+          "LocalAlloc",
+          "LocalFree",
+          "LocalReAlloc",
+          "MultiByteToWideChar",
+          "RaiseException",
+          "RtlUnwind",
+          "SetErrorMode",
+          "SetFilePointer",
+          "SetHandleCount",
+          "SetLastError",
+          "SetStdHandle",
+          "SetUnhandledExceptionFilter",
+          "TerminateProcess",
+          "TlsAlloc",
+          "TlsFree",
+          "TlsGetValue",
+          "TlsSetValue",
+          "VirtualAlloc",
+          "VirtualFree",
+          "WideCharToMultiByte",
+          "WriteFile",
+          "WritePrivateProfileStringA",
+          "lstrcatA",
+          "lstrcmpA",
+          "lstrcmpiA",
+          "lstrcpyA",
+          "lstrcpynA",
+          "lstrlenA"
+        ],
+        "USER32.dll": [
+          "AdjustWindowRectEx",
+          "CallNextHookEx",
+          "CallWindowProcA",
+          "CheckMenuItem",
+          "ClientToScreen",
+          "CopyRect",
+          "CreateWindowExA",
+          "DefWindowProcA",
+          "DestroyMenu",
+          "DestroyWindow",
+          "DispatchMessageA",
+          "DrawTextA",
+          "EnableMenuItem",
+          "EnableWindow",
+          "GetActiveWindow",
+          "GetCapture",
+          "GetClassInfoA",
+          "GetClassLongA",
+          "GetClassNameA",
+          "GetClientRect",
+          "GetCursorPos",
+          "GetDC",
+          "GetDlgCtrlID",
+          "GetDlgItem",
+          "GetFocus",
+          "GetForegroundWindow",
+          "GetKeyState",
+          "GetLastActivePopup",
+          "GetMenu",
+          "GetMenuCheckMarkDimensions",
+          "GetMenuItemCount",
+          "GetMenuItemID",
+          "GetMenuState",
+          "GetMessageA",
+          "GetMessagePos",
+          "GetMessageTime",
+          "GetNextDlgTabItem",
+          "GetParent",
+          "GetPropA",
+          "GetSubMenu",
+          "GetSysColor",
+          "GetSysColorBrush",
+          "GetSystemMetrics",
+          "GetTopWindow",
+          "GetWindow",
+          "GetWindowLongA",
+          "GetWindowPlacement",
+          "GetWindowRect",
+          "GetWindowTextA",
+          "GrayStringA",
+          "IsIconic",
+          "IsWindowEnabled",
+          "IsWindowVisible",
+          "LoadBitmapA",
+          "LoadCursorA",
+          "LoadIconA",
+          "LoadStringA",
+          "MapWindowPoints",
+          "MessageBoxA",
+          "ModifyMenuA",
+          "PeekMessageA",
+          "PostMessageA",
+          "PostQuitMessage",
+          "PtInRect",
+          "RegisterClassA",
+          "RegisterWindowMessageA",
+          "ReleaseDC",
+          "RemovePropA",
+          "SendMessageA",
+          "SetCursor",
+          "SetFocus",
+          "SetForegroundWindow",
+          "SetMenuItemBitmaps",
+          "SetPropA",
+          "SetWindowLongA",
+          "SetWindowPos",
+          "SetWindowTextA",
+          "SetWindowsHookExA",
+          "ShowWindow",
+          "SystemParametersInfoA",
+          "TabbedTextOutA",
+          "TranslateMessage",
+          "UnhookWindowsHookEx",
+          "UnregisterClassA",
+          "ValidateRect",
+          "WinHelpA",
+          "wsprintfA"
+        ],
+        "GDI32.dll": [
+          "CreateBitmap",
+          "DeleteDC",
+          "DeleteObject",
+          "Escape",
+          "ExtTextOutA",
+          "GetClipBox",
+          "GetDeviceCaps",
+          "GetObjectA",
+          "GetStockObject",
+          "OffsetViewportOrgEx",
+          "PtVisible",
+          "RectVisible",
+          "RestoreDC",
+          "SaveDC",
+          "ScaleViewportExtEx",
+          "ScaleWindowExtEx",
+          "SelectObject",
+          "SetBkColor",
+          "SetMapMode",
+          "SetTextColor",
+          "SetViewportExtEx",
+          "SetViewportOrgEx",
+          "SetWindowExtEx",
+          "TextOutA"
+        ],
+        "WINSPOOL.DRV": [
+          "ClosePrinter",
+          "DocumentPropertiesA",
+          "OpenPrinterA"
+        ],
+        "ADVAPI32.dll": [
+          "RegCloseKey",
+          "RegCreateKeyExA",
+          "RegOpenKeyExA",
+          "RegSetValueExA"
+        ],
+        "COMCTL32.dll": []
+      },
+      "usbscan_descriptor_checks": []
+    }
+  },
+  "pwiascnr_class_strings": [
+    {
+      "class": "CPfs1800AFL",
+      "following_strings": [
+        "37.GG",
+        "SCAN08"
+      ]
+    },
+    {
+      "class": "CPfs1800Lab",
+      "following_strings": [
+        "38.GG",
+        "PF1800LAB"
+      ]
+    },
+    {
+      "class": "CPfs1800P",
+      "following_strings": [
+        "42.GG",
+        "PF1800LC"
+      ]
+    }
+  ],
+  "inf_usb_hardware_ids": {
+    "DPInst/LC/Pf1800lc.inf": [
+      "2770:011C"
+    ],
+    "DPInst/U/SS3600I.inf": [
+      "05E3:0145"
+    ],
+    "INF_VISTA/PF1800U.INF": [
+      "05E3:0120"
+    ],
+    "INF_VISTA/PF2700.INF": [
+      "05E3:0129"
+    ],
+    "INF_VISTA/PF3600U.INF": [
+      "2770:011C"
+    ],
+    "INF_VISTA/PF7250U.inf": [
+      "05E3:0145"
+    ],
+    "INF_W2K/PF1800U.INF": [
+      "05E3:0120"
+    ],
+    "INF_W2K/PF2700.INF": [
+      "05E3:0129"
+    ],
+    "INF_W2K/PF3600U.INF": [
+      "2770:011C"
+    ],
+    "INF_W2K/PF7250U.inf": [
+      "05E3:0145"
+    ],
+    "INF_W9X/PF1800U.INF": [
+      "05E3:0120"
+    ],
+    "INF_W9X/PF2700.INF": [
+      "05E3:0129"
+    ],
+    "INF_W9X/PF3600U.INF": [
+      "2770:011C"
+    ],
+    "INF_W9X/PF7250U.inf": [
+      "05E3:0145"
+    ],
+    "INF_WNT/PF1800U.INF": [
+      "05E3:0120"
+    ],
+    "INF_WNT/PF2700.INF": [
+      "05E3:0129"
+    ],
+    "INF_WNT/PF3600U.INF": [
+      "2770:011C"
+    ],
+    "INF_WNT/PF7250U.inf": [
+      "05E3:0145"
+    ],
+    "INF_WXP/PF1800U.INF": [
+      "05E3:0120"
+    ],
+    "INF_WXP/PF2700.INF": [
+      "05E3:0129"
+    ],
+    "INF_WXP/PF3600U.INF": [
+      "2770:011C"
+    ],
+    "INF_WXP/PF7250U.inf": [
+      "05E3:0145"
+    ]
+  },
+  "gamma_headers": {
+    "GAMMA/34.GG": [
+      "Version 1.1",
+      "Generic gamma file for PF1800U"
+    ],
+    "GAMMA/37.GG": [
+      "Version 1.1",
+      "Generic gamma file for PF3600AFL"
+    ],
+    "GAMMA/38.GG": [
+      "Version 1.1",
+      "Generic gamma file for PF1800LAB"
+    ],
+    "GAMMA/39.GG": [
+      "Version 1.1",
+      "Generic gamma file for PF3600PRO"
+    ],
+    "GAMMA/40.GG": [
+      "Version 1.1",
+      "Generic gamma file for PF3600AFL"
+    ],
+    "GAMMA/42.GG": [
+      "Version 1.1",
+      "Generic gamma file for Low Cost"
+    ],
+    "GAMMA/43.GG": [
+      "Version 1.1",
+      "Generic gamma file for Reflecta"
+    ],
+    "GAMMA/44.gg": [
+      "Version 1.2",
+      "Generic gamma file for PF3650Pro3",
+      "Generic gamma is linear",
+      "46.GG & 44.GG is STD Model"
+    ],
+    "GAMMA/46.GG": [
+      "Version 1.2",
+      "Generic gamma file for PF3650U",
+      "Generic gamma is linear",
+      "46.GG & 44.GG is STD Model"
+    ],
+    "GAMMA/48.GG": [
+      "Version 1.2",
+      "Generic gamma file for PF3650U",
+      "Generic gamma is linear",
+      "46.GG & 44.GG is STD Model"
+    ],
+    "GAMMA/54.GG": [
+      "Version 1.2",
+      "Generic gamma file for PF3650U",
+      "Generic gamma is linear",
+      "46.GG & 44.GG is STD Model"
+    ]
+  }
+}

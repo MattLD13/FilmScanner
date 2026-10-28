@@ -31,7 +31,7 @@ M0 and the local simulated M1 vertical slice are implemented. Physical iPhone de
 
 ## M1.5: CyberView Reverse Engineering and Virtual Scanner Emulation
 
-**Status: IN PROGRESS.** Registered as **PENDING** in commit 877fb23 before any M1.5 research. The M0/M1 gate then passed again on 2026-10-27: 41 core tests in 21.33 seconds, TypeScript checks, production build and the full 36-frame browser workflow. M1.5 began automatically under the approved instruction. No existing work or agent was interrupted, cancelled or redirected.
+**Status: PARTIAL, EXTERNAL BLOCKER (2026-10-28).** Registered as **PENDING** in commit 877fb23 before any M1.5 research. The M0/M1 gate then passed again on 2026-10-27: 41 core tests in 21.33 seconds, TypeScript checks, production build and the full 36-frame browser workflow. M1.5 began automatically under the approved instruction. No existing work or agent was interrupted, cancelled or redirected.
 
 - [x] M0/M1 gate: core tests, client checks/build and existing complete simulated browser workflow pass.
 - [x] Preserve official PF1800 AFL Windows v1.3 installer, source provenance and SHA256; extract without executing legacy code.
@@ -75,6 +75,27 @@ Do not install legacy kernel drivers on the main Windows system, modify physical
 | Hardware plan | Bounded original-software capture sequence and virtual-versus-physical checklist. |
 
 The AFL constructor selects `SCAN08`; the examined BeneScan loader requests that model's external DLL. No standalone `SCAN08.dll` exists in the official archive. This is a likely packaging dependency gap, pending runtime confirmation or evidence that another installation path supplies it. PF1800U.dll and its VID/PID are not substituted.
+
+### M1.5 completion pass, 2026-10-28 UTC
+
+**Outcome: PARTIAL, EXTERNAL BLOCKER.** Completed static work on the directive's packages A, C and D, without executing vendor code:
+
+- **SCAN08.dll: still unresolved, but sharper.** The AFL is BeneScan model 37 → `SCAN08.dll`, which is absent from the payload. The package contains two SCAN08-lineage builds ("SQ Scan08 ASIC"). `LC.dll` has a SCAN08.DLL 1.0.9.4 version resource, and WIA `PF1800LC.Dll` has the export name Scan08.dll 1.0.0.1. Instruction cross-references bind both to the **1800P / "Low Cost"** model 42, not the AFL. Gamma file numbers match model codes. Neither is renamed or substituted. Details: `research/cyberview/scan08-investigation.md`.
+- **Candidate USB identities, not attributed to the AFL:** `2770:011C`, accepted by LC.dll and PF1800LC and bound by the LC/PF3600U INFs, and `0461:034A`, accepted only by the 2002 Scan08Dll build, with no INF. No INF in the package names an AFL.
+- **SQ host stack mapped statically:** LC.dll → SQ_Scan → IO_PORT → FVC → `\\.\USBSCAN%d`, with 2-byte bulk register framing. This is the 1800P path. Whether the AFL uses it is INFERRED only.
+- **Runtime baseline: not captured.** No Sandbox or hypervisor is on the host. The only isolated runtime is the QEMU Server 2008 evaluation guest. It is still stopped at the product-key OOBE page, and the base hash was re-verified as unchanged. The next steps need the user to accept the EULA, set an Administrator password, and lift the Escape stop on guest UI control. None was done. `research/cyberview/runtime-baseline.md`.
+- **Virtual device: unable to build an evidence-backed AFL profile.** QEMU 11.1 `usb-redir` (socket chardev, `pcap=`) is the chosen architecture, with a Python usbredir server and `replay.py`. It is not built, and no guest-visible device was presented. With this package, no USB device can be recognized through the AFL class while `SCAN08.dll` is missing. `research/usb/virtual-device-feasibility.md`.
+- Hardware plan gains CD/VID checks and a stop condition: halt if CyberView names a model other than PF1800 AFL.
+- Validation: `python -m pytest -q tests/research` → 29 passed; `python -m pytest -q` → **78 passed in 22.77 s**; `npm run lint` and `npm run build` passed; `npm run test:e2e` passed (36 frames, 16-bit TIFF inspected, no JavaScript exceptions).
+
+Exact blockers and the minimum input that unblocks each:
+
+| Blocker | Minimum real-world input |
+| --- | --- |
+| No CyberView no-device baseline | User completes Server 2008 OOBE (EULA, own password) and explicitly re-authorizes bounded guest UI input, or provides an equally isolated licensed XP/7 guest. |
+| AFL model module `SCAN08.dll` absent | Original PF1800AFL CD (hash and inventory), or a genuine vendor package containing it. |
+| AFL USB identity and descriptors | The physical unit's enumeration in an isolated guest (VID/PID, full descriptor set). |
+| Initialization, status and image responses | Original-software traces, one action at a time, per `hardware-plan.md`. |
 
 The Windows 11 compatibility-mode question is documented in `research/cyberview/windows11-compatibility.md`: an application-only test remains worthwhile and unattempted. Compatibility settings do not translate the extracted x86 kernel drivers for this 64-bit host. Successful application startup would not establish scanner operation.
 

@@ -21,6 +21,15 @@ application has a distinct `CPfs1800AFL` class that selects `SCAN08`, while the 
 class selects `PF1800U`. The exact AFL VID/PID is therefore **not established** by
 that U evidence. No physical/guest descriptor is synthesized from an INF.
 
+2026-10-28 addendum ([scan08-investigation](scan08-investigation.md)): the
+SCAN08 lineage, "SQ Scan08 ASIC", accepts two other identities through USBSCAN
+`IOCTL_GET_DEVICE_DESCRIPTOR` (`0x80002018`). `LC.dll`, whose version resource
+says SCAN08.DLL 1.0.9.4, accepts only `2770:011C`. WIA `PF1800LC.Dll`, whose
+export name is Scan08.dll 1.0.0.1, accepts `0461:034A` or `2770:011C`. The vendor
+binds both modules to the **1800P / "Low Cost"** model, code 42. The LC and
+PF3600U INFs bind `2770:011C`. No INF names `0461:034A`. These are candidate
+lineage identities and are **not** attributed to the AFL.
+
 Still unknown: bcdUSB/bcdDevice, device class/protocol, endpoint-zero packet size,
 configuration power attributes, interfaces, alternate settings, bulk/interrupt
 endpoint addresses and sizes, strings/language IDs, serial behavior, device speed,
@@ -65,6 +74,25 @@ invented.
   limits and actual model applicability remain unknown. It is blocked from use.
 * Generic `_UsbWriteScannerFw@8` exists. No firmware command is allowlisted.
 
+### SQ stack host framing (static)
+
+LC.dll → `SQ_Scan.dll` (SQ Tech 1.0.0.1) → `IO_PORT.DLL` ("Service & Quality
+Technology") → `FVC.DLL`. FVC.DLL `openusb` `0x10001af0` opens the first openable
+`\\.\USBSCAN0..127`, with no VID filter of its own, and returns VID/PID from
+`0x80002018`. Its user-mode calls are:
+
+| FVC export | Host call | Bytes |
+| --- | --- | --- |
+| `usboutp` `0x10001db0` | `WriteFile` on the USBSCAN handle | 2 bytes: `reg − 0x78`, `value` |
+| `usbinp` `0x10001de0` | `WriteFile` then `ReadFile` | 2 bytes `0xF0`, `reg − 0x78`; then 1 byte back |
+| `SystemRequest` `0x10001bc0` | `DeviceIoControl` `0x8000200c` / `0x80002010` with a 16-byte block; `0x80002008` with a 1-byte output | Register/control path |
+
+Microsoft documents that USBSCAN maps `ReadFile`/`WriteFile` onto bulk pipes and
+register IOCTLs onto vendor control requests. That makes the wire mapping
+DOCUMENTED, not observed. The layer is the 1800P/LC path. Whether the missing AFL
+SCAN08.dll uses the same SQ stack is INFERRED from the shared "Scan08" name only.
+No register meaning, response value or safe register set is known.
+
 There is no evidenced complete PF1800AFL command CDB/framing registry. The default
 `decode_command` consequently rejects every vendor payload. Host API selectors9,
 10,0x15 and0x20 are **not** inserted into that registry as USB opcodes.
@@ -106,6 +134,20 @@ contains four real loopback-management events. Each has `source=harness-only`,
 `cyberview_guest=false`, `physical_device=false`. There is no original CyberView
 traffic to compare yet. [QEMU smoke](../usb/evidence/qemu-smoke-2026-10-27.json)
 records stopped CPU state and infrastructure availability; it is not enumeration.
+
+## Evidence classes (2026-10-28)
+
+| Claim | Class |
+| --- | --- |
+| AFL class → `SCAN08` → BeneScan model 37 → `SCAN08.dll`; file absent from payload | STATIC |
+| Missing module makes BeneScan discovery skip the AFL silently | INFERRED (static control flow) |
+| `2770:011C` / `0461:034A` accepted by SCAN08-lineage builds bound to 1800P | STATIC |
+| Either ID is the AFL's | UNKNOWN |
+| USBSCAN register IOCTL → vendor control request; ReadFile/WriteFile → bulk | DOCUMENTED |
+| FVC 2-byte register framing on the SQ stack | STATIC (host side only) |
+| USB/IP DEVLIST/IMPORT exchange, replay fixtures | HARNESS ONLY |
+| Guest enumeration, CyberView startup or detection | none: GUEST OBSERVED is empty |
+| Any device behavior | none: VERIFIED ON DEVICE is empty |
 
 ## Next evidence required
 

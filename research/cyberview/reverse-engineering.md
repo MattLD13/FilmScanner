@@ -70,6 +70,10 @@ type descriptors, virtual tables and method slots.
 | BeneScan.dll `0x1000c0f0` /`0x1000bf50` | Discovery/open walk 0x44-byte model-table records at `0x100450d0` | Selection uses model records and dynamically loaded modules. |
 | BeneScan.dll `0x1004519c` /`0x100451a0` | Model `0x25` record contains `SCAN08.dll` | Concrete model module name in the driver loader's table. |
 | BeneScan.dll `0x100106d0` /`0x10010040` | Builds module-directory + table filename, calls `LoadLibraryA`; fallback loads the filename; then resolves `ScannerDeviceIO` | Strong evidence of an external DLL load path in this examined code. |
+| CyberViewX.ds `0x100a9d58` /`0x100a9d65` | `CPfs1800P` constructor pushes `LC` and `42.GG` | 1800P binds BeneScan model 42 `LC.dll` (record `0x100452f0`). Added 2026-10-28. |
+| BeneScan.dll `0x1000c0f0` | Discovery walks records 18→0; calls detect selector 3 only after the module loads | A missing module is most likely skipped silently (INFERRED). |
+| LC.dll `0x10011677` et al. | Version resource SCAN08.DLL 1.0.9.4; `Model Code = 42`; accepts USBSCAN descriptor `2770:011C` only | SCAN08-lineage build bound to 1800P, not AFL. |
+| PF1800LC.Dll `0x10005d40` | Export name `Scan08.dll` 1.0.0.1; accepts `0461:034A` or `2770:011C` | WIA 1800P module; PWiaScnr binds `CPfs1800P → PF1800LC`. |
 
 `BeneRaw.dll` and `BeneScan.dll` are byte-identical, SHA256
 `ACD215AA92EC45B79837A6DC0ECF4A008AAE772A6A6946C98A93B9570635C27C`.
@@ -81,6 +85,16 @@ installation path generates/supplies it. Therefore this is a **specific likely
 dependency gap**, not a proven guest loader failure. Do not rename PF1800U.dll or
 substitute a DLL from another scanner model. The original CD remains an important
 comparison source.
+
+**2026-10-28 refinement.** The earlier note that strings in `LC.dll`/`PF1800LC.Dll`
+"may resolve to code" is now answered. Both are SCAN08-*lineage* builds: LC.dll's
+version resource says `SCAN08.DLL`, and PF1800LC.Dll's export name is `Scan08.dll`.
+The vendor's own tables bind both to the 1800P ("Low Cost", model 42), and the
+AFL is model 37. Neither supplies the AFL module, and renaming either would be a
+cross-model substitution. Gamma file numbers match model codes throughout. The
+`setup.inx` script is still encoded, so an install-time rename is not ruled out
+statically. Full evidence: [scan08-investigation.md](scan08-investigation.md).
+Status: **still unresolved**.
 
 ## Detection, transport and acquisition map
 

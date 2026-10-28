@@ -20,6 +20,22 @@ supplies evidence. The production USB/TWAIN backends remain disabled.
    installing any host capture/filter driver requires its own explicit approval.
    Do not issue a custom vendor request to obtain this first trace.
 
+### Added 2026-10-28 from the SCAN08 investigation
+
+5. On the CD, search for `SCAN08.dll` and record its hash, version resource, export
+   name and the USBSCAN VID/PID compare immediates, using `scan08_survey.py` methods.
+   Compare its file list with the 290-file web package. Look for any InstallScript
+   that renames `LC.dll`.
+6. Compare the unit's VID/PID with the static candidates `2770:011C` and
+   `0461:034A` (SCAN08 lineage, bound to the 1800P) and `05E3:0120` (PF1800U).
+   Record which one matches, or that none does. Do not infer the module from this alone.
+7. **New stop condition:** if CyberView names any model other than PF1800 AFL
+   (for example 1800P/LC or PF1800U), stop before load, calibration or transport.
+   That would mean a cross-model module such as LC.dll claimed the device.
+8. If the module loads from the CD, record whether BeneScan actually loads it from
+   the `Twain_32\CyberViewX_SF` directory. This is runtime confirmation of
+   `0x100106d0`.
+
 ## One original-software action per capture
 
 Read the PF1800AFL manual's loading and operation instructions before motion. Use

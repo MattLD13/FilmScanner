@@ -1747,3 +1747,15 @@ The following links are the primary-source and upstream references preserved in 
 ### How to interpret future updates
 
 Retain the original hashes and this snapshot when adding evidence. New findings should state which binary, guest action, capture or physical unit produced them; whether they are static, documented, inferred or observed; and which repeatable test supports them. Promote physical capabilities only after actual-unit verification. Do not turn a passing simulator test, UI screenshot, family DLL symbol or empty USB/IP exchange into a claim that original CyberView can scan through a virtual or physical PF1800 AFL.
+
+## Addendum: 2026-10-28 completion pass
+
+This addendum leaves the snapshot above unchanged. Outcome: **M1.5 PARTIAL, EXTERNAL BLOCKER.** New evidence:
+
+- [SCAN08 investigation](../research/cyberview/scan08-investigation.md). The AFL is BeneScan model 37 → `SCAN08.dll`, which is absent. The two SCAN08-lineage builds in the package (`LC.dll`, `PF1800LC.Dll`) are bound to the 1800P "Low Cost" model 42 and accept `2770:011C` (PF1800LC also accepts `0461:034A`). Status: still unresolved. The evidence is reproducible with `analysis/scan08_survey.py` and locked by `tests/research/test_scan08_evidence.py`.
+- [Runtime baseline](../research/cyberview/runtime-baseline.md). Not captured. The guest needs user-performed OOBE (EULA, password) and renewed UI authorization after the Escape stop.
+- [Virtual-device feasibility](../research/usb/virtual-device-feasibility.md). The chosen path is QEMU `usb-redir` with a Python usbredir server. No evidence-backed AFL profile exists, and the negative proof is recorded there.
+- The protocol notebook adds the SQ-stack host framing and an evidence-class matrix. The hardware plan adds CD/VID checks and a wrong-model stop condition.
+- Validation: 78 Python tests passed (29 research), lint and build passed, and the 36-frame e2e workflow passed.
+
+The completion checklist in section 12 is unchanged. Both unchecked items remain blocked on the inputs listed in `docs/progress.md`.
