@@ -1,0 +1,22 @@
+{
+  "evidence": "actual-isolated-guest-preparation",
+  "capture_utc": "2026-10-28T00:29:04Z",
+  "furthest_saved_screen": "Windows Server2008 OOBE product-key page",
+  "product_key_field": "blank",
+  "autoactivation_checkbox": "default checked; not submitted",
+  "network_adapter_present": false,
+  "activation_attempted": false,
+  "expiry_warning_visible": false,
+  "cyberview_installed": false,
+  "cyberview_launched": false,
+  "cyberview_detection_attempted": false,
+  "virtual_pf1800_attached": false,
+  "host_usb_passthrough": false,
+  "stop_reason": "Computer Use reported user physical Escape stop; no further UI calls",
+  "qemu_stopped": true,
+  "base_vhd_hash_unchanged": true,
+  "base_vhd_sha256": "bc57268875ab4589f2f11b766fa214bbe11b5349b427ec518e2a6316e2ded19d",
+  "raw_screendump_sha256": "959b1d0b9e61692b9f52b8868defeee5f040725c23fa1f24e15e4de92ab2bc15",
+  "png_sha256": "ca73fbc6056db7241f628bbe7e884514a3ccaab5b59e437d4179b2c8e2405407",
+  "png": "guest-oobe-2026-10-28.png"
+}

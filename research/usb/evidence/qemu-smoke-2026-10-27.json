@@ -1,0 +1,100 @@
+{
+  "evidence": "actual-QEMU-diskless-stopped-smoke-test",
+  "version": "QEMU emulator version 11.1.0 (v11.1.0-12130-ge470268ff4)",
+  "binary_sha256": "dbbf7242e5b0d295e54336c69034a266ee1cc117d7ac6e3060e38bb61651200b",
+  "options": [
+    "-machine",
+    "pc",
+    "-accel",
+    "tcg",
+    "-m",
+    "32",
+    "-nodefaults",
+    "-nic",
+    "none",
+    "-usb",
+    "-S",
+    "-display",
+    "none",
+    "-serial",
+    "none",
+    "-monitor",
+    "none",
+    "-qmp",
+    "tcp:127.0.0.1:63514,server=on,wait=off"
+  ],
+  "commands": [
+    {
+      "execute": "qmp_capabilities",
+      "id": 1
+    },
+    {
+      "execute": "query-status",
+      "id": 2
+    },
+    {
+      "execute": "human-monitor-command",
+      "arguments": {
+        "command-line": "info usb"
+      },
+      "id": 3
+    },
+    {
+      "execute": "quit",
+      "id": 4
+    }
+  ],
+  "responses": [
+    {
+      "QMP": {
+        "version": {
+          "qemu": {
+            "micro": 0,
+            "minor": 1,
+            "major": 11
+          },
+          "package": "v11.1.0-12130-ge470268ff4"
+        },
+        "capabilities": [
+          "oob"
+        ]
+      }
+    },
+    {
+      "return": {},
+      "id": 1
+    },
+    {
+      "return": {
+        "status": "prelaunch",
+        "running": false
+      },
+      "id": 2
+    },
+    {
+      "return": "",
+      "id": 3
+    },
+    {
+      "timestamp": {
+        "seconds": 1793144265,
+        "microseconds": 983045
+      },
+      "event": "SHUTDOWN",
+      "data": {
+        "guest": false,
+        "reason": "host-qmp-quit"
+      }
+    },
+    {
+      "return": {},
+      "id": 4
+    }
+  ],
+  "usb_redir_available": true,
+  "usbip_device_available": false,
+  "guest_os_present": false,
+  "cyberview_launched": false,
+  "pf1800_emulator_attached": false,
+  "physical_usb_access": false
+}

@@ -1,0 +1,4 @@
+{"binding": "127.0.0.1", "cyberview_guest": false, "device_profile": "unavailable: no captured PF1800 descriptors", "event": "listening", "physical_device": false, "port": 52792, "sequence": 1, "source": "harness-only"}
+{"cyberview_guest": false, "devices": 0, "event": "devlist", "physical_device": false, "request_hex": "0111800500000000", "response_hex": "011100050000000000000000", "sequence": 2, "source": "harness-only"}
+{"cyberview_guest": false, "event": "import-rejected", "physical_device": false, "reason": "No evidenced device profile", "request_hex": "0111800300000000312d310000000000000000000000000000000000000000000000000000000000", "response_hex": "0111000300000001", "sequence": 3, "source": "harness-only"}
+{"cyberview_guest": false, "event": "malformed-rejected", "physical_device": false, "reason": "Unsupported USB/IP management opcode 0xffff", "sequence": 4, "source": "harness-only"}

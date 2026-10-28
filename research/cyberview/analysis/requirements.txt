@@ -1,0 +1,4 @@
+# Optional static tools. Do not add these to production FRAME requirements.
+pefile==2024.8.26
+capstone==5.0.9
+pycdlib==1.16.0
