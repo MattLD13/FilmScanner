@@ -1,0 +1,3 @@
+LIBRARY SCAN08
+EXPORTS
+    ScannerDeviceIO

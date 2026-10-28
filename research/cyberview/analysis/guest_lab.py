@@ -34,6 +34,7 @@ VENDOR = WORKSPACE / "research/cyberview/.artifacts/official-pf1800afl-v1.3/Prim
 BASE_SHA = "bc57268875ab4589f2f11b766fa214bbe11b5349b427ec518e2a6316e2ded19d"
 VENDOR_SHA = "ebcbe798fe577b9461df22db3bde6240185e0553e65eb9b93d139d367f9109cf"
 TOOLS = Path(__file__).resolve().parent / "guest_tools"
+SIMULATOR = WORKSPACE / "research/cyberview/.artifacts/afl-sim/SCAN08.dll"
 FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
@@ -142,27 +143,45 @@ def start(budget_minutes=5):
     print(json.dumps({"started_pid": process.pid, "qmp_port": port, "network": "none", "base": "read-only"}))
 
 
-def make_media():
-    """Tools CD (tracked guest_tools scripts) plus one blank evidence floppy for this run."""
+def build_tools_iso():
+    """Tools CD from tracked guest_tools scripts plus the built research simulator, if present."""
     import pycdlib
-    from fat12 import blank_image
-    if (LAB / "media.json").exists():
-        raise FileExistsError("Media already made for this lab; keep its evidence floppy")
     image = pycdlib.PyCdlib()
     image.new(interchange_level=3, joliet=3, vol_ident="FRAME_TOOLS")
-    scripts = {}
-    for script in sorted(TOOLS.glob("*.CMD")):
-        data = script.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
-        image.add_fp(io.BytesIO(data), len(data), f"/{script.name};1", joliet_path=f"/{script.name}")
-        scripts[script.name] = hashlib.sha256(data).hexdigest()
+    files = {}
+    sources = [(p, p.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+               for p in sorted(TOOLS.glob("*.CMD"))]
+    if SIMULATOR.exists():
+        sources.append((SIMULATOR, SIMULATOR.read_bytes()))
+    for path, data in sources:
+        name = path.name.upper()
+        image.add_fp(io.BytesIO(data), len(data), f"/{name};1", joliet_path=f"/{name}")
+        files[name] = hashlib.sha256(data).hexdigest()
     image.write(str(LAB / "tools.iso")); image.close()
+    return files
+
+
+def new_floppy():
+    from fat12 import blank_image
     floppy = "evidence-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".img"
     (LAB / floppy).write_bytes(blank_image())
-    media = {"made_utc": datetime.now(timezone.utc).isoformat(), "scripts": scripts,
+    return floppy
+
+
+def make_media(refresh=False):
+    """Tools CD plus one blank evidence floppy. Refresh rebuilds both and keeps old floppies."""
+    if (LAB / "media.json").exists() and not refresh:
+        raise FileExistsError("Media already made for this lab; use refresh-media for a new run")
+    files = build_tools_iso()
+    floppy = new_floppy()
+    media = {"made_utc": datetime.now(timezone.utc).isoformat(), "scripts": files,
              "tools_iso_sha256": digest(LAB / "tools.iso"), "evidence_floppy": floppy,
              "blank_floppy_sha256": digest(LAB / floppy)}
+    if refresh:
+        history = json.loads((LAB / "media.json").read_text())
+        media["previous"] = history.get("previous", []) + [{k: v for k, v in history.items() if k != "previous"}]
     (LAB / "media.json").write_text(json.dumps(media, indent=2))
-    print(json.dumps(media, indent=2))
+    print(json.dumps({k: v for k, v in media.items() if k != "previous"}, indent=2))
 
 
 def insert(port, kind):
@@ -253,9 +272,24 @@ def click(port, x, y, width=800, height=600, button="left", double=False):
 
 def launch_watchdog(port, budget_minutes):
     with (LAB / "watchdog.txt").open("ab") as stream:
-        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watchdog", "--port", str(port),
-                          "--budget-minutes", str(budget_minutes)],
-                         stdout=stream, stderr=stream, creationflags=FLAGS)
+        process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watchdog", "--port", str(port),
+                                    "--budget-minutes", str(budget_minutes)],
+                                   stdout=stream, stderr=stream, creationflags=FLAGS)
+    (LAB / "watchdog.pid").write_text(str(process.pid))
+
+
+def rewatch(port, budget_minutes):
+    """Replace this run's watchdog with a fresh budget, so a logged-in guest need not reboot."""
+    pid_file = LAB / "watchdog.pid"
+    if pid_file.exists():
+        subprocess.run(["taskkill", "/PID", pid_file.read_text().strip(), "/F"],
+                       capture_output=True, creationflags=FLAGS)
+    launch_watchdog(port, budget_minutes)
+    run = json.loads((LAB / "run.json").read_text())
+    run.setdefault("watchdog_extensions", []).append(
+        {"utc": datetime.now(timezone.utc).isoformat(), "budget_minutes": budget_minutes})
+    (LAB / "run.json").write_text(json.dumps(run, indent=2))
+    print(json.dumps({"watchdog_budget_minutes": budget_minutes, "from_utc": datetime.now(timezone.utc).isoformat()}))
 
 
 def watchdog(port, budget_minutes=5):
@@ -283,7 +317,7 @@ def watchdog(port, budget_minutes=5):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["prepare", "start", "status", "screenshot", "stop", "verify-base", "watchdog",
-                                           "make-media", "insert", "eject-evidence", "read-evidence",
+                                           "make-media", "refresh-media", "insert", "eject-evidence", "read-evidence", "rewatch",
                                            "key", "type", "click", "dclick", "rclick"])
     parser.add_argument("--port", type=int)
     parser.add_argument("--media", choices=["vendor", "tools", "evidence"])
@@ -295,12 +329,14 @@ if __name__ == "__main__":
     elif args.action == "start": start(args.budget_minutes)
     elif args.action == "watchdog": watchdog(args.port, args.budget_minutes)
     elif args.action == "make-media": make_media()
+    elif args.action == "refresh-media": make_media(refresh=True)
     elif args.action == "read-evidence": read_evidence()
     elif args.action == "verify-base": print(json.dumps({"base_sha256": digest(BASE), "unchanged": digest(BASE) == BASE_SHA}))
     else:
         run = json.loads((LAB / "run.json").read_text()); port = run["qmp_port"]
         if args.action == "stop": print(qmp(port, "quit"))
         elif args.action == "insert": insert(port, args.media)
+        elif args.action == "rewatch": rewatch(port, args.budget_minutes)
         elif args.action == "key":
             for combo in args.value: send_keys(port, combo)
         elif args.action == "type": type_text(port, " ".join(args.value))

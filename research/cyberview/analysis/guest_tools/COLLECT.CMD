@@ -16,7 +16,8 @@ for %%f in ("%OUT%\KERNEL.ETL" "%OUT%\KERNEL.CSV") do echo %%~nxf %%~zf bytes >>
 for /f "delims=" %%i in ('dir /s /b "%WINDIR%\twain_32\CyberViewX.ini" 2^>nul') do copy /y "%%i" %OUT%\CVX.INI > nul
 for /f "delims=" %%i in ('dir /s /b "%WINDIR%\twain_32\*.log" 2^>nul') do echo %%i >> %OUT%\LOGS.TXT
 echo collect-end %DATE% %TIME% >> %OUT%\RUN.TXT
-for %%f in (RUN SCAN08 MODULES TASKS TWAIN SYS32 STARTMNU UNINST SUMMARY APP MODELS LOGS HEAD) do if exist %OUT%\%%f.TXT copy /y %OUT%\%%f.TXT A:\ > nul || echo copy-failed %%f >> %OUT%\RUN.TXT
+if exist %OUT%\SIMAFL.LOG copy /y %OUT%\SIMAFL.LOG A:\ > nul
+for %%f in (RUN SIMINST SCAN08 MODELS SUMMARY TASKS MODULES TWAIN SYS32 STARTMNU UNINST LOGS) do if exist %OUT%\%%f.TXT copy /y %OUT%\%%f.TXT A:\ > nul || echo copy-failed %%f >> %OUT%\RUN.TXT
 if exist %OUT%\CVX.INI copy /y %OUT%\CVX.INI A:\ > nul
 copy /y %OUT%\RUN.TXT A:\ > nul
 dir A:\
