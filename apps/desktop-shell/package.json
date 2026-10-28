@@ -1,0 +1,18 @@
+{
+  "name": "frame-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows desktop shell for the local FRAME service and React client",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "electron": "44.7.1"
+  }
+}

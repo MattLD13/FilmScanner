@@ -106,6 +106,15 @@ Exact blockers and the minimum input that unblocks each:
 
 The Windows 11 compatibility-mode question is documented in `research/cyberview/windows11-compatibility.md`: an application-only test remains worthwhile and unattempted. Compatibility settings do not translate the extracted x86 kernel drivers for this 64-bit host. Successful application startup would not establish scanner operation.
 
+## Windows desktop shell (started 2026-10-28)
+
+**Status: first slice working.** The user asked for a Windows 11 app with an Electron UI built on the M1.5 findings. `apps/desktop-shell` opens the existing React client and Python service in a native Electron 44.7.1 window. It attaches to a running service on 8765, or owns one on a free loopback port. The page is sandboxed, navigation is locked to the service origin, and every non-loopback request is cancelled. CyberView features are being rebuilt in FRAME's own UI, not copied from Pacific Image's design or assets. The scanner backend is still the simulator; real AFL USB access stays disabled until traces from the physical unit exist.
+
+- [x] Shell, attach-or-own service lifecycle, single instance, hardening.
+- [x] `npm run test:desktop`: 7 unit tests. `npm run smoke:desktop`: real Electron launch, page authenticated, `/api/state` 200, screenshot `docs/screenshots/desktop-shell.png`.
+- [ ] Installer and bundled Python (M6). Electron upgrade to 44.10.0 or later on or after 2026-11-10 (GHSA-jr5w-w6x2-84p9, mitigated meanwhile).
+- [ ] CyberView-equivalent scan workspace: prescan, frame strip, crop, exposure/gain, and film profiles read from the user's own CyberView install. AFL-state-aware simulator behavior from `research/cyberview/afl-simulator.md`.
+
 ## M2: Image processing and archival reliability
 
 **Status: IN PROGRESS, independently of M1.5.**

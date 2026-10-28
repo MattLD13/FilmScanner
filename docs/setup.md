@@ -10,7 +10,7 @@ npm run build
 npm start
 ```
 
-Open http://127.0.0.1:8765. The server binds only to this computer. `powershell -File scripts/start.ps1` also builds a missing client and starts the server. After changing client source, rebuild; after Python changes, restart the service. Avoid multiple service processes sharing the same data directory.
+Open http://127.0.0.1:8765, or run `npm run desktop` for the Windows desktop window (Electron; see `apps/desktop-shell/README.md`). The server binds only to this computer. `powershell -File scripts/start.ps1` also builds a missing client and starts the server. After changing client source, rebuild; after Python changes, restart the service. Avoid multiple service processes sharing the same data directory.
 
 ```powershell
 npm test

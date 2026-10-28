@@ -15,3 +15,7 @@ jobs:
       - run: npm --prefix apps/web ci
       - run: npm run build
       - run: npm test
+      - run: npm --prefix apps/desktop-shell ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm run test:desktop
