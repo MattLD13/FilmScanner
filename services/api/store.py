@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import threading
 import uuid
 
 
@@ -26,6 +27,9 @@ class Store:
     def __init__(self, root: Path):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        # check_same_thread=False permits use across the API and test/control
+        # threads; it does not make a shared connection/cursor transaction safe.
+        self._lock = threading.RLock()
         self.db = sqlite3.connect(self.root / 'frame.sqlite', check_same_thread=False)
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('CREATE TABLE IF NOT EXISTS entities(kind TEXT, id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
@@ -34,25 +38,32 @@ class Store:
         self.db.commit()
 
     def all(self, kind):
-        return [json.loads(row[0]) for row in self.db.execute('SELECT payload FROM entities WHERE kind=? ORDER BY rowid', (kind,))]
+        with self._lock:
+            rows = self.db.execute('SELECT payload FROM entities WHERE kind=? ORDER BY rowid', (kind,)).fetchall()
+        return [json.loads(row[0]) for row in rows]
 
     def get(self, kind, entity_id):
-        row = self.db.execute('SELECT payload FROM entities WHERE kind=? AND id=?', (kind, entity_id)).fetchone()
+        with self._lock:
+            row = self.db.execute('SELECT payload FROM entities WHERE kind=? AND id=?', (kind, entity_id)).fetchone()
         if not row:
             raise KeyError(entity_id)
         return json.loads(row[0])
 
     def save(self, kind, item):
-        with self.db:
+        with self._lock, self.db:
             self.db.execute('INSERT INTO entities VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE kind=excluded.kind', (kind, item['id'], json.dumps(item)))
         return item
 
     def backup(self):
         target = self.root / 'backups' / f'v1-{uuid.uuid4().hex}.sqlite'
         target.parent.mkdir(exist_ok=True)
-        with sqlite3.connect(target) as destination:
+        with self._lock, sqlite3.connect(target) as destination:
             self.db.backup(destination)
         return target
+
+    def close(self):
+        with self._lock:
+            self.db.close()
 
     def path(self, relative):
         path = (self.root / relative).resolve()

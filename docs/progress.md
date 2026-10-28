@@ -57,6 +57,7 @@ Do not install legacy kernel drivers on the main Windows system, modify physical
 - Sixteen portable passive USB/USBIP parser/harness tests passed as part of a64-test run. Harness traffic is test-generated metadata, not originalCyberView traffic.
 - A diskless, stoppedQEMU/QMP smoke test has run; no vendor application or Windows guest is claimed from that test.
 - The user has no local licensed Windows image and asked to find one online. The official Microsoft Server 2008 Enterprise x86 evaluation VHD and all three archive parts are downloaded and hashed. The included evaluation license permits VHD-capable virtualization; use is internal evaluation only, with no activation. The preserved base is 7,653,676,032 bytes; a disposable overlay is used for the bounded guest attempt. Host hypervisor/security settings are untouched. Actual guest/vendor results are recorded separately from acquisition.
+- The official evaluation guest has now booted to its regional first-run setup screen in isolated QEMU. This is actual guest execution, not a CyberView launch or scanner detection result. The primary agent is completing the bounded setup attempt.
 
 ## M2: Image processing and archival reliability
 
@@ -73,6 +74,8 @@ Do not install legacy kernel drivers on the main Windows system, modify physical
 
 Latest combined run at this checkpoint: `python -m pytest -q` →64passed in21.63seconds (including16research tests); client checks/build and complete36-frame browser workflow passed. The already runningM1 service was not restarted. New service processes use `frame-density-2`; the client shows new film-base controls only when that engine is reported, preserving compatibility until the next normal service restart.
 
+The repeatable nominal 4.34-megapixel synthetic TIFF benchmark is `python scripts/benchmark_imaging.py`; the recorded run rendered in0.671seconds with416,628,522bytes of tracked Python/NumPy allocations during rendering. The measurement excludes preallocated input and full process RSS and is not scanner performance. Larger input benchmarks and a lower-memory pipeline remain open.
+
 ## Executed validation
 
 - `python -m pytest -q`: **41 passed in21.04seconds**. Includes17scanner tests and7independent review regressions, a36-frame scan, jam17/recovery, cancellation, all simulator faults, authenticated HTTP/WebSocket access, originals/contact-sheet corruption rejection, and actual independent service-process restart. Restart preserves an active development timestamp, archived metadata and exact TIFF export bytes.
@@ -83,7 +86,7 @@ Latest combined run at this checkpoint: `python -m pytest -q` →64passed in21.6
 - Screenshots: docs/screenshots/desktop-empty.png, desktop-home.png and iphone-home.png. Phone evidence is Chromium emulation, not a physical iPhone or Safari test.
 - The interactive Chrome inspection also created a demonstration roll and started its water rehearsal. Browser-control tooling later stopped because it could not confidently verify the current URL. The isolated automated workflow completed successfully; the live demo may still show a practice confirmation dialog/session for the user to dismiss or continue.
 
-The first remote checkpoint's CI failed because the client had not yet been committed. Final-source CI status is tracked separately; local results above are actual successful runs.
+The first remote checkpoint's CI failed because the client had not yet been committed. The initial finished M1 checkpoint then passed Windows CI. Subsequent Windows CI runs exposed concurrent access to the shared SQLite connection in a recovery test (`sqlite3.InterfaceError`); root serialized store operations, transactions and cursor consumption with a lock and added a six-thread read/write regression. That test plus seven existing review regressions pass locally. A fresh remote run is required before claiming this fix passes CI.
 
 ## Actual agent assignments
 

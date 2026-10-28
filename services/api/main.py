@@ -90,7 +90,7 @@ def create_app(data_dir=None):
                 await task
             except asyncio.CancelledError:
                 pass
-        store.db.close()
+        store.close()
 
     app = FastAPI(title='FRAME', lifespan=lifespan)
     app.state.store = store
