@@ -44,6 +44,8 @@ class ScannerBackend(Protocol):
     async def calibrate(self) -> None: ...
     async def load(self, frame_count: int, media: str = "uncut") -> None: ...
     async def prescan(self) -> list[dict]: ...
+    async def prescan_preview(self, index: int) -> np.ndarray: ...
+    def configure(self, window: dict | None = None, gains: list[float] | None = None) -> dict: ...
     async def list_frames(self) -> list[dict]: ...
     async def position_frame(self, index: int) -> None: ...
     async def acquire(self, index: int) -> np.ndarray: ...
@@ -99,6 +101,8 @@ class SimulatedScannerBackend:
         self._dispatcher: asyncio.Task | None = None
         self._sequence = 0
         self._ticks = 0
+        self.window: dict | None = None
+        self.gains = (1.0, 1.0, 1.0)
 
     async def discover(self) -> list[dict]:
         return [{"id": "frame-simulator", "name": "PF1800 workflow simulator",
@@ -278,6 +282,44 @@ class SimulatedScannerBackend:
     async def list_frames(self) -> list[dict]:
         return [dict(frame) for frame in self.frames]
 
+    def configure(self, window: dict | None = None, gains: list[float] | None = None) -> dict:
+        """Simulated scan window (fractions of the frame) and per-channel exposure gains.
+
+        Applied to the synthetic transmission at acquisition, as a scanner applies its
+        window and exposure before data leaves the device. Not a model of PF1800 optics.
+        """
+        if window is not None:
+            left, top, width, height = (float(window[k]) for k in ("left", "top", "width", "height"))
+            if not all(np.isfinite(v) for v in (left, top, width, height)) or left < 0 or top < 0                     or width < 0.05 or height < 0.05 or left + width > 1.0001 or top + height > 1.0001:
+                raise ValueError("Scan window must be a rectangle of at least 5% inside the frame")
+            window = {"left": left, "top": top, "width": width, "height": height}
+        if gains is not None:
+            gains = tuple(float(g) for g in gains)
+            if len(gains) != 3 or not all(np.isfinite(g) and 0.25 <= g <= 4 for g in gains):
+                raise ValueError("Exposure gains must be three values from 0.25 to 4")
+        self.window = window
+        self.gains = gains or (1.0, 1.0, 1.0)
+        return {"window": self.window, "gains": list(self.gains)}
+
+    def _apply_settings(self, pixels: np.ndarray) -> np.ndarray:
+        result = pixels
+        if self.window:
+            height, width = pixels.shape[:2]
+            x0, y0 = round(self.window["left"] * width), round(self.window["top"] * height)
+            x1 = max(x0 + 8, round((self.window["left"] + self.window["width"]) * width))
+            y1 = max(y0 + 8, round((self.window["top"] + self.window["height"]) * height))
+            result = result[y0:min(y1, height), x0:min(x1, width)]
+        if self.gains != (1.0, 1.0, 1.0):
+            result = np.clip(np.rint(result * np.asarray(self.gains)), 0, 255).astype(np.uint8)
+        return np.ascontiguousarray(result)
+
+    async def prescan_preview(self, index: int) -> np.ndarray:
+        """Whole-frame low-resolution synthetic transmission; the scan window is not applied."""
+        if not self.frames:
+            raise ScannerError("Prescan the loaded film before requesting previews")
+        self._validate_index(index)
+        return self.transmission_fixture(index)[::2, ::2].copy()
+
     def _validate_index(self, index: int) -> None:
         if isinstance(index, bool) or not isinstance(index, int) or not 1 <= index <= self.frame_count:
             raise ValueError("Frame index is outside the loaded film")
@@ -316,7 +358,7 @@ class SimulatedScannerBackend:
                 raise ScannerError("Position the requested frame before acquiring")
             if index in self.completed_frames:
                 # Repeated requests are idempotent; no duplicate completion event.
-                return self.transmission_fixture(index)
+                return self._apply_settings(self.transmission_fixture(index))
             self._state("focusing")
             await self._tick()
             self._state("scanning")
@@ -329,7 +371,7 @@ class SimulatedScannerBackend:
                            total_rows=128, image_kind="synthetic film transmission")
             self._state("saving", simulated=True)
             self._inject("write", index)
-            result = self.transmission_fixture(index)
+            result = self._apply_settings(self.transmission_fixture(index))
             self.completed_frames.add(index)
             self._state("complete" if len(self.completed_frames) == self.frame_count else "ready")
             self._emit("frame_complete", index=index, completed_frames=len(self.completed_frames))
@@ -382,7 +424,10 @@ class _DisabledHardwareBackend:
     async def _unsupported(self, *args, **kwargs):
         raise UnsupportedOperation(f"{self.name} hardware backend disabled: no verified device implementation")
 
-    connect = initialize = calibrate = load = prescan = list_frames = _unsupported
+    connect = initialize = calibrate = load = prescan = prescan_preview = list_frames = _unsupported
+
+    def configure(self, *args, **kwargs):
+        raise UnsupportedOperation(f"{self.name} hardware backend disabled: no verified device implementation")
     position_frame = acquire = cancel = recover = eject = disconnect = _unsupported
 
 

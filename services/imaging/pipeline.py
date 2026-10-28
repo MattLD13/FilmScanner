@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageOps
 import tifffile
 
 from services.api.store import atomic_write
+from services.imaging import filmterms
 
 VERSION = 'frame-density-2'
 DEFAULT_EDIT = {'exposure': 0, 'contrast': 1, 'rotation': 0, 'invert': True}
@@ -84,7 +85,7 @@ def load_samples(original):
         return np.asarray(corrected.convert('RGB')).astype(np.float64) / 255
 
 
-def render_samples(original: bytes, edit: dict, film_type='color_negative'):
+def render_samples(original: bytes, edit: dict, film_type='color_negative', profile=None):
     values = load_samples(original)
     if edit.get('invert', True) and film_type != 'positive':
         # Optical density relative to an explicit nominal film base. Manual measured
@@ -96,6 +97,11 @@ def render_samples(original: bytes, edit: dict, film_type='color_negative'):
         values = 1 - np.exp(-density * 1.6)
         if film_type == 'bw_negative':
             values = np.repeat(values.mean(axis=2, keepdims=True), 3, axis=2)
+    if edit.get('film_profile'):
+        # Film term before user adjustments, as CyberView orders them; the caller resolves the cached profile.
+        if not profile or profile.get('id') != edit['film_profile']:
+            raise ValueError('Film profile is not available for rendering')
+        values = filmterms.apply(values, profile)
     values = ((values * 2 ** edit.get('exposure', 0) - .5) * edit.get('contrast', 1) + .5)
     values = np.clip(values, 0, 1)
     rotation = edit.get('rotation', 0) % 360
@@ -107,18 +113,20 @@ def render_samples(original: bytes, edit: dict, film_type='color_negative'):
     return np.stack(channels, axis=2).astype(np.float64)
 
 
-def render(original: bytes, edit: dict, film_type='color_negative'):
-    return Image.fromarray(np.uint8(np.rint(render_samples(original, edit, film_type) * 255)))
+def render(original: bytes, edit: dict, film_type='color_negative', profile=None):
+    return Image.fromarray(np.uint8(np.rint(render_samples(original, edit, film_type, profile) * 255)))
 
 
-def render_tiff16(original, edit, film_type='color_negative', acquired_effective_bits=None):
-    values = np.asarray(np.rint(render_samples(original, edit, film_type) * 65535), dtype='<u2')
+def render_tiff16(original, edit, film_type='color_negative', acquired_effective_bits=None, profile=None):
+    values = np.asarray(np.rint(render_samples(original, edit, film_type, profile) * 65535), dtype='<u2')
     details = {'engine': VERSION, 'edit': edit, 'film_type': film_type,
                'source_sha256': hashlib.sha256(original).hexdigest(),
                'source_sample_bits': source_info(original)['sample_bits'],
                'acquired_effective_bits': acquired_effective_bits, 'output_sample_bits': 16,
                'processing_precision': 'float64', 'color_space': 'sRGB',
-               'color_assumption': 'Nominal output space; scanner/film characterization not measured'}
+               'color_assumption': 'Nominal output space; scanner/film characterization not measured',
+               'film_profile': ({'id': profile['id'], 'name': profile['name'], 'source': 'user CyberView install',
+                                 'application': 'inferred table then matrix'} if profile else None)}
     stream = BytesIO()
     tifffile.imwrite(stream, values, photometric='rgb', planarconfig='contig', byteorder='<',
                      compression=None, metadata=None, description=json.dumps(details, sort_keys=True),
@@ -126,14 +134,16 @@ def render_tiff16(original, edit, film_type='color_negative', acquired_effective
     return stream.getvalue()
 
 
-def save_frame(store, roll, index, pixels, frame_id, synthetic=True, original_bytes=None):
+def save_frame(store, roll, index, pixels, frame_id, synthetic=True, original_bytes=None, profile=None, scan_settings=None):
     original = original_bytes if original_bytes is not None else encode(Image.fromarray(pixels))
     prefix = f"{roll['id']}/acquisition/{frame_id}"
     info = source_info(original)
     original_path = prefix + info['extension']
     edit = dict(DEFAULT_EDIT, invert=synthetic and roll['film_type'] != 'positive')
+    if profile:
+        edit['film_profile'] = profile['id']
     preview = f"{roll['id']}/previews/{frame_id}-initial.jpg"
-    image = render(original, edit, roll['film_type'])
+    image = render(original, edit, roll['film_type'], profile)
     image.thumbnail((1280, 1280))
     atomic_write(store.path(original_path), original)
     atomic_write(store.path(preview), encode(image, 'JPEG'))
@@ -141,7 +151,8 @@ def save_frame(store, roll, index, pixels, frame_id, synthetic=True, original_by
             'preview_path': preview, 'sha256': hashlib.sha256(original).hexdigest(), 'synthetic': synthetic,
             'edit': edit, 'favorite': False, 'effective_bits': 8 if synthetic else None,
             'source_sample_bits': info['sample_bits'], 'engine': VERSION,
-            'provenance': 'Synthetic simulator transmission fixture' if synthetic else 'User imported image; acquired precision not measured'}
+            'provenance': 'Synthetic simulator transmission fixture' if synthetic else 'User imported image; acquired precision not measured',
+            'scan_settings': scan_settings}
 
 
 def verify_frame(store, frame):

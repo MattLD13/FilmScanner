@@ -113,7 +113,24 @@ The Windows 11 compatibility-mode question is documented in `research/cyberview/
 - [x] Shell, attach-or-own service lifecycle, single instance, hardening.
 - [x] `npm run test:desktop`: 7 unit tests. `npm run smoke:desktop`: real Electron launch, page authenticated, `/api/state` 200, screenshot `docs/screenshots/desktop-shell.png`.
 - [ ] Installer and bundled Python (M6). Electron upgrade to 44.10.0 or later on or after 2026-11-10 (GHSA-jr5w-w6x2-84p9, mitigated meanwhile).
-- [ ] CyberView-equivalent scan workspace: prescan, frame strip, crop, exposure/gain, and film profiles read from the user's own CyberView install. AFL-state-aware simulator behavior from `research/cyberview/afl-simulator.md`.
+- [x] CyberView-equivalent scan workspace (2026-10-28), in FRAME's own design, on the simulator. Details below.
+- [ ] AFL-state-aware simulator behavior from `research/cyberview/afl-simulator.md`: film-inserted status, auto Final Scan, frame location.
+
+### Scan workspace
+
+The Scan page gains a workspace panel. Screenshot: `docs/screenshots/desktop-scan-workspace.png`.
+
+- **Prescan roll** (`POST /api/rolls/{id}/prescan`): low-resolution synthetic preview of every frame, stored on the roll.
+- **Frame strip**: view or select frames. `POST /api/scans` accepts `frames` and scans only those.
+- **Scan window**: drag on the viewer or type percentages. The simulator crops the acquired frame to it.
+- **Exposure**: per-channel gains of 50–200%, applied by the simulator at acquisition.
+- **Resolution and color depth**: requested values are recorded per frame in `scan_settings` next to what was `delivered` (always an 8-bit synthetic fixture).
+- **Film profiles**: `GET /api/film-profiles` reads CyberView `.ft` files from the user's install (`%WINDIR%\twain_32\CyberViewX_SF\GAMMA` or `FRAME_FILMTERM_DIRS`).
+  - All 132 files in the official package parse, giving 82 unique profiles. Variants handled: CRLF, a trailing `;`, `B&&W` as the black-and-white class, and 4096-row tables with values up to 4095.
+  - A chosen profile is applied after inversion as table then matrix (INFERRED ordering). It is cached in the library, so edits and exports survive uninstalling CyberView.
+  - Many CyberView 3600u slide profiles share one identical table and matrix; that is vendor data.
+  - FRAME distributes no vendor profile; tests use fictitious ones.
+- Validation: `python -m pytest -q` → 106 passed (12 new workspace tests). `npm run lint` and `npm run build` passed. `npm run test:e2e` passed with prescan, profile, dragged 20–80% window and exposure R 105%, checking `scan_settings` on all 36 saved frames. `npm run test:desktop` 7 passed; `npm run smoke:desktop` passed.
 
 ## M2: Image processing and archival reliability
 

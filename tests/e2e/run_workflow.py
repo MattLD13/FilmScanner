@@ -32,11 +32,21 @@ def wait_server():
     raise AssertionError('Temporary service failed to start')
 
 
+def write_profile(folder):
+    # Fictitious linear film term in the CyberView layout; no vendor profile is used.
+    table = '\n'.join('\t'.join([str(i)] * 3) for i in range(256))
+    folder.mkdir(parents=True)
+    (folder / 'E2E Linear.ft').write_text('FilmClass\t\tNEG;\nFilmMfgr\t\tFRAME;\nFilmName\t\tE2E Linear;\n'
+                                         f'FilmBalance\t\t1\t1\t1;\nFilmLut\t\t\n{table}\n', encoding='latin-1')
+
+
 def run():
     evidence = ROOT / 'docs' / 'screenshots'
     evidence.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='frame-browser-') as temporary:
-        env = dict(os.environ, FRAME_DATA_DIR=str(Path(temporary) / 'library'))
+        write_profile(Path(temporary) / 'filmterms')
+        env = dict(os.environ, FRAME_DATA_DIR=str(Path(temporary) / 'library'),
+                   FRAME_FILMTERM_DIRS=str(Path(temporary) / 'filmterms'))
         with (Path(temporary) / 'server.log').open('w') as log:
             service = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'services.api.main:app', '--host', '127.0.0.1', '--port', '8766'],
                                        cwd=ROOT, env=env, stdout=log, stderr=log,
@@ -103,6 +113,22 @@ def run():
                     page.locator('.sidebar nav button').filter(has_text='Scan').click()
                     page.get_by_role('button', name='Connect simulator ↗', exact=True).click()
                     expect(page.locator('.pill')).to_contain_text('SIMULATOR · CONNECTED')
+                    # Scan workspace: profile, prescan strip, dragged scan window and channel exposure.
+                    page.get_by_role('combobox', name=re.compile('FILM PROFILE')).select_option(label='E2E Linear')
+                    page.get_by_role('button', name='Prescan roll ↗', exact=True).click()
+                    expect(page.locator('.frame-strip [role=listitem]')).to_have_count(36)
+                    expect(page.locator('.ws-viewer img')).to_be_visible()
+                    page.locator('.ws-viewer').scroll_into_view_if_needed()
+                    box = page.locator('.ws-viewer').bounding_box()
+                    page.mouse.move(box['x'] + box['width'] * .2, box['y'] + box['height'] * .2)
+                    page.mouse.down()
+                    page.mouse.move(box['x'] + box['width'] * .8, box['y'] + box['height'] * .8, steps=8)
+                    page.mouse.up()
+                    expect(page.locator('.ws-window')).to_be_visible()
+                    expect(page.get_by_label('WINDOW LEFT %', exact=True)).to_have_value('20')
+                    page.locator('.ws-controls input[type=range]').first.press('ArrowRight')
+                    expect(page.locator('.ws-controls')).to_contain_text('EXPOSURE R · 105%')
+                    page.locator('.scan-workspace').screenshot(path=str(evidence / 'desktop-scan-workspace.png'))
                     page.get_by_role('button', name='Start simulated scan ↗', exact=True).click()
                     mobile.wait_for_function('window.frameEvents.some(e => e.type === "frame_saved")', timeout=20000)
                     received = mobile.evaluate('window.frameEvents.filter(e => e.type === "frame_saved")[0]')
@@ -118,6 +144,11 @@ def run():
                         time.sleep(.05)
                     assert state['scan']['status'] == 'complete', state['scan']
                     assert len(state['frames']) == 36
+                    for saved in state['frames']:
+                        settings = saved['scan_settings']
+                        assert settings['gains'] == [1.05, 1, 1] and settings['film_profile'] == saved['edit']['film_profile']
+                        assert abs(settings['window']['left'] - .2) < .02 and abs(settings['window']['width'] - .6) < .02
+                        assert settings['delivered'].endswith('uint8 synthetic fixture')
                     # A companion reconnect obtains current state with paths, not image buffers.
                     mobile.evaluate("""() => {
                       window.reconnected = null;
@@ -149,7 +180,12 @@ def run():
                     page.get_by_label('FILM BASE B', exact=True).fill('0.85')
                     page.get_by_role('button', name='Save edits ↗', exact=True).click()
                     expect(page.get_by_role('button', name='Save edits ↗', exact=True)).to_be_enabled()
-                    after_edit = desktop.request.get(URL + '/api/state').json()['frames'][0]
+                    # The enabled-button check can pass before the request starts; wait for the saved edit itself.
+                    for _ in range(100):
+                        after_edit = next(f for f in desktop.request.get(URL + '/api/state').json()['frames'] if f['id'] == first['id'])
+                        if after_edit['edit']['rotation'] == 90:
+                            break
+                        time.sleep(.05)
                     assert after_edit['sha256'] == first['sha256']
                     assert after_edit['edit']['rotation'] == 90
                     assert after_edit['edit']['film_base'] == [.95, .9, .85]
@@ -172,10 +208,11 @@ def run():
                     mobile.screenshot(path=str(evidence / 'iphone-home.png'), full_page=True)
                     assert not errors, errors
                     report = {'result': 'passed', 'frames': 36, 'development': 'real elapsed rehearsal with reload',
+                              'scan_workspace': 'prescan strip 36, film profile, dragged window 20-80%, exposure R 105%; settings on every saved frame',
                               'phone': '390x844 Chromium emulation; completed preview received during acquisition',
                               'reconnect': 'authenticated current snapshot', 'exports': '16-bit TIFF inspected',
                               'archive': 'integrity verified through UI', 'javascript_exceptions': errors,
-                              'ui_controls': ['create roll', 'start developing', 'confirm transitions', 'connect', 'scan', 'shuffle', 'search stock/date', 'edit', 'TIFF download', 'archive']}
+                              'ui_controls': ['create roll', 'start developing', 'confirm transitions', 'connect', 'film profile', 'prescan', 'scan window drag', 'exposure', 'scan', 'shuffle', 'search stock/date', 'edit', 'TIFF download', 'archive']}
                     (ROOT / 'docs' / 'browser-validation.json').write_text(json.dumps(report, indent=2), encoding='utf8')
                     print(json.dumps(report))
                     browser.close()
