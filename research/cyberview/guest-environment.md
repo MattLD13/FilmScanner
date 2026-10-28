@@ -93,8 +93,9 @@ If a later authorized continuation reaches login/password/security prompts, the
 Computer Use skill's explicit boundaries apply: do not automate authentication
 dialogs, do not act on security permission requests, and hand off final password
 changes. Ordinary regional setup and authentication are separate stages. This
-pass never reached an authentication dialog. Skill source:
-[computer-use/SKILL.md](C:/Users/mld20/.codex/plugins/cache/openai-bundled/computer-use/26.1023.50603/skills/computer-use/SKILL.md).
+pass never reached an authentication dialog. The installed skill source read for
+this pass was `computer-use/26.1023.50603/skills/computer-use/SKILL.md`, with its
+bundled `docs/guidance.md` and `docs/confirmations.md`.
 
 ## Reproduction and remaining work
 
