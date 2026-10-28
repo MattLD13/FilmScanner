@@ -244,13 +244,14 @@ static int dispatch(int selector, BYTE *param)
         if (IsBadReadPtr(param, 12)) return 0;
         memcpy(stored14, param, 12);
         return 1;
-    case 0x15: {                                          /* status bits, as 0x10010470 */
-        DWORD *status = (DWORD *)param, result = 0;
+    case 0x15: {
+        /* Status bits as CyberViewX reads them (0x100bb1a0 GetScannerStatus, 0x100bb240
+           IsDocumentInFeeder): bit0 -> busy (keeps polling), bit1 ready, bit4 set = feeder empty. */
+        DWORD *status = (DWORD *)param, result;
         if (IsBadWritePtr(param, 8)) return 0;
-        if ((status[0] & 1) && setting("FilmLoaded", 1)) result |= 1;
-        if (status[0] & 2) result |= 2;
-        if (status[0] & 8) result |= 8;
-        status[1] = result;
+        result = (DWORD)setting("StatusBits", 0x0a);
+        if (!setting("FilmLoaded", 1)) result |= 0x10;
+        status[1] = result & status[0];
         return 1;
     }
     case 0x16:                                           /* capabilities into param+1 */

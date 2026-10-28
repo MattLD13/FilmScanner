@@ -81,6 +81,16 @@ prescan needs one original-software trace per operation (see the
 [hardware plan](../cyberview/hardware-plan.md)). Without that evidence, the honest
 experiment is this negative one, and nothing was run against the guest.
 
+## Host-API simulation actually run (2026-10-28)
+
+Because of point 1, the user asked for a simulated AFL. FRAME built a labeled
+simulator one layer up: a research `SCAN08.dll` that implements BeneScan's
+model-module contract, recovered from LC.dll. Original CyberView detected it,
+opened it, prescanned and scanned to a TIFF through it
+([afl-simulator.md](../cyberview/afl-simulator.md)). That run is GUEST OBSERVED
+against a SIMULATOR. **It is not a guest-visible USB device and not an AFL USB
+profile.** The usb-redir path above is still unbuilt for the same evidence reasons.
+
 ## Explicitly not claimed
 
 No QEMU boot, USB/IP loopback, synthetic descriptor fixture or Ghidra decompile is

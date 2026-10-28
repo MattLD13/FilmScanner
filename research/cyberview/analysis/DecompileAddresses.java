@@ -22,6 +22,7 @@ public class DecompileAddresses extends GhidraScript {
         List<Object> rows = new ArrayList<>();
         for (int i = 1; i < args.length; i++) {
             Address address = toAddr(args[i]); Function f = getFunctionAt(address);
+            if (f == null) f = getFunctionContaining(address);
             if (f == null) { disassemble(address); f = createFunction(address, null); }
             if (f == null) { println("NO FUNCTION: " + args[i]); continue; }
             Map<String,Object> row = record(f);

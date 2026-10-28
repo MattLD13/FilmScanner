@@ -36,6 +36,13 @@ supplies evidence. The production USB/TWAIN backends remain disabled.
    the `Twain_32\CyberViewX_SF` directory. This is runtime confirmation of
    `0x100106d0`.
 
+9. On the CD, also look for model-37 film terms: `.ft` files destined for the
+   `GAMMA` root. Without them, CyberView crashes when it builds the film menu
+   for an AFL (see [afl-simulator.md](afl-simulator.md)).
+10. Compare the real unit's behavior with the simulator's assumptions: capability
+    block fields, status bits (bit 0 means film inserted and starts an auto Final
+    Scan), and `GetNowFilmLocation`. The simulator's values are LC-derived, not AFL truth.
+
 ## One original-software action per capture
 
 Read the PF1800AFL manual's loading and operation instructions before motion. Use

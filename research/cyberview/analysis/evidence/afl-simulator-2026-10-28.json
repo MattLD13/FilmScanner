@@ -1,0 +1,247 @@
+{
+  "evidence": "GUEST OBSERVED with SIMULATED module; not device evidence",
+  "date_utc": "2026-10-28",
+  "simulator": {
+    "source": "research/cyberview/simulator/scan08_sim.c",
+    "binary_sha256": "16a1ce8feb5460ec8ad7478f36ac33d7fc3fa9a9d0d8faa729923126c299b491",
+    "model_code": "0x25",
+    "status_answer": "0x0a (bits 1,3); FilmLoaded=1"
+  },
+  "test_configuration_changes": [
+    "simulated SCAN08.dll placed in C:\\Windows\\twain_32\\CyberViewX_SF",
+    "GAMMA\\Original\\*.ft copied to GAMMA\\ (model 37 reads film terms from GAMMA\\*.ft, empty in the official package)"
+  ],
+  "selector_counts": {
+    "0x1": 2,
+    "0x2": 1,
+    "0x3": 2,
+    "0x5": 1,
+    "0xc": 255,
+    "0xe": 1,
+    "0xf": 1,
+    "0x14": 1,
+    "0x15": 239,
+    "0x16": 2,
+    "0x1a": 2,
+    "0x20": 2,
+    "0x23": 7
+  },
+  "first_calls": [
+    {
+      "selector": "0x1",
+      "result": 1,
+      "in32": "null",
+      "out32": "null"
+    },
+    {
+      "selector": "0x3",
+      "result": 1,
+      "in32": "0000000000000000000000000000000000000000000000000000000050231200",
+      "out32": "504945202020202053462046696c6d205363616e6e657220312e300050231200"
+    },
+    {
+      "selector": "0x2",
+      "result": 1,
+      "in32": "null",
+      "out32": "null"
+    },
+    {
+      "selector": "0x1",
+      "result": 1,
+      "in32": "null",
+      "out32": "null"
+    },
+    {
+      "selector": "0x3",
+      "result": 1,
+      "in32": "504945202020202053462046696c6d205363616e6e657220312e300050231200",
+      "out32": "504945202020202053462046696c6d205363616e6e657220312e300050231200"
+    },
+    {
+      "selector": "0x5",
+      "result": 1,
+      "in32": "504945202020202053462046696c6d205363616e6e657220312e300050231200",
+      "out32": "504945202020202053462046696c6d205363616e6e657220312e300050231200"
+    },
+    {
+      "selector": "0x16",
+      "result": 1,
+      "in32": "84376e03e80b6e034e5449464945523d7838362046616d696c792036204d6f64",
+      "out32": "8406000201b4000000504945202020202053462046696c6d205363616e6e6572"
+    },
+    {
+      "selector": "0x16",
+      "result": 1,
+      "in32": "8500000000000000000000000000000000000000000000000000000000000000",
+      "out32": "8506000201b4000000504945202020202053462046696c6d205363616e6e6572"
+    },
+    {
+      "selector": "0x14",
+      "result": 1,
+      "in32": "a05a7301c05a7301e05a7301750a730114000000082112001400000080187301",
+      "out32": "a05a7301c05a7301e05a7301750a730114000000082112001400000080187301"
+    },
+    {
+      "selector": "0x23",
+      "result": 1,
+      "in32": "3c00000000000000000000000000000000000000000000000000000000000000",
+      "out32": "3c01000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "selector": "0x23",
+      "result": 1,
+      "in32": "3c00000000000000000000000000000000000000000000000000000000000000",
+      "out32": "3c01000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "selector": "0x23",
+      "result": 1,
+      "in32": "3c00000000000000000000000000000000000000000000000000000000000000",
+      "out32": "3c01000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "selector": "0x23",
+      "result": 1,
+      "in32": "3c00000000000000000000000000000000000000000000000000000000000000",
+      "out32": "3c01000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "selector": "0x23",
+      "result": 1,
+      "in32": "3c00000000000000000000000000000000000000000000000000000000000000",
+      "out32": "3c01000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "selector": "0x23",
+      "result": 1,
+      "in32": "3c00000000000000000000000000000000000000000000000000000000000000",
+      "out32": "3c01000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "selector": "0x15",
+      "result": 1,
+      "in32": "1f00000000000000e174c302f88e3603f88e360334fc12000000000034fc1200",
+      "out32": "1f0000000a000000e174c302f88e3603f88e360334fc12000000000034fc1200"
+    }
+  ],
+  "scan_blocks_hex": [
+    "2c01000000000000000000007368b13f22b0723f030000008c008c008c00640064006400b89e6603b8be6603b8de660300000000001000000000000080000000805a7301ff000000",
+    "2c01000000000000000000001111b13f4b7e713f030000008c008c008c00640064006400c8376603c8576603c877660300000000001000000000000080000000805a7301ff000000"
+  ],
+  "scan_blocks_decoded": [
+    {
+      "dpi": 300,
+      "window_inches": {
+        "left": 0.0,
+        "top": 0.0,
+        "width": 1.386,
+        "height": 0.948
+      },
+      "mode": 3,
+      "bytes_per_pixel": 3,
+      "exposure_rgb": [
+        140,
+        140,
+        140
+      ],
+      "offset_rgb": [
+        100,
+        100,
+        100
+      ],
+      "lut_pointers": [
+        "0x3669eb8",
+        "0x366beb8",
+        "0x366deb8"
+      ],
+      "gain_rgb": [
+        0,
+        0,
+        0
+      ],
+      "callback": "0x1735a80",
+      "lines_per_strip": 255
+    },
+    {
+      "dpi": 300,
+      "window_inches": {
+        "left": 0.0,
+        "top": 0.0,
+        "width": 1.3833,
+        "height": 0.9433
+      },
+      "mode": 3,
+      "bytes_per_pixel": 3,
+      "exposure_rgb": [
+        140,
+        140,
+        140
+      ],
+      "offset_rgb": [
+        100,
+        100,
+        100
+      ],
+      "lut_pointers": [
+        "0x36637c8",
+        "0x36657c8",
+        "0x36677c8"
+      ],
+      "gain_rgb": [
+        0,
+        0,
+        0
+      ],
+      "callback": "0x1735a80",
+      "lines_per_strip": 255
+    }
+  ],
+  "simulator_scan_lines": [
+    "scan frame=0 dpi=300 mode=3 width=416 height=284 bytes_per_line=1248 lines_per_strip=255",
+    "scan complete strips=2 lines=284",
+    "scan frame=0 dpi=300 mode=3 width=416 height=284 bytes_per_line=1248 lines_per_strip=255",
+    "scan complete strips=2 lines=284"
+  ],
+  "scanned_file": {
+    "name": "image001.tif",
+    "bytes": 354636,
+    "sha256": "43011e05b07a4925bf6bb46dd7ab00ff9e350449e94f335f05c0222f507a65bd",
+    "pixels": [
+      416,
+      284
+    ],
+    "mode": "RGB 8-bit",
+    "dpi": 300,
+    "expected_from_simulator": {
+      "width": 416,
+      "height": 284,
+      "bytes_per_line": 1248
+    }
+  },
+  "ui_results": [
+    "Run 1 (no film terms): access violation CyberViewX.ds+0xcf74 after selector 0x23 (null film-term list in 0x1001e580)",
+    "Run 2 (status 0x0b): AFL state machine treated bit0 as film-inserted and started an automatic Final Scan; stuck at 'Preparing film scanner'",
+    "Run 3 (status 0x0a): main window idle at 1800 dpi, 1.386 x 0.948 in, Location 1; Prescan Current Frame displayed the synthetic image; Scan Current Frame to File at 300 dpi wrote image001.tif"
+  ],
+  "collected_files_sha256": {
+    "SIMAFL.LOG": "eb2d912e18351593c60aba1ff08914e7111ecf0fb74ace9a0ffa3ad99353fe8a",
+    "IMAGE001.TIF": "43011e05b07a4925bf6bb46dd7ab00ff9e350449e94f335f05c0222f507a65bd",
+    "RUN.TXT": "3aa9aa9b602bc80f9487c0cb7bbfa04f9ac8d82e88b576d333c6da8e4bc77549",
+    "PICS.TXT": "9dc56957edfe30b8d4e0ab3de5d1ba49b9143c78f39bf468078d470d030e4870",
+    "CRASH.TXT": "aeee4bbe5c348592876273af8fbac5bb35337176daf595b2adb4330051979eed",
+    "ENDCV.TXT": "fe402a955ab23ad5abdd5f75423f878e7948ecef2600cae5fa4b936f5b501c89",
+    "SIMINST.TXT": "f9f4786de062be3761fb406ee9ec9334e3473aff3eb71cb5dcd7b04552c8e104",
+    "SIMSET.TXT": "9ae5b2ff4a9c8c9d26a67a5271524790c5f9ba4bf0b0c254550a53c1a532c032",
+    "FILMTERM.TXT": "26b05efaa9cc32289e2d1219b98d0d6bcc4e58f314fb4331256f9ea415ac459e",
+    "SCAN08.TXT": "708e66ae66e41be8503c88302bb164484e02bfccb47bd9fdd7e3163f8e6e522a",
+    "MODELS.TXT": "d5da59802e0987dbd5916f244be5f53fc0712e833840f647f63c122293835311",
+    "SUMMARY.TXT": "1b509739f4366ae30ab17a5da1df36b07ea0c19a218f682e6a17d8f73dc25095",
+    "TASKS.TXT": "668f3e58945254552320b2ecbe9e8748bf2628fbee38d04f35e73714bdfd207c",
+    "MODULES.TXT": "33db91e7eaecd690443b9b134cea01d0cdd965a96305c018e2b9965c6f47f488",
+    "TWAIN.TXT": "27a383741b5d88decfc1d7cb0d7f6642b686b514da84654ab153b36c1ddd87db",
+    "SYS32.TXT": "0725f2be05cb2d71223cbc4827359fe247084198a8c74754930dfcdf85ef52ca",
+    "STARTMNU.TXT": "9b8d4da58c04e562b249159defcaf8f1448133dc8633a32e4eb3c958104e07a6",
+    "UNINST.TXT": "c15c4d7cf855cef304186ddfaefcf452b6334137d826376748f8f80c3fea8bd0",
+    "CVX.INI": "5bf961b1779aab4cec353d42d39eb34bd89c2b75d8936961fb9be9bce47d9a94"
+  }
+}

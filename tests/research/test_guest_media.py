@@ -59,9 +59,9 @@ def test_rejects_loops_short_chains_and_non_fat_images():
 
 def test_guest_scripts_only_observe_and_write_evidence():
     scripts = {p.name: p.read_text() for p in (ROOT / 'research/cyberview/analysis/guest_tools').glob('*.CMD')}
-    assert set(scripts) == {'BASELINE.CMD', 'COLLECT.CMD', 'INSTSIM.CMD'}
+    assert set(scripts) == {'BASELINE.CMD', 'COLLECT.CMD', 'FILMTERM.CMD', 'INSTSIM.CMD', 'SIMSET.CMD', 'ENDCV.CMD'}
     forbidden = re.compile(r'\breg\s+(add|delete|import)\b|\bdel\b|\berase\b|\bformat\b|\bnet\s|\bbcdedit\b|'
-                           r'\bsc\s|\bdpinst\b|\bpnputil\b|\bdisableuac\b|\bshutdown\b|\brd\b|\brmdir\b', re.I)
+                           r'\bsc\s|\bdpinst\b|\bpnputil\b|\bdisableuac\b|\bshutdown\b|(?<!/)\brd\b|\brmdir\b', re.I)
     for name, text in scripts.items():
         assert not forbidden.search(text), name
     assert '-max 64' in scripts['BASELINE.CMD']

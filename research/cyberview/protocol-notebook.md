@@ -148,6 +148,8 @@ records stopped CPU state and infrastructure availability; it is not enumeration
 | FVC 2-byte register framing on the SQ stack | STATIC (host side only) |
 | USB/IP DEVLIST/IMPORT exchange, replay fixtures | HARNESS ONLY |
 | CyberView no-device startup: model probe, "Unable to communicate" error, exit | GUEST OBSERVED 2026-10-28 |
+| CyberView → model-module scan block layout, status bits, idle polling | GUEST OBSERVED against the FRAME simulator ([afl-simulator.md](afl-simulator.md)) |
+| SCAN08-family device commands `0x15`/`0x0A`/`0x0F`/`0xDD`/`0xE2`–`0xE8` (LC.dll `0x10011330`) | STATIC, 1800P path only; never issued |
 | Guest USB enumeration of any scanner, real or virtual | none |
 | Any device behavior | none: VERIFIED ON DEVICE is empty |
 

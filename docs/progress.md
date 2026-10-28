@@ -86,7 +86,12 @@ The AFL constructor selects `SCAN08`; the examined BeneScan loader requests that
 - **Runtime baseline: captured (GUEST OBSERVED), in a second pass the same day.** The user completed OOBE in the QEMU window with no product key and their own password. A first attempt hung after a key was typed; it was reset to the restore point. The user authorized bounded guest input and accepted the CyberView EULA in chat. That EULA's section 4 forbids reverse engineering; the user's right-to-repair position is recorded. The install showed no driver prompts and installed no SCAN08.dll. With no scanner, `PfsLoader.exe` loaded CyberViewX.ds and BeneScan. BeneScan probed model records 18→1, loaded the 6 present modules (LC pulled in the SQ_SCAN/IO_PORT/FVC stack), and searched 5 paths for **SCAN08.dll without loading it**. CyberView then showed "Unable to communicate with the Film Scanner" and exited. The kernel trace lost 0 events. **SCAN08.dll is therefore genuinely missing after runtime verification for the official web package.** `research/cyberview/runtime-baseline.md`, `analysis/evidence/runtime-baseline-2026-10-28.json`.
 - **Guest tooling:** results leave the network-less guest on a blank FAT12 floppy that the host reads offline. Guest input goes only through QMP and is logged. QMP media swaps are limited to hash-recorded media.
 - **Virtual device: unable to build an evidence-backed AFL profile.** QEMU 11.1 `usb-redir` (socket chardev, `pcap=`) is the chosen architecture, with a Python usbredir server and `replay.py`. It is not built, and no guest-visible device was presented. With this package, no USB device can be recognized through the AFL class while `SCAN08.dll` is missing. `research/usb/virtual-device-feasibility.md`.
-- Hardware plan gains CD/VID checks and a stop condition: halt if CyberView names a model other than PF1800 AFL.
+- **Simulated AFL, at the user's request (GUEST OBSERVED against a SIMULATOR).** The model-module contract was recovered from SCAN08-lineage LC.dll with Ghidra: identity, the 0x84-byte capability block with the model code at +0x74, status, and the strip-callback scan. A labeled FRAME `SCAN08.dll` (model `0x25`, synthetic image, every call logged, no device I/O) was built with MSVC x86 and placed only in the guest. Original CyberView **detected and opened it, showed its main window (1800 dpi, 1.386 × 0.948 in, Location 1), prescanned, and scanned `image001.tif` (416×284 RGB, 300 dpi)**. The captured scan request is decoded in `analysis/afl_contract.py`. Learned on the way:
+  - a **second packaging gap**: model 37 reads film terms from `GAMMA\*.ft`, which is empty, and CyberView crashes at `+0xcf74` without them. The guest run used a test-only copy of `GAMMA\Original`;
+  - status bit 0 means "film inserted" and starts an automatic Final Scan.
+
+  This is not USB emulation and not device evidence. `research/cyberview/afl-simulator.md`.
+- Hardware plan gains CD/VID checks and a stop condition: halt if CyberView names a model other than PF1800 AFL. It now also checks the CD for model-37 film terms.
 - Validation: `python -m pytest -q tests/research` → 29 passed; `python -m pytest -q` → **78 passed in 22.77 s**; `npm run lint` and `npm run build` passed; `npm run test:e2e` passed (36 frames, 16-bit TIFF inspected, no JavaScript exceptions).
 
 Exact blockers and the minimum input that unblocks each:
@@ -94,7 +99,7 @@ Exact blockers and the minimum input that unblocks each:
 | Blocker | Minimum real-world input |
 | --- | --- |
 | ~~No CyberView no-device baseline~~ | Resolved 2026-10-28. |
-| AFL model module `SCAN08.dll` absent (runtime-verified) | Original PF1800AFL CD (hash and inventory), or a genuine vendor package containing it. |
+| AFL model module `SCAN08.dll` and model-37 film terms absent (runtime-verified) | Original PF1800AFL CD (hash and inventory), or a genuine vendor package containing them. |
 | Guest-visible virtual AFL device (spec "Done" item) | Requires the two rows below; without them no truthful profile exists. |
 | AFL USB identity and descriptors | The physical unit's enumeration in an isolated guest (VID/PID, full descriptor set). |
 | Initialization, status and image responses | Original-software traces, one action at a time, per `hardware-plan.md`. |

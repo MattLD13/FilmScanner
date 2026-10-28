@@ -93,6 +93,15 @@ All addresses are preferred-image VAs in the named, hash-identified PE. Every ro
 | **Genuinely missing after runtime verification** | **Yes (official web package)** | 2026-10-28 guest trace: `SCAN08.dll` opened at 5 search-path locations, no image load, AFL record skipped, then "Unable to communicate with the Film Scanner". |
 | Still unresolved | Only for other media | The original CD may differ from the web package. |
 
+## Second gap: model-37 film terms (found 2026-10-28)
+
+CyberViewX picks the film-term folder by model code (jump table at
+`0x100222f3`). Model 37 reads `GAMMA\*.ft`, and the official package installs no
+`.ft` files there. With a model-37 module loaded, the film-menu builder
+`0x1001e580` dereferences an empty list and crashes (`CyberViewX.ds+0xcf74`,
+GUEST OBSERVED with the FRAME simulator). So the web package lacks both the
+AFL module and the AFL film terms. The original CD should be checked for both.
+
 ## Rejected shortcuts
 
 * Renaming LC.dll or PF1800LC.Dll to SCAN08.dll. Their own descriptor checks and
