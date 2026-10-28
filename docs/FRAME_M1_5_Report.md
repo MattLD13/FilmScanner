@@ -1759,3 +1759,7 @@ This addendum leaves the snapshot above unchanged. Outcome: **M1.5 PARTIAL, EXTE
 - Validation: 78 Python tests passed (29 research), lint and build passed, and the 36-frame e2e workflow passed.
 
 The completion checklist in section 12 is unchanged. Both unchecked items remain blocked on the inputs listed in `docs/progress.md`.
+
+### Addendum 2: 2026-10-28 runtime baseline
+
+The user completed Server 2008 OOBE and accepted the CyberView EULA for the guest. That EULA's section 4 forbids reverse engineering; the user's right-to-repair position is recorded in `research/cyberview/runtime-baseline.md`. Original CyberView X SF v1.30 then installed with no driver prompts and ran with no scanner attached. The kernel trace shows BeneScan probing model records 18→1. It loaded the six present modules and searched five paths for `SCAN08.dll`, which never loaded. CyberView reported "Unable to communicate with the Film Scanner" and exited. **SCAN08.dll is genuinely missing for the official web package, verified at runtime.** The tracked evidence is `research/cyberview/analysis/evidence/runtime-baseline-2026-10-28.json`, locked by `tests/research/test_runtime_baseline.py`. M1.5 remains PARTIAL, external blocker: a guest-visible virtual AFL needs the original CD's model module and the unit's real descriptors.

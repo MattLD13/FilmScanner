@@ -1,10 +1,13 @@
 # SCAN08.dll dependency investigation
 
 Research pass: 2026-10-27/28 UTC. Work package A of the M1.5 completion
-directive. **Conclusion: still unresolved.** The file is not located. Nothing found
-shows it is supplied dynamically. Runtime has not confirmed it is missing. The
-static picture is now much sharper than in the earlier pass. No vendor code was
-executed, and no DLL was renamed, substituted or fabricated.
+directive. **Conclusion (updated 2026-10-28 after the runtime baseline): genuinely
+missing after runtime verification, for this official package.** The installer
+does not create it. At launch, BeneScan searched five locations for it, it never
+loaded, and the AFL record was skipped silently
+([runtime-baseline.md](runtime-baseline.md)). The static analysis below was done
+first, without executing vendor code. No DLL was renamed, substituted or
+fabricated. Whether the original CD supplies the file is still open.
 
 Reproduce: `research/.tools/analysis-venv/Scripts/python.exe research/cyberview/analysis/scan08_survey.py <payload> research/cyberview/acquisition/payload-inventory.json <out.json>`.
 The script checks six payload hashes against the inventory before it reads anything. The tracked
@@ -86,9 +89,9 @@ All addresses are preferred-image VAs in the named, hash-identified PE. Every ro
 | Outcome | Status | Why |
 | --- | --- | --- |
 | Located | No | No file carries the loader-required name. The SCAN08-named builds are bound to other models. |
-| Dynamically supplied | Not established | No installer evidence of a rename, generation or download. `setup.inx` is still encoded. |
-| Genuinely missing after runtime verification | Not reached | CyberView has not run. See [runtime-baseline.md](runtime-baseline.md). |
-| **Still unresolved** | **Yes** | Static evidence strongly indicates a packaging gap for model 37. Only runtime or the original CD can settle it. |
+| Dynamically supplied | No | After a real install, the installed `twain_32\CyberViewX_SF` and `system32` contain no SCAN08.dll. Nothing was renamed or generated. |
+| **Genuinely missing after runtime verification** | **Yes (official web package)** | 2026-10-28 guest trace: `SCAN08.dll` opened at 5 search-path locations, no image load, AFL record skipped, then "Unable to communicate with the Film Scanner". |
+| Still unresolved | Only for other media | The original CD may differ from the web package. |
 
 ## Rejected shortcuts
 
@@ -103,9 +106,9 @@ All addresses are preferred-image VAs in the named, hash-identified PE. Every ro
 
 1. The original PF1800AFL CD: hash it, inventory it, and search it for `SCAN08.dll`
    and for any InstallScript that renames LC.dll.
-2. A runtime trace in a permitted guest (see runtime-baseline.md). It should show
-   whether `LoadLibraryA("…\SCAN08.dll")` is attempted, the path tried and the
-   resulting Win32 error (expected `ERROR_MOD_NOT_FOUND`, 126).
+2. ~~A runtime trace in a permitted guest.~~ **Done 2026-10-28.** The load was
+   attempted at five paths and the file was not found (see runtime-baseline.md).
+   The Win32 error code itself was not captured; 126 is the expected value.
 3. The physical unit's VID/PID, compared against `2770:011C`, `0461:034A` and
    `05E3:0120`.
 4. Optional static follow-up: decode `setup.inx` with a reviewed InstallScript

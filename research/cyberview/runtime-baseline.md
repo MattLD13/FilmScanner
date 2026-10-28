@@ -1,79 +1,98 @@
 # CyberView no-device runtime baseline
 
-Status on 2026-10-27/28 UTC: **not captured. External blocker.** Original CyberView
-has never run in any environment for this project. There are no screenshots,
-module-load records or error codes from a CyberView process. This file states the
-blocker precisely and lists the exact steps that remain.
+Status 2026-10-28 UTC: **captured. GUEST OBSERVED.** Original CyberView X SF v1.30
+was installed and launched in the isolated evaluation guest with no scanner
+attached. It requested `SCAN08.dll`, did not find it, probed every other model
+module, then showed "Unable to communicate with the Film Scanner" and exited.
+Tracked record: [runtime-baseline-2026-10-28.json](analysis/evidence/runtime-baseline-2026-10-28.json).
+Screenshot: [cyberview-no-device-2026-10-28.png](analysis/evidence/cyberview-no-device-2026-10-28.png).
+Tests: `tests/research/test_runtime_baseline.py`.
 
-## Environment actually available
+## Environment
 
-| Item | Checked this pass | Result |
-| --- | --- | --- |
-| Host | Windows 11 Pro 10.0.26200, x64 | `WindowsSandbox.exe` absent; `HypervisorPresent=False`. No feature was enabled. Hyper-V/Sandbox would need a host security/configuration change, which is outside this research's permissions. |
-| Emulator | `qemu-system-i386` 11.1.0 (`v11.1.0-12130-ge470268ff4`), portable, TCG | Present. Includes `usb-redir` (socket chardev, `pcap=` capture) and UHCI/EHCI/xHCI controllers. See [virtual-device-feasibility](../usb/virtual-device-feasibility.md). |
-| Guest base | Official Microsoft Server 2008 Enterprise x86 evaluation VHD | `guest_lab.py verify-base` → SHA-256 `bc57268875ab…d19d`, `unchanged: true`. |
-| Guest overlay | `.artifacts/guest-lab/experiment.qcow2` | qcow2 over read-only `vpc` base, 132 MiB on disk. It still holds the state from the earlier stop at the product-key OOBE page. `guest_lab.py status` → connection refused: no QEMU running. |
-| Free host disk | C: | About 40 GB free. The lab's ≥8 GiB reserve and ≤2 GiB overlay checks still apply. |
-| Vendor media | Official installer, SHA-256 `EBCBE798…09CF` | Preserved. The read-only research CD contains only this installer and its hash. |
+| Item | Value |
+| --- | --- |
+| Guest | Microsoft Windows Server 2008 Enterprise x86 evaluation, 6.0.6001. Official VHD, base SHA-256 `bc57268875ab…d19d`, re-verified unchanged. No product key. Not activated. |
+| Emulator | QEMU 11.1.0 TCG, `pc`, 2 vCPU, 1024 MiB. **No NIC**, no host shares, no host USB passthrough. Only USB device: QEMU's input tablet. |
+| Disks | qcow2 overlay over a read-only base. Restore point `restore-01-pre-oobe.qcow2` (SHA-256 `e52727a1…c9e3`). The first OOBE attempt hung on a typed key; it is kept as `abandoned-oobe-keypage-…qcow2`. |
+| Media | Vendor CD (installer `EBCBE798…09CF`, ISO `3ef1e3dc…7f00`). Tools CD (`20d63ce4…86f7`) holding the tracked `guest_tools/BASELINE.CMD` and `COLLECT.CMD`. A blank FAT12 evidence floppy. |
+| Licenses | Microsoft evaluation EULA, accepted by the user during OOBE. CyberView EULA, read in full, then accepted by the user in chat for this guest. Its section 4 forbids reverse engineering, decompiling or disassembly. The user's stated position is that the software is unmaintained and right-to-repair reverse engineering is acceptable. That is the user's decision, recorded here; it is not a legal opinion. |
 
-License facts are in [guest-environment.md](guest-environment.md): internal
-evaluation only, 60 days from first installation, no activation, no production
-use. The guest's own expiry state is unknown, because setup has never finished.
+## Who did what
 
-## Why no baseline exists
+* **User:** OOBE in the QEMU window (blank key, evaluation EULA, their own
+  Administrator password), and acceptance of the CyberView EULA.
+* **Research tooling:** QMP-only input into the guest, logged one event per line in
+  ignored `guest-lab/inputs.jsonl`. It never controls the host desktop and never
+  types credentials. Actions: closed Initial Configuration Tasks; Run →
+  `D:\CyberView-Official.exe`; paged through the EULA; clicked **Yes** after the
+  user's approval; dismissed "connect the scanner"; swapped in the tools CD; Run →
+  `BASELINE.CMD`; Run → `COLLECT.CMD`; dismissed the CyberView error.
 
-Every remaining step to a running CyberView needs interactive guest input:
+## Installation result
 
-1. **Server 2008 OOBE.** Leave the product key blank (as the README instructs).
-   **Accept the Windows evaluation license terms.** **Set a password** for the
-   built-in Administrator account.
-2. Install CyberView from the research CD. This means the InstallShield dialogs,
-   including **the vendor license agreement**, model selection and any driver prompts.
-3. Launch CyberView with no device attached, and record what happens.
+* Pages shown: License Agreement, then "Please connect the scanner to the computer now
+  and turn on the scanner. The rest of the installation will proceed
+  automatically." There was no destination, model or language page, and no finish page.
+* **No driver-install prompt** appeared. DPInst did not run. `USBSCAN.SYS` was copied to
+  `system32\drivers`. No device is bound, because there is no scanner.
+* Files: `C:\Windows\twain_32\CyberViewX_SF\` holds the payload's CyberViewX_SF tree
+  plus DPInst and Vista helpers, `SQ_SCAN.DLL`, `IO_PORT.DLL`, `FVC.DLL` and
+  `daspi32u.dll` in `system32`. Start menu "CyberViewX_SF" has three shortcuts.
+  Uninstall key `{D8FF6E29-…}`, InstallLocation `C:\Program Files\Pacific Image ELectronics Co., Ltd.\CyberView X - SF v1.30 (build 20110526)`.
+* **`SCAN08.dll` was not installed anywhere.** The installer neither generates nor
+  renames it.
 
-These steps hit three boundaries at once:
+## Launch result (no device)
 
-* The previous Computer Use session was **stopped by the user with the physical
-  Escape key**. The directive and this project's rules require fresh user steering
-  before guest UI control resumes. That includes driving the guest through QEMU's
-  own keyboard injection instead of Computer Use.
-* Accepting license terms requires explicit user approval.
-* Setting the Administrator password is a human-action stop condition. Doing it
-  through an injected `unattend.xml` would only move the same acceptance and
-  credential step out of view, so that was **not** done.
+`PfsLoader.exe` was started under the NT Kernel Logger (process, image, fileio). The
+trace ran 71 s with 34,730 events and **0 lost**. In time order:
 
-No input was sent to the guest this pass. No key, password, EULA acceptance,
-activation, clock change or evaluation extension was attempted.
+1. PfsLoader loads `CyberViewX.ds`, which loads `BeneScan.dll`.
+2. BeneScan walks its model table **from record 18 down to record 1**, exactly the
+   static order of `0x1000c0f0`. For each record it opens `Twain_32\CyberViewX_SF\<module>`:
+   * **Loaded** (and probed): PS7200, PF7250U, SS3600ICE, **LC** (which pulled in
+     `system32\SQ_SCAN.DLL` → `IO_PORT.DLL` → `FVC.DLL`), PF2700 (writes
+     `%TEMP%\PF2700.log`), PF1800U (writes `%TEMP%\PF1800U.log`).
+   * **Absent, skipped with no message:** MF5000, DD6000, PF7250PRO3, PS3650, PF3650LAB,
+     ProDICE, PowSlide, PF3610AFL, PF3600Pro, PF1800LAB, **SCAN08**, RFS3600.
+3. `SCAN08.dll` and `PF1800LAB.dll` each go through the full search:
+   `Twain_32\CyberViewX_SF`, `system32`, `system`, `Windows`, `System32\Wbem`.
+   No image load follows, matching `LoadLibraryA` failure in `0x100106d0`. The
+   Win32 error code itself is not in a kernel trace. `ERROR_MOD_NOT_FOUND` (126) is
+   the expected value, not an observed one.
+4. Record 0 (RAWSCAN) is never probed.
+5. Dialog **"Unable to communicate with the Film Scanner. Try the following: Make
+   sure the scanner power is on / Check all cables / Refer to the User's Manual on
+   the CD as needed."** After OK, the process exits. No main window opened.
+6. Persistent change: `CyberViewX.ini` `Pfs Loader Call=0 → 1`.
 
-## What the run should capture once authorized
+Not established by this run: whether the loaded modules opened `\\.\USBSCANn` or
+`\\.\Geneusbn`. With no device, those opens fail in the object manager, and this
+trace configuration did not record them. A registry or Process Monitor capture
+would be needed for that.
 
-Order matters. One snapshot of the overlay goes before each stage.
+## Meaning
 
-1. The user completes OOBE themselves in the QEMU window: blank key, accept the
-   EULA, set their own password. Alternatively, the user explicitly authorizes
-   bounded input for the non-credential screens. Then `guest_lab.py screenshot`.
-2. Install CyberView from the CD. Record which components install, every dialog,
-   every error, and whether any driver package (DPInst LC/U, USBSCAN, GENEUSB)
-   asks to install. Install no driver unless the user approves it for this guest.
-3. Launch with no device. Record separately (a) whether the application/TWAIN host
-   process starts, (b) TWAIN source registration, and (c) scanner detection: the
-   exact dialog or status text, and any model it names.
-4. Module-load evidence for `SCAN08.dll`. Prefer a tool already inside the guest.
-   A Sysinternals Process Monitor binary would have to be brought in on the
-   research CD, which needs the user's approval to download. Expected result if
-   the static reading is right: `…\Twain_32\CyberViewX_SF\SCAN08.dll` NAME NOT
-   FOUND, then the bare-name search fails, with no user-visible error.
-5. Shut the guest down through QMP and run `verify-base`.
+* **SCAN08.dll is genuinely missing for this official package**, now verified at
+  runtime. A real PF1800 AFL connected to this installation cannot be driven by
+  the AFL module.
+* Recognition with this package therefore depends on whether a loaded module
+  (LC, PF1800U, PF2700, PF7250U, SS3600ICE, PS7200) claims the device's VID/PID. If
+  one does, CyberView will treat the unit as **that** model. See the hardware-plan
+  stop condition.
 
-Stop conditions still apply: a password or security prompt that needs a human,
-an activation barrier, an expired evaluation, a driver-install prompt the user has
-not approved, or the resource budget being exhausted.
+## Reproduce
 
-## Windows 11 application-only alternative
+```powershell
+python research/cyberview/analysis/guest_lab.py start --budget-minutes 120
+python research/cyberview/analysis/guest_lab.py insert --media evidence
+# user completes OOBE; then CyberView install from the vendor CD (EULA needs the user's acceptance)
+python research/cyberview/analysis/guest_lab.py insert --media tools   # then Run D:\BASELINE.CMD, observe, Run D:\COLLECT.CMD
+python research/cyberview/analysis/guest_lab.py read-evidence
+python research/cyberview/analysis/kernel_trace.py table-walk.json <collected>/MODELS.TXT <collected>/SCAN08.TXT <collected>/APP.TXT
+python research/cyberview/analysis/guest_lab.py verify-base
+```
 
-This is still unattempted. The host has no Sandbox or hypervisor. Running vendor
-x86 code directly on the main Windows installation is not "appropriately
-isolated," so it was not done. A disposable Windows 11 evaluation VM under TCG
-would run very slowly and would also need the user's Microsoft account to download
-it. Even a successful window would establish only application startup. It would
-not show TWAIN registration through the x86 drivers, or scanner operation.
+Raw ETL/CSV stay inside the guest at `C:\FRAME`. The floppy's text extracts, with
+hashes, are in ignored `guest-lab/collected-20261028T014601Z/`.

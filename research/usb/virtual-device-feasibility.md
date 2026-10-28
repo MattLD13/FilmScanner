@@ -52,7 +52,9 @@ is not the vendor software.
    detect selector only after `LoadLibraryA` succeeds. No file of that name exists
    ([scan08-investigation](../cyberview/scan08-investigation.md)). So with this
    package, no USB device, however accurate, can be recognized **as a PF1800 AFL**
-   by the AFL class. This is STATIC/INFERRED and still needs runtime confirmation.
+   by the AFL class. **GUEST OBSERVED 2026-10-28:** at launch, BeneScan searched
+   five paths for `SCAN08.dll`, never loaded it, skipped the AFL record and
+   reported no scanner ([runtime-baseline](../cyberview/runtime-baseline.md)).
 2. **The only USB identities in the SCAN08 lineage belong to other models.**
    `2770:011C` is accepted by LC.dll (model 42, 1800P "Low Cost") and by
    PF1800LC.Dll, and is bound by the LC and PF3600U INFs. `0461:034A` is accepted

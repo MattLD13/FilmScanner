@@ -1,4 +1,8 @@
-"""Bounded offline QEMU evaluation guest launcher. No guest UI input functions.
+"""Bounded offline QEMU evaluation guest launcher.
+
+Guest input (keys, ASCII text, absolute tablet clicks) goes only through our own
+QMP socket and every event is appended to inputs.jsonl. It never touches the host
+desktop. Credentials are never typed by this tool.
 
 Media changes are limited to the hash-recorded vendor/tools CDs and this run's
 blank evidence floppy, the only path for results out of the network-less guest.
@@ -51,7 +55,7 @@ def reserve():
 
 def qmp(port, execute, arguments=None):
     if execute not in {"query-status", "query-block", "screendump", "quit", "system_powerdown",
-                       "blockdev-change-medium", "eject"}:
+                       "blockdev-change-medium", "eject", "send-key", "input-send-event"}:
         raise ValueError("Only inspection/screenshot/own-guest shutdown commands allowed")
     with socket.create_connection(("127.0.0.1", port), timeout=5) as connection:
         connection.settimeout(10)
@@ -195,6 +199,58 @@ def read_evidence():
     print(out)
 
 
+SHIFTED = {"!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9",
+           ")": "0", "_": "minus", "+": "equal", ":": "semicolon", '"': "apostrophe", "<": "comma",
+           ">": "dot", "?": "slash", "|": "backslash", "{": "bracket_left", "}": "bracket_right", "~": "grave_accent"}
+PLAIN = {" ": "spc", "-": "minus", "=": "equal", ";": "semicolon", "'": "apostrophe", ",": "comma",
+         ".": "dot", "/": "slash", "\\": "backslash", "[": "bracket_left", "]": "bracket_right", "`": "grave_accent"}
+
+
+def qcodes(char):
+    """QEMU qcodes for one printable ASCII character on a US keyboard layout."""
+    if char.isascii() and char.isalnum():
+        return (["shift"] if char.isupper() else []) + [char.lower()]
+    if char in PLAIN:
+        return [PLAIN[char]]
+    if char in SHIFTED:
+        return ["shift", SHIFTED[char]]
+    raise ValueError(f"Unsupported character {char!r}")
+
+
+def log_input(record):
+    record["utc"] = datetime.now(timezone.utc).isoformat()
+    with (LAB / "inputs.jsonl").open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(record) + chr(10))
+
+
+def send_keys(port, combo):
+    """Press one chord such as 'ret', 'tab', 'alt-n' or 'meta_l-r'."""
+    keys = combo.split("-") if combo != "minus" else ["minus"]
+    qmp(port, "send-key", {"keys": [{"type": "qcode", "data": k} for k in keys], "hold-time": 120})
+    log_input({"kind": "key", "value": combo})
+
+
+def type_text(port, text):
+    for char in text:
+        qmp(port, "send-key", {"keys": [{"type": "qcode", "data": k} for k in qcodes(char)], "hold-time": 60})
+        time.sleep(0.08)
+    log_input({"kind": "text", "value": text})
+
+
+def click(port, x, y, width=800, height=600, button="left", double=False):
+    """Absolute tablet click at screenshot pixel (x, y)."""
+    if not (0 <= x < width and 0 <= y < height):
+        raise ValueError("Click outside guest screen")
+    position = [{"type": "abs", "data": {"axis": "x", "value": round(x * 32767 / (width - 1))}},
+                {"type": "abs", "data": {"axis": "y", "value": round(y * 32767 / (height - 1))}}]
+    qmp(port, "input-send-event", {"events": position})
+    for _ in range(2 if double else 1):
+        for down in (True, False):
+            qmp(port, "input-send-event", {"events": [{"type": "btn", "data": {"down": down, "button": button}}]})
+            time.sleep(0.05)
+    log_input({"kind": "click", "x": x, "y": y, "button": button, "double": double})
+
+
 def launch_watchdog(port, budget_minutes):
     with (LAB / "watchdog.txt").open("ab") as stream:
         subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watchdog", "--port", str(port),
@@ -227,9 +283,11 @@ def watchdog(port, budget_minutes=5):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["prepare", "start", "status", "screenshot", "stop", "verify-base", "watchdog",
-                                           "make-media", "insert", "eject-evidence", "read-evidence"])
+                                           "make-media", "insert", "eject-evidence", "read-evidence",
+                                           "key", "type", "click", "dclick", "rclick"])
     parser.add_argument("--port", type=int)
     parser.add_argument("--media", choices=["vendor", "tools", "evidence"])
+    parser.add_argument("value", nargs="*", help="key chord, text, or x y")
     parser.add_argument("--budget-minutes", type=int, default=5, choices=range(1, 241),
                         help="hard stop for this pass; at most four hours")
     args = parser.parse_args()
@@ -243,6 +301,12 @@ if __name__ == "__main__":
         run = json.loads((LAB / "run.json").read_text()); port = run["qmp_port"]
         if args.action == "stop": print(qmp(port, "quit"))
         elif args.action == "insert": insert(port, args.media)
+        elif args.action == "key":
+            for combo in args.value: send_keys(port, combo)
+        elif args.action == "type": type_text(port, " ".join(args.value))
+        elif args.action in ("click", "dclick", "rclick"):
+            click(port, int(args.value[0]), int(args.value[1]), button="right" if args.action == "rclick" else "left",
+                  double=args.action == "dclick")
         elif args.action == "eject-evidence": print(qmp(port, "eject", {"device": "floppy0"}))
         elif args.action == "status":
             reserve(); print(json.dumps({"status": qmp(port,"query-status"), "block": qmp(port,"query-block"),

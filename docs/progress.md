@@ -39,7 +39,7 @@ M0 and the local simulated M1 vertical slice are implemented. Physical iPhone de
 - [x] Perform the initial static investigation of device detection, USB identity, transport, positioning, focus/calibration, image transfer, sensor controls and firmware paths; unresolved AFL-specific protocol details remain explicit.
 - [x] Write an evidence-linked reverse engineering report and USB protocol notebook; separate static facts, actual observed interactions, hypotheses and unknowns.
 - [x] Evaluate QEMU USB emulation and Python USB/IP; deliver tested passive parsers, management harness and offline exact replay. No PF1800 AFL profile is invented or advertised to a guest.
-- [ ] Attempt original CyberView device detection inside an isolated licensed legacy Windows guest; retain actual communication logs and reproducible setup instructions.
+- [ ] Attempt original CyberView device detection inside an isolated licensed legacy Windows guest; retain actual communication logs and reproducible setup instructions. *(2026-10-28: no-device detection run and traced in the guest; detection against a virtual AFL is still blocked, see below.)*
 - [x] Test the implemented harness and replay operations; scanner emulation and sample-image acquisition remain unimplemented without wire evidence.
 - [x] Deliver firmware findings, real hardware experiment plan and virtual-versus-physical checklist.
 - [x] Revalidate existing FRAME application and simulator tests.
@@ -83,7 +83,8 @@ The AFL constructor selects `SCAN08`; the examined BeneScan loader requests that
 - **SCAN08.dll: still unresolved, but sharper.** The AFL is BeneScan model 37 → `SCAN08.dll`, which is absent from the payload. The package contains two SCAN08-lineage builds ("SQ Scan08 ASIC"). `LC.dll` has a SCAN08.DLL 1.0.9.4 version resource, and WIA `PF1800LC.Dll` has the export name Scan08.dll 1.0.0.1. Instruction cross-references bind both to the **1800P / "Low Cost"** model 42, not the AFL. Gamma file numbers match model codes. Neither is renamed or substituted. Details: `research/cyberview/scan08-investigation.md`.
 - **Candidate USB identities, not attributed to the AFL:** `2770:011C`, accepted by LC.dll and PF1800LC and bound by the LC/PF3600U INFs, and `0461:034A`, accepted only by the 2002 Scan08Dll build, with no INF. No INF in the package names an AFL.
 - **SQ host stack mapped statically:** LC.dll → SQ_Scan → IO_PORT → FVC → `\\.\USBSCAN%d`, with 2-byte bulk register framing. This is the 1800P path. Whether the AFL uses it is INFERRED only.
-- **Runtime baseline: not captured.** No Sandbox or hypervisor is on the host. The only isolated runtime is the QEMU Server 2008 evaluation guest. It is still stopped at the product-key OOBE page, and the base hash was re-verified as unchanged. The next steps need the user to accept the EULA, set an Administrator password, and lift the Escape stop on guest UI control. None was done. `research/cyberview/runtime-baseline.md`.
+- **Runtime baseline: captured (GUEST OBSERVED), in a second pass the same day.** The user completed OOBE in the QEMU window with no product key and their own password. A first attempt hung after a key was typed; it was reset to the restore point. The user authorized bounded guest input and accepted the CyberView EULA in chat. That EULA's section 4 forbids reverse engineering; the user's right-to-repair position is recorded. The install showed no driver prompts and installed no SCAN08.dll. With no scanner, `PfsLoader.exe` loaded CyberViewX.ds and BeneScan. BeneScan probed model records 18→1, loaded the 6 present modules (LC pulled in the SQ_SCAN/IO_PORT/FVC stack), and searched 5 paths for **SCAN08.dll without loading it**. CyberView then showed "Unable to communicate with the Film Scanner" and exited. The kernel trace lost 0 events. **SCAN08.dll is therefore genuinely missing after runtime verification for the official web package.** `research/cyberview/runtime-baseline.md`, `analysis/evidence/runtime-baseline-2026-10-28.json`.
+- **Guest tooling:** results leave the network-less guest on a blank FAT12 floppy that the host reads offline. Guest input goes only through QMP and is logged. QMP media swaps are limited to hash-recorded media.
 - **Virtual device: unable to build an evidence-backed AFL profile.** QEMU 11.1 `usb-redir` (socket chardev, `pcap=`) is the chosen architecture, with a Python usbredir server and `replay.py`. It is not built, and no guest-visible device was presented. With this package, no USB device can be recognized through the AFL class while `SCAN08.dll` is missing. `research/usb/virtual-device-feasibility.md`.
 - Hardware plan gains CD/VID checks and a stop condition: halt if CyberView names a model other than PF1800 AFL.
 - Validation: `python -m pytest -q tests/research` → 29 passed; `python -m pytest -q` → **78 passed in 22.77 s**; `npm run lint` and `npm run build` passed; `npm run test:e2e` passed (36 frames, 16-bit TIFF inspected, no JavaScript exceptions).
@@ -92,8 +93,9 @@ Exact blockers and the minimum input that unblocks each:
 
 | Blocker | Minimum real-world input |
 | --- | --- |
-| No CyberView no-device baseline | User completes Server 2008 OOBE (EULA, own password) and explicitly re-authorizes bounded guest UI input, or provides an equally isolated licensed XP/7 guest. |
-| AFL model module `SCAN08.dll` absent | Original PF1800AFL CD (hash and inventory), or a genuine vendor package containing it. |
+| ~~No CyberView no-device baseline~~ | Resolved 2026-10-28. |
+| AFL model module `SCAN08.dll` absent (runtime-verified) | Original PF1800AFL CD (hash and inventory), or a genuine vendor package containing it. |
+| Guest-visible virtual AFL device (spec "Done" item) | Requires the two rows below; without them no truthful profile exists. |
 | AFL USB identity and descriptors | The physical unit's enumeration in an isolated guest (VID/PID, full descriptor set). |
 | Initialization, status and image responses | Original-software traces, one action at a time, per `hardware-plan.md`. |
 

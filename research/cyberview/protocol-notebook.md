@@ -140,13 +140,15 @@ records stopped CPU state and infrastructure availability; it is not enumeration
 | Claim | Class |
 | --- | --- |
 | AFL class → `SCAN08` → BeneScan model 37 → `SCAN08.dll`; file absent from payload | STATIC |
-| Missing module makes BeneScan discovery skip the AFL silently | INFERRED (static control flow) |
+| Missing module makes BeneScan discovery skip the AFL silently | GUEST OBSERVED 2026-10-28 (no-device trace) |
+| BeneScan probes model records 18→1 and loads each present module | GUEST OBSERVED 2026-10-28 |
 | `2770:011C` / `0461:034A` accepted by SCAN08-lineage builds bound to 1800P | STATIC |
 | Either ID is the AFL's | UNKNOWN |
 | USBSCAN register IOCTL → vendor control request; ReadFile/WriteFile → bulk | DOCUMENTED |
 | FVC 2-byte register framing on the SQ stack | STATIC (host side only) |
 | USB/IP DEVLIST/IMPORT exchange, replay fixtures | HARNESS ONLY |
-| Guest enumeration, CyberView startup or detection | none: GUEST OBSERVED is empty |
+| CyberView no-device startup: model probe, "Unable to communicate" error, exit | GUEST OBSERVED 2026-10-28 |
+| Guest USB enumeration of any scanner, real or virtual | none |
 | Any device behavior | none: VERIFIED ON DEVICE is empty |
 
 ## Next evidence required

@@ -1,0 +1,182 @@
+{
+  "evidence": "GUEST OBSERVED",
+  "date_utc": "2026-10-28",
+  "guest": {
+    "os": "Microsoft Windows Server 2008 Enterprise x86 evaluation (6.0.6001), no product key, not activated",
+    "base_vhd_sha256": "bc57268875ab4589f2f11b766fa214bbe11b5349b427ec518e2a6316e2ded19d",
+    "qemu": "11.1.0 TCG, pc, 2 vCPU, 1024 MiB, no NIC, no shares",
+    "scanner_attached": false,
+    "usb_devices": [
+      "QEMU usb-tablet (input only)"
+    ]
+  },
+  "media": {
+    "vendor_installer_sha256": "ebcbe798fe577b9461df22db3bde6240185e0553e65eb9b93d139d367f9109cf",
+    "vendor_iso_sha256": "3ef1e3dc6b24e942069a4e5d8ff9d8ab438f7882a05c47479f0afc151cc57f00",
+    "tools_iso_sha256": "20d63ce456d6e85f63bdc401206fb7e1ac6c21d8be3d76e3ae0b8ebc6feb86f7",
+    "tools_scripts_sha256": {
+      "BASELINE.CMD": "6042f121d809103b85daf36a765bfec912a585fd38a996521f9332518965bc79",
+      "COLLECT.CMD": "cdc2d1e8b5ca31668c8543a262f2db040e0ab5eed37640baec4634479fda96b8"
+    },
+    "evidence_floppy_sha256": "1d98bac4835b20f572c639cce2eedf21693f7d2991ed8803f7d3c47a34eed8f4"
+  },
+  "install": {
+    "license": "vendor EULA accepted by the user in chat for this guest (section 4 prohibits reverse engineering)",
+    "dialogs": [
+      "License Agreement",
+      "Please connect the scanner to the computer now and turn on the scanner. The rest of the installation will proceed automatically."
+    ],
+    "driver_install_prompts": 0,
+    "install_location": "C:\\Program Files\\Pacific Image ELectronics Co., Ltd.\\CyberView X - SF v1.30 (build 20110526)",
+    "twain_directory": "C:\\Windows\\twain_32\\CyberViewX_SF",
+    "scan08_dll_installed": false,
+    "system32_files": [
+      "SQ_SCAN.DLL",
+      "IO_PORT.DLL",
+      "FVC.DLL",
+      "daspi32u.dll",
+      "drivers\\USBSCAN.SYS"
+    ]
+  },
+  "launch": {
+    "program": "C:\\Windows\\twain_32\\CyberViewX_SF\\PfsLoader.exe",
+    "trace": "NT Kernel Logger process,img,fileio; 71 s; 34730 events; 0 lost",
+    "dialog": "CyberView X: Unable to communicate with the Film Scanner. Try the following: Make sure the scanner power is on / Check all cables / Refer to the User's Manual on the CD as needed.",
+    "after_ok": "process exited; no main window",
+    "ini_change": "Pfs Loader Call=0 -> 1"
+  },
+  "model_probe_order": [
+    "MF5000.dll",
+    "DD6000.dll",
+    "PS7200.dll",
+    "PF7250PRO3.dll",
+    "PF7250U.dll",
+    "PS3650.dll",
+    "SS3600ICE.dll",
+    "PF3650LAB.dll",
+    "ProDICE.dll",
+    "PowSlide.dll",
+    "LC.dll",
+    "PF3610AFL.dll",
+    "PF2700.dll",
+    "PF3600Pro.dll",
+    "PF1800LAB.dll",
+    "SCAN08.dll",
+    "RFS3600.dll",
+    "PF1800U.dll"
+  ],
+  "modules": {
+    "mf5000.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "dd6000.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "ps7200.dll": {
+      "open_paths": 1,
+      "image_loaded": true,
+      "loaded_from": "\\Windows\\TWAIN_32\\CyberViewX_SF\\PS7200.dll"
+    },
+    "pf7250pro3.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "pf7250u.dll": {
+      "open_paths": 1,
+      "image_loaded": true,
+      "loaded_from": "\\Windows\\TWAIN_32\\CyberViewX_SF\\PF7250U.dll"
+    },
+    "ps3650.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "ss3600ice.dll": {
+      "open_paths": 1,
+      "image_loaded": true,
+      "loaded_from": "\\Windows\\TWAIN_32\\CyberViewX_SF\\SS3600ICE.dll"
+    },
+    "pf3650lab.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "prodice.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "powslide.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "lc.dll": {
+      "open_paths": 1,
+      "image_loaded": true,
+      "loaded_from": "\\Windows\\TWAIN_32\\CyberViewX_SF\\LC.dll"
+    },
+    "pf3610afl.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "pf2700.dll": {
+      "open_paths": 1,
+      "image_loaded": true,
+      "loaded_from": "\\Windows\\TWAIN_32\\CyberViewX_SF\\PF2700.dll"
+    },
+    "pf3600pro.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "pf1800lab.dll": {
+      "open_paths": 5,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "scan08.dll": {
+      "open_paths": 5,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "rfs3600.dll": {
+      "open_paths": 1,
+      "image_loaded": false,
+      "loaded_from": null
+    },
+    "pf1800u.dll": {
+      "open_paths": 1,
+      "image_loaded": true,
+      "loaded_from": "\\Windows\\TWAIN_32\\CyberViewX_SF\\PF1800U.dll"
+    }
+  },
+  "scan08_open_attempts": [
+    "\\Windows\\Twain_32\\CyberViewX_SF\\SCAN08.dll",
+    "\\Windows\\system32\\SCAN08.dll",
+    "\\Windows\\system\\SCAN08.dll",
+    "\\Windows\\SCAN08.dll",
+    "\\Windows\\System32\\Wbem\\SCAN08.dll"
+  ],
+  "collected_files_sha256": {
+    "RUN.TXT": "59bc32604c20542d77d84d59afd2bff339df6973199669426cf62cdc7c84b316",
+    "SCAN08.TXT": "9074a7fc82424c1584f99c6752df04f834262caf5b5b74ab229b3edcb2e71336",
+    "MODULES.TXT": "57b479e81c3295bd942b24638c89dc670d3c902e1390eb784c86e81ae5660e6e",
+    "TASKS.TXT": "e870b05896641697bced6b9dfad23ffc2b2e52db31efc5162dff7ff5b7392202",
+    "TWAIN.TXT": "0dd6c3a45aeae4d918d7eb372108119941838a6c6a69df9c9c5152420d83d229",
+    "SYS32.TXT": "ebde098e279d1c652971ec0e909f8fd046a28009977ff8cfadbe4592e5f1e2bc",
+    "STARTMNU.TXT": "9b8d4da58c04e562b249159defcaf8f1448133dc8633a32e4eb3c958104e07a6",
+    "UNINST.TXT": "c15c4d7cf855cef304186ddfaefcf452b6334137d826376748f8f80c3fea8bd0",
+    "SUMMARY.TXT": "fe63a91d2cb23583f6aa97c79da7d4527f3192a7e3fcb6ff7c87fbbbef18d20e",
+    "APP.TXT": "69ebb5bf80229aca231054f4492ad2653518b285bd4bddf9c45a5b68162483a8",
+    "MODELS.TXT": "82837946704e7872ef0607ea3c7c086df748f4360d33d4017d80659a0b10d928",
+    "HEAD.TXT": "5f74917a36cfe0c1f6b495f17855b20e7a45a560f59e1f146fed362b1cbe1111",
+    "CVX.INI": "5bf961b1779aab4cec353d42d39eb34bd89c2b75d8936961fb9be9bce47d9a94"
+  }
+}
