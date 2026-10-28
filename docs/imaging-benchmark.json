@@ -1,0 +1,17 @@
+{
+  "fixture": "synthetic nominal 4.34 MP RGB TIFF; not hardware timing",
+  "shape": [
+    1701,
+    2551,
+    3
+  ],
+  "source_sample_bits": 16,
+  "acquired_effective_bits": null,
+  "source_bytes": 26035730,
+  "output_bytes": 26036786,
+  "render_seconds": 0.671,
+  "python_tracemalloc_peak_bytes": 416628522,
+  "memory_scope": "Tracked Python/NumPy allocations during render; excludes preallocated input and full OS RSS",
+  "engine": "frame-density-2",
+  "limitation": "One image at a time; larger inputs need separate memory benchmarks"
+}

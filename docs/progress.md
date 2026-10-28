@@ -34,15 +34,15 @@ M0 and the local simulated M1 vertical slice are implemented. Physical iPhone de
 **Status: IN PROGRESS.** Registered as **PENDING** in commit877fb23 before any M1.5 research. The M0/M1 gate then passed again on2026-10-27:41core tests in21.33seconds, TypeScript checks, production build and the full36-frame browser workflow. M1.5 began automatically under the approved instruction. No existing work or agent was interrupted, cancelled or redirected.
 
 - [x] M0/M1 gate: core tests, client checks/build and existing complete simulated browser workflow pass.
-- [ ] Preserve official PF1800 AFL Windows v1.3 installer, source provenance and SHA256; extract without executing legacy code.
-- [ ] Inventory binary versions, hashes, dependencies, TWAIN/driver/configuration files and firmware candidates.
+- [x] Preserve official PF1800 AFL Windows v1.3 installer, source provenance and SHA256; extract without executing legacy code.
+- [x] Inventory binary versions, hashes, dependencies, TWAIN/driver/configuration files and firmware candidates.
 - [ ] Analyze device detection, USB identity, initialization, transport, positioning, autofocus, calibration, image transfer, evidenced sensor controls and firmware paths using appropriate static tools.
 - [ ] Write an evidence-linked reverse engineering report and USB protocol notebook; separate static facts, actual observed interactions, hypotheses and unknowns.
 - [ ] Evaluate QEMU USB emulation and Python USB/IP; implement only evidenced descriptors/endpoints/commands in an isolated research environment.
 - [ ] Attempt original CyberView device detection inside an isolated licensed legacy Windows guest; retain actual communication logs and reproducible setup instructions.
 - [ ] Test every successfully emulated operation; optional sample-image acquisition is a stretch goal.
 - [ ] Deliver firmware findings, real hardware experiment plan and virtual-versus-physical checklist.
-- [ ] Revalidate existing FRAME application and simulator tests.
+- [x] Revalidate existing FRAME application and simulator tests.
 
 Ownership: one primary reverse engineer (`gpt-6.1-sol`, `xhigh`) and one optional researcher (`gpt-6-luna`, `medium`). Configured roles alone are not claims of active execution. Research stays under `research/`; the production scanner backend and simulator remain unchanged. M2 may proceed independently when resources permit.
 
@@ -52,11 +52,11 @@ Do not install legacy kernel drivers on the main Windows system, modify physical
 
 - Official manufacturer-linked PF1800AFL package preserved locally:9,898,119bytes, SHA256 `EBCBE798FE577B9461DF22DB3BDE6240185E0553E65EB9B93D139D367F9109CF`. Vendor binaries remain ignored; provenance and inventory reports are tracked.
 - Reviewed source-built ISx and Unshield parsers extracted290payload files without executing vendor software. Embedded CyberView version1.30/build20110526 differs from individual PE resource versions; the report retains those distinctions.
-- One primary reverse engineer (Sol/xhigh) is tracing actualAFL dispatch in Ghidra. One optional researcher (Luna/medium) handles acquisition, extraction and official guest-media research. No additional M1.5 agents were created.
+- One primary reverse engineer (Sol/xhigh) is tracing actual AFL dispatch in Ghidra. One optional researcher (Luna/medium) handles acquisition, extraction and official guest-media research. No additional M1.5 agents were created. Both were interrupted by an account usage limit, then resumed in their same assignments after the user said to continue.
 - The generic PF1800U driver declares VID05E3/PID0120, but distinctAFL/U class evidence means that ID is not yet attributed to the physicalAFL unit.
 - Sixteen portable passive USB/USBIP parser/harness tests passed as part of a64-test run. Harness traffic is test-generated metadata, not originalCyberView traffic.
 - A diskless, stoppedQEMU/QMP smoke test has run; no vendor application or Windows guest is claimed from that test.
-- The user has no local licensed Windows image and asked to find one online. An official Microsoft Server2008Enterprise x86 evaluationVHD was located; its three parts are being acquired and inspected under the free evaluation conditions. Guest boot/detection remain pending. Host hypervisor/security settings are untouched.
+- The user has no local licensed Windows image and asked to find one online. The official Microsoft Server 2008 Enterprise x86 evaluation VHD and all three archive parts are downloaded and hashed. The included evaluation license permits VHD-capable virtualization; use is internal evaluation only, with no activation. The preserved base is 7,653,676,032 bytes; a disposable overlay is used for the bounded guest attempt. Host hypervisor/security settings are untouched. Actual guest/vendor results are recorded separately from acquisition.
 
 ## M2: Image processing and archival reliability
 
@@ -93,7 +93,7 @@ The first remote checkpoint's CI failed because the client had not yet been comm
 - Research agent, gpt-6-luna/medium: project agent configuration, model/runtime and dependency evidence; seven TOML files parsed.
 - Independent reviewer, gpt-6.1-sol/high: substantial correctness/security review and seven passing regressions; fixes integrated by root.
 
-No reverse-engineering or dedicated image subagent was activated. Configured agent roles are templates, not claims of execution. The root session's model was not retroactively changed. No per-agent token-cost telemetry was exposed; no cost total is invented.
+The initial M0/M1 pass used no reverse-engineering or dedicated image subagent. M1.5 later activated the reverse/research assignments recorded above; root handled the independent M2 precision work. Configured roles are templates, not claims of execution. The root session's model was not retroactively changed. No per-agent token-cost telemetry was exposed; no cost total is invented.
 
 ## Remaining boundaries
 
