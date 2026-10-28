@@ -54,6 +54,8 @@ All addresses are preferred-image VAs in the named, hash-identified PE. Every ro
 | All 22 INFs | hardware IDs | `05E3:0120` (PF1800U), `05E3:0129` (PF2700), `05E3:0145` (PF7250U/SS3600I), `2770:011C`. **None names `0461:034A`. None names an AFL.** |
 | data1.hdr | file groups/components | 42 groups, 58 components. No group or path named SCAN08. |
 | Disk1/setup.inx | compiled InstallScript | Still encoded. The ISx file-name key does not decode it. Rename or copy logic is **not recovered**. |
+| CyberViewX_SF/XP-SF-LC.EXE | Microsoft WEXTRACT self-extractor; RCDATA `CABINET` (263,179 bytes, SHA-256 `5175EC5E…`) expanded with Windows `expand.exe` | 11 files: the same LC WIA package (`PF1800LC.Dll` and `PWiaScnr.dll` hashes identical to `DPInst/LC`; a 2,632-byte `Pf1800lc.inf` variant, still `2770:011C`/"LC"). **No SCAN08.dll.** |
+| All 290 payload files + Disk1 | Signature sweep for nested CAB/ZIP/7z/RAR/ISc/gzip/PE past offset 0 | Only XP-SF-LC.EXE holds a real nested container. Every other hit is a coincidental byte pattern inside code: none decompresses, and the `PK` hits in zlib.dll are constants. |
 
 ## Interpretation
 

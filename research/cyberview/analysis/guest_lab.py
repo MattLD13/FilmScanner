@@ -1,5 +1,8 @@
 """Bounded offline QEMU evaluation guest launcher. No guest UI input functions.
 
+Media changes are limited to the hash-recorded vendor/tools CDs and this run's
+blank evidence floppy, the only path for results out of the network-less guest.
+
 Use the Computer Use workflow for UI interaction. The only QMP commands exposed
 here inspect state, save a screenshot, or shut down our own QEMU process.
 Runtime paths, process IDs, disks and license/media remain in ignored artifacts.
@@ -9,7 +12,9 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -24,6 +29,7 @@ BASE = WORKSPACE / "research/cyberview/.artifacts/guest-media/server2008-x86/vhd
 VENDOR = WORKSPACE / "research/cyberview/.artifacts/official-pf1800afl-v1.3/PrimeFilm_1800AFL_Windows_SF_ENG_1.3.exe"
 BASE_SHA = "bc57268875ab4589f2f11b766fa214bbe11b5349b427ec518e2a6316e2ded19d"
 VENDOR_SHA = "ebcbe798fe577b9461df22db3bde6240185e0553e65eb9b93d139d367f9109cf"
+TOOLS = Path(__file__).resolve().parent / "guest_tools"
 FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
@@ -44,7 +50,8 @@ def reserve():
 
 
 def qmp(port, execute, arguments=None):
-    if execute not in {"query-status", "query-block", "screendump", "quit", "system_powerdown"}:
+    if execute not in {"query-status", "query-block", "screendump", "quit", "system_powerdown",
+                       "blockdev-change-medium", "eject"}:
         raise ValueError("Only inspection/screenshot/own-guest shutdown commands allowed")
     with socket.create_connection(("127.0.0.1", port), timeout=5) as connection:
         connection.settimeout(10)
@@ -92,7 +99,7 @@ def prepare():
     print("Prepared verified base + qcow2 overlay + read-only vendor CD")
 
 
-def start():
+def start(budget_minutes=5):
     reserve()
     preparation = json.loads((LAB / "preparation.json").read_text())
     if digest(BASE) != BASE_SHA or digest(VENDOR) != VENDOR_SHA:
@@ -125,24 +132,84 @@ def start():
     record = {"pid": process.pid, "qmp_port": port, "started_utc": datetime.now(timezone.utc).isoformat(),
               "options": options, "guest_vendor_app_executed": False, "scanner_attached": False}
     (LAB / "run.json").write_text(json.dumps(record, indent=2))
-    launch_watchdog(port)
+    record["watchdog_budget_minutes"] = budget_minutes
+    (LAB / "run.json").write_text(json.dumps(record, indent=2))
+    launch_watchdog(port, budget_minutes)
     print(json.dumps({"started_pid": process.pid, "qmp_port": port, "network": "none", "base": "read-only"}))
 
 
-def launch_watchdog(port):
+def make_media():
+    """Tools CD (tracked guest_tools scripts) plus one blank evidence floppy for this run."""
+    import pycdlib
+    from fat12 import blank_image
+    if (LAB / "media.json").exists():
+        raise FileExistsError("Media already made for this lab; keep its evidence floppy")
+    image = pycdlib.PyCdlib()
+    image.new(interchange_level=3, joliet=3, vol_ident="FRAME_TOOLS")
+    scripts = {}
+    for script in sorted(TOOLS.glob("*.CMD")):
+        data = script.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        image.add_fp(io.BytesIO(data), len(data), f"/{script.name};1", joliet_path=f"/{script.name}")
+        scripts[script.name] = hashlib.sha256(data).hexdigest()
+    image.write(str(LAB / "tools.iso")); image.close()
+    floppy = "evidence-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".img"
+    (LAB / floppy).write_bytes(blank_image())
+    media = {"made_utc": datetime.now(timezone.utc).isoformat(), "scripts": scripts,
+             "tools_iso_sha256": digest(LAB / "tools.iso"), "evidence_floppy": floppy,
+             "blank_floppy_sha256": digest(LAB / floppy)}
+    (LAB / "media.json").write_text(json.dumps(media, indent=2))
+    print(json.dumps(media, indent=2))
+
+
+def insert(port, kind):
+    """Swap only our hash-recorded CDs or this run's evidence floppy into the guest."""
+    media = json.loads((LAB / "media.json").read_text())
+    if kind == "evidence":
+        path, device, mode = LAB / media["evidence_floppy"], "floppy0", "read-write"
+    else:
+        path = LAB / ("vendor.iso" if kind == "vendor" else "tools.iso")
+        expected = (json.loads((LAB / "preparation.json").read_text())["iso_sha256"] if kind == "vendor"
+                    else media["tools_iso_sha256"])
+        if digest(path) != expected:
+            raise RuntimeError(f"{path.name} hash changed")
+        device, mode = "ide1-cd0", "read-only"
+    qmp(port, "blockdev-change-medium", {"device": device, "filename": str(path),
+                                         "format": "raw", "read-only-mode": mode})
+    print(json.dumps({"inserted": path.name, "device": device, "mode": mode}))
+
+
+def read_evidence():
+    """Copy root files from the evidence floppy into a new ignored directory with hashes."""
+    from fat12 import read_root_files
+    media = json.loads((LAB / "media.json").read_text())
+    image = (LAB / media["evidence_floppy"]).read_bytes()
+    out = LAB / ("collected-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+    out.mkdir()
+    manifest = {"floppy": media["evidence_floppy"], "floppy_sha256": hashlib.sha256(image).hexdigest(), "files": {}}
+    for name, data in read_root_files(image).items():
+        if not re.fullmatch(r"[A-Z0-9_~$!#%&@^-]{1,8}(\.[A-Z0-9_~$!#%&@^-]{1,3})?", name):
+            raise ValueError(f"Unsafe evidence filename {name!r}")
+        (out / name).write_bytes(data)
+        manifest["files"][name] = {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    print(out)
+
+
+def launch_watchdog(port, budget_minutes):
     with (LAB / "watchdog.txt").open("ab") as stream:
-        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watchdog", "--port", str(port)],
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watchdog", "--port", str(port),
+                          "--budget-minutes", str(budget_minutes)],
                          stdout=stream, stderr=stream, creationflags=FLAGS)
 
 
-def watchdog(port):
-    """Five-minute first-pass budget; stop only the QEMU at our saved QMP socket."""
-    deadline = time.monotonic() + 300
+def watchdog(port, budget_minutes=5):
+    """Bounded pass budget (default five minutes); stop only the QEMU at our saved QMP socket."""
+    deadline = time.monotonic() + budget_minutes * 60
     while True:
         try:
             reserve()
             if time.monotonic() > deadline:
-                raise RuntimeError("Five-minute evaluation pass budget reached")
+                raise RuntimeError(f"{budget_minutes}-minute evaluation pass budget reached")
             status = qmp(port, "query-status")
             print(json.dumps({"utc": datetime.now(timezone.utc).isoformat(), "status": status,
                 "overlay_bytes": (LAB / "experiment.qcow2").stat().st_size,
@@ -159,16 +226,24 @@ def watchdog(port):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["prepare", "start", "status", "screenshot", "stop", "verify-base", "watchdog"])
+    parser.add_argument("action", choices=["prepare", "start", "status", "screenshot", "stop", "verify-base", "watchdog",
+                                           "make-media", "insert", "eject-evidence", "read-evidence"])
     parser.add_argument("--port", type=int)
+    parser.add_argument("--media", choices=["vendor", "tools", "evidence"])
+    parser.add_argument("--budget-minutes", type=int, default=5, choices=range(1, 241),
+                        help="hard stop for this pass; at most four hours")
     args = parser.parse_args()
     if args.action == "prepare": prepare()
-    elif args.action == "start": start()
-    elif args.action == "watchdog": watchdog(args.port)
+    elif args.action == "start": start(args.budget_minutes)
+    elif args.action == "watchdog": watchdog(args.port, args.budget_minutes)
+    elif args.action == "make-media": make_media()
+    elif args.action == "read-evidence": read_evidence()
     elif args.action == "verify-base": print(json.dumps({"base_sha256": digest(BASE), "unchanged": digest(BASE) == BASE_SHA}))
     else:
         run = json.loads((LAB / "run.json").read_text()); port = run["qmp_port"]
         if args.action == "stop": print(qmp(port, "quit"))
+        elif args.action == "insert": insert(port, args.media)
+        elif args.action == "eject-evidence": print(qmp(port, "eject", {"device": "floppy0"}))
         elif args.action == "status":
             reserve(); print(json.dumps({"status": qmp(port,"query-status"), "block": qmp(port,"query-block"),
                 "overlay_bytes": (LAB / "experiment.qcow2").stat().st_size,
