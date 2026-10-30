@@ -132,6 +132,29 @@ The Scan page gains a workspace panel. Screenshot: `docs/screenshots/desktop-sca
   - FRAME distributes no vendor profile; tests use fictitious ones.
 - Validation: `python -m pytest -q` → 106 passed (12 new workspace tests). `npm run lint` and `npm run build` passed. `npm run test:e2e` passed with prescan, profile, dragged 20–80% window and exposure R 105%, checking `scan_settings` on all 36 saved frames. `npm run test:desktop` 7 passed; `npm run smoke:desktop` passed.
 
+## CyberScan X interface preview on October 30 2026
+
+The user authorized work on a modern CyberView-style skin while explicitly
+forbidding scanner connections by the software. A separate local-only renderer
+now implements a dark CyberScan X scan studio with a large viewer, filmstrip,
+image adjustments, local import, transforms, visual guides, session library and
+JPEG/JSON preview exports. Demo photos are labeled and are not the user's Gold200
+scans. The theme is confined to the page; no Windows appearance setting is changed.
+
+`npm run preview:skin` serves only static files on127.0.0.1:8770. It imports no
+FRAME API or scanner host. Connect/Prescan/Scan are disabled. A separate browser
+test checks desktop and390px layouts and verifies zero API requests, zero event
+sockets and zero external requests. This work did not start the scanner service,
+run device discovery, open VueScan/CyberView, send a USB/TWAIN command or change a
+driver. Existing production UI and backend workflows remain separately available.
+
+`npm run lint`, `npm run build` and `npm run test:skin` passed. The skin test caught
+and fixed missing accessible names on the adjustment sliders. Evidence and scope:
+[skin notes](cyberscan-skin.md), [validation](cyberscan-validation.json),
+[desktop screenshot](screenshots/cyberscan-desktop.png) and
+[phone screenshot](screenshots/cyberscan-phone.png). Scanner integration and the
+native desktop entry for this skin remain future work, subject to authorization.
+
 ## M2: Image processing and archival reliability
 
 **Status: IN PROGRESS, independently of M1.5.**

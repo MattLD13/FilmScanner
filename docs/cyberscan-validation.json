@@ -1,0 +1,25 @@
+{
+  "result": "passed",
+  "mode": "static UI only",
+  "api_requests": [],
+  "websocket_connections": [],
+  "external_requests": [],
+  "javascript_exceptions": [],
+  "hardware_controls": "disabled on desktop and phone",
+  "verified": [
+    "local demo images",
+    "frame selection",
+    "zoom/fit",
+    "rotate/mirror",
+    "guides",
+    "exposure",
+    "recipe download",
+    "rotated JPEG export",
+    "local memory import",
+    "library/preferences",
+    "reload clears imports",
+    "390px responsive layout"
+  ],
+  "scanner_service_started": false,
+  "device_access_attempted": false
+}

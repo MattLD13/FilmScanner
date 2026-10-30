@@ -6,6 +6,8 @@
     "build": "npm --prefix apps/web run build",
     "test": "python -m pytest -q",
     "test:e2e": "python tests/e2e/run_workflow.py",
+    "preview:skin": "python scripts/preview_skin.py",
+    "test:skin": "python tests/e2e/run_skin_preview.py",
     "lint": "npm --prefix apps/web run lint",
     "setup": "python -m pip install -r requirements.txt && npm --prefix apps/web install && npm --prefix apps/desktop-shell install",
     "desktop": "npm --prefix apps/desktop-shell start",

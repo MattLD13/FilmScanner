@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import './style.css';
 import { ScanWorkspace, initialWorkspace, scanRequest, type Prescan, type WorkspaceState } from './workspace';
 
 type Roll = {id:string; stock:string; format:string; iso?:number; camera?:string; date?:string; notes?:string; tags?:string[]; status:string; prescan?:Prescan};
@@ -47,5 +46,18 @@ function App(){
  {page==='Settings'&&<><div className="page-heading"><div><p className="eyebrow orange">04 / THE DETAILS</p><h1>Keep things <em>considered.</em></h1><p className="lead">A clear view of what FRAME can do today.</p></div></div><div className="settings-grid"><section className="panel"><span className="eyebrow">SCANNER</span><h2>Simulator</h2><p>The simulator produces synthetic images for testing. The Pacific Image PF1800 AFL has not been verified on this device.</p><div className="setting-line"><span>Real hardware commands</span><strong>DISABLED</strong></div><div className="setting-line"><span>Connection</span><strong>{String(state.scanner?.connected?'SIMULATOR CONNECTED':'DISCONNECTED')}</strong></div><div className="setting-line"><span>Mounted slides / eject</span><strong>UNAVAILABLE</strong></div></section><section className="panel"><span className="eyebrow">PRIVACY & STORAGE</span><h2>Close to home.</h2><p>Your library is served locally with a session cookie. The offline shell does not cache your private API responses or images.</p><div className="setting-line"><span>Access</span><strong>LOCAL ONLY</strong></div><div className="setting-line"><span>Background timer alerts</span><strong>NOT GUARANTEED</strong></div><div className="setting-line"><span>Originals</span><strong>PRESERVED</strong></div></section></div></>}
  <footer><span>FRAME <span className="orange">●</span> YOUR FILM, CONSIDERED.</span><span>MADE FOR THE LONG WAY AROUND.</span></footer></main><div className="mobile-nav">{nav.map((n,i)=><button key={n} className={page===n?'active':''} onClick={()=>setPage(n)}><span>{['◒','◉','◷','▦','✳'][i]}</span>{n}</button>)}</div></div>;
 }
-createRoot(document.getElementById('root')!).render(<App/>);
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+const root = createRoot(document.getElementById('root')!);
+const skinPreview = new URLSearchParams(location.search).get('workspace') === 'cyberscan';
+if (skinPreview) {
+ document.title = 'CyberScan X — UI preview | FRAME';
+ document.documentElement.style.colorScheme = 'dark';
+ document.body.style.margin = '0';
+ document.body.style.backgroundColor = '#201c1a';
+ // Mount the local-only renderer instead of App: no authentication, API, event
+ // socket, service-worker registration or scanner connection runs in this mode.
+ import('./cyberscan').then(({ CyberScanSkin }) => root.render(<CyberScanSkin/>));
+} else {
+ import('./style.css');
+ root.render(<App/>);
+ if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
