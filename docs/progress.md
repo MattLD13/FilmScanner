@@ -1,6 +1,152 @@
 # FRAME implementation progress
 
-Updated 2026-10-30. FRAME_SPEC.md remains authoritative.
+Updated 2026-10-31. FRAME_SPEC.md remains authoritative.
+
+## FRAME rebrand and recovered vendor colour (October 31, 2026)
+
+The scanner UI is renamed FRAME and follows the original brown/cream/orange,
+editorial-serif concept. Home uses a random saved edited photograph; Scan has a
+larger photo and grouped advanced controls; Rolls and filmstrip use saved edits.
+Labeled phone navigation and the existing developing workflow are connected,
+with the current separation between developing records and scanned rolls stated.
+Canonical entry: `npm run frame` / `workspace=frame` / `--frame-scanner`. Legacy
+aliases, userData identity and driver folder remain compatible. Start-menu and
+desktop FRAME shortcuts were installed; recognised old shortcuts were replaced.
+
+Recovered colour work:
+
+- `CPfs1800AFL` selects `37.GG`, then complements the model gamma for negative
+  film. The missing model-specific tone curve is now part of explicit stock
+  profiles ending **AFL conversion**.
+- The 16-bit CFilmCIP LUT/matrix stage is ported with fractional file values,
+  integer interpolation, float32 coefficients and vendor truncation. Four
+  synthetic exhaustive-domain comparisons match the actual vendor CPU worker
+  sample-for-sample. No scanner API or hardware session is used by the oracle.
+- The new profile is opt-in. Original acquisitions, old profile parser/recipes,
+  hardware exposure and validation gates are preserved. The 12-bit gamma to
+  16-bit software adapter is documented separately from exact film-term parity.
+- Exact Auto Gamma builder located: it uses Lagrange and returns zeroes when
+  supplied duplicate endpoints in isolation. Caller selection/state remains
+  unresolved, so that behaviour was not substituted into production.
+- The recovered pipeline rendered the saved garden scan without using reference
+  colours to fit it. Aligned valid-overlap RGB MAE versus CyberView is 9.47/255;
+  flower detail/colour improve, but full vendor output parity and broader colour
+  accuracy remain unproven. Output: `.local/color-review/vendor-pipeline/`.
+  Addresses, source hashes and reproducible commands:
+  [vendor-colour-pipeline.md](vendor-colour-pipeline.md).
+- Independent review caught disappearance of legacy slide/BW profiles from the
+  new listing; they are retained. It verified profile compatibility/identity and
+  authenticated, bounded, read-only rendered-preview handling. No further blockers.
+
+Executed checks:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File services/cyberview_bridge/build.ps1 -Tests`
+  built bridge, auto-colour, new vendor-colour oracle and USB-watch harness without
+  compiler warnings.
+- `python -m pytest -q`: **234 passed, 2 existing expected failures, 48.67 s**,
+  no skips. The first targeted run hit a duplicate Python test module basename;
+  the API test was renamed before the passing run. An early rendered-image test
+  assumed a more specific cache header than the existing no-store middleware;
+  its expectation was corrected and the read-only/refresh tests pass.
+- `npm run lint`, `npm run build`, `npm run test:skin`, `npm run test:native-ui`,
+  `npm run test:e2e`, `npm run test:live-preview`, `npm run test:desktop` passed.
+  The 36-frame simulator/phone/reconnect/archive workflow and new profile
+  preview/export/FRAME navigation run with no JavaScript exceptions.
+- `npm --prefix apps/desktop-shell run smoke -- --frame-scanner` passed, title
+  FRAME, temporary isolated library, sandboxed window and owned service shutdown.
+  The initial root smoke command swallowed the forwarded flag, so its successful
+  general-workflow result was followed by this explicit scanner-workspace run.
+- Saved-scan visual review used an isolated temporary library with mocked scanner
+  discovery/bridge. Desktop Home/Scan and phone screenshots were inspected under
+  `.local/frame-ui/`; user source data were unchanged. Static demo screenshots
+  remain explicitly labeled as samples.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-cyberscan-shortcut.ps1`
+  installed per-user FRAME shortcuts in both locations, preserving unrelated links.
+
+No physical scanner operation, new validation claim, driver installation, or
+live-service restart. Code changes remain uncommitted.
+
+## Flower detail and colour correction after user review (October 31, 2026)
+
+The user correctly rejected the earlier generic conversion's flower detail and
+colour. Aligned full-size crops showed compressed fine contrast and lavender
+foliage/paving. The earlier whole-image quantile metric did not demonstrate good
+photographic rendering.
+
+- Added an experimental reference-derived profile using separate monotone RGB
+  curves, fitted outside excluded flower and paving regions. No sharpening,
+  reference texture copying, library edit migration or new acquisition.
+- Aligned held-out pixel MAE changed from 22.82 to 5.28 on the 120/168/269 scan;
+  applying the same LUT without refitting to the 100/100/100 scan changed 22.94 to
+  5.50, on a 0–255 scale. These remain two exposures of the same negative, not
+  validation on other scenes/stocks. The generic `0.5` default remains incomplete.
+- Private deliverables: `.local/color-review/reference-profile/corrected.tif`,
+  `comparison.jpg`, `detail.jpg`, `flowers.jpg`, exact profile/recipe and reports.
+  Generated profile installed locally as Garden - CyberView reference
+  (experimental). User originals and existing saved edits remain unchanged.
+- CyberScan explicitly requests reference profiles; the incompatible general
+  FRAME pipeline excludes/rejects them. Cached curves are structurally validated
+  and content-hashed on listing, caching and load. Corrupt files fail cleanly.
+- Independent review identified cache structure/integrity and listing-scope gaps,
+  plus non-object JSON handling. All were corrected and regression tested.
+
+Executed: `python -m pytest -q` → **220 passed, 2 pre-existing expected failures,
+45.44 seconds, no skips**. `npm run lint`, `npm run build`, `npm run test:native-ui`,
+`npm run test:e2e`, `npm run test:skin`, and `npm run test:live-preview` passed.
+The native browser workflow now selects a private synthetic reference profile and
+checks both preview and exported recipe. No JavaScript exceptions. The offline
+`python scripts/fit_reference_tone.py ...` run verified unchanged source/reference
+hashes. Details and reproduction: [reference-tone.md](reference-tone.md).
+
+No scanner commands or service restarts were performed. Changes remain uncommitted.
+
+## Offline negative-conversion continuation (October 31, 2026)
+
+Resumed from committed scanner checkpoint `5fb63e2` after reading the handoff,
+standalone plan and automatic-colour notes. Current handoff:
+[handoff-current.md](handoff-current.md). The original handoff's branch state and
+scanner plan are marked historical.
+
+- New direct negatives suggest a film base and editable nominal response `0.5`;
+  old recipes retain `1.6`. Ordinary and stitched scans share initial conversion
+  and automatic colour, excluding uncovered pixels. Balance negative applies the
+  suggestion to saved scans without scanner access or exposure changes.
+- Preview and 16-bit export agree on response. Existing acquisitions/edits were
+  not migrated. TIFF metadata includes engine, recipe and original checksum.
+  Restart reproduces exports byte-for-byte.
+- On the same garden negative at two exposures, mean RGB quantile error versus
+  the saved CyberView reference changed from 66.88 to 14.95 (100/100/100) and 82.39
+  to 14.43 (120/168/269), on a 0–255 scale. This is an appearance metric for one
+  scene, not calibrated colour accuracy. Residual differences remain. Evidence,
+  reproduction and limits: [negative-conversion.md](negative-conversion.md).
+- Independent review found and verified fixes for concurrent edit loss, colour
+  toggles including uncovered stitch margins, and Reset changing response under
+  existing auto colour. No remaining review blockers. Reviewer's independent
+  command `python -m pytest tests/imaging/test_negative.py tests/api/test_negative_balance.py -q`
+  gave 14 passed.
+
+Executed validation:
+
+- `python -m pytest -q` → **207 passed, 2 expected failures in 45.34 s**, no skips.
+  Expected failures remain the pre-existing sparse-frame import and prescan
+  ownership regressions in `tests/review/test_claude_regressions.py`.
+- `npm run lint`, `npm run build` → passed.
+- `npm run test:skin` → passed (desktop/390 px, zero service/network calls).
+- `npm run test:native-ui` → passed; now checks initial response, slider/SVG
+  agreement, Balance negative, Reset preserving response, exported recipe and
+  immutable original with synthetic film. Evidence: `.local/color-review/`.
+- `npm run test:live-preview` → passed with a fake direct bridge.
+- `npm run test:e2e` → passed: 36-frame simulator workflow, phone preview/reconnect,
+  16-bit exports and archive integrity; no JavaScript exceptions.
+- `npm run test:desktop` → 7 passed.
+- `python scripts/compare_negative.py ...` → completed on both saved exposure
+  variants, verifying unchanged input hashes. Private comparison outputs are in
+  `.local/color-review/final/` and `.local/color-review/default-exposure/`.
+
+An early targeted run had one exposure-estimator regression. That refactor was
+removed and prior hardware exposure behaviour restored before the successful
+final run. No new scanner commands, hardware sessions, validation gate changes or
+driver installations were performed. Changes remain uncommitted.
 
 ## 35 mm auto-align and the DLL chain, October 30, 2026 (night)
 
@@ -321,6 +467,24 @@ Validation: `python -m pytest -q` → 172 passed, 2 xfailed. `npm run lint`, `bu
 `test:skin`, `test:native-ui`, `test:e2e`, `test:desktop` all passed.
 `services/native_bridge/build.ps1 -Fixtures` and `services/cyberview_bridge/build.ps1` built
 without warnings.
+
+## Scan, Next frame, rolls and stitched scans in the app (October 31 2026, evening)
+
+- Scan button and stitched scan were refused because the saved exposure (blue 324) was
+  outside the validated range and the reason was not shown. Automatic exposure is now kept
+  inside `exposure_range`, an old saved value is clamped on start, the refusal reason shows
+  beside the button, and stitched scans are offered only when a scan is allowed.
+- Scan "Current frame" or "All frames" (until the film runs out). Next frame moves and
+  then runs a quick 300 dpi preview. Roll picker with New roll; the strip shows that
+  roll's frames labelled Frame 1, Frame 2...; stitched frames show their three source
+  scans (`GET /api/cyberview/captures/{id}/sources/{n}/preview`).
+- Stitched scans fixed on the scanner (see [stitched-scan-explained.md](stitched-scan-explained.md)):
+  20-step moves only, positions measured from images, ragged edges filled.
+- On the scanner: Scan frame, Next frame + preview and a stitched scan all completed.
+  Validation: `python -m pytest -q` → 245 passed, 2 xfailed; lint, build, skin,
+  native-ui, live-preview, e2e and desktop suites passed.
+- Includes ChatGPT's uncommitted work from the same day (FRAME styling, Home, Rolls,
+  vendor colour pipeline research, stitch cancellation hardening).
 
 ## Supervised direct-capture session (October 31 2026, afternoon)
 

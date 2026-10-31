@@ -351,7 +351,7 @@ class CyberViewBridge:
             await self._ended()
         return images, error
 
-    async def scan(self, out: Path, count: int, on_event: EventCallback) -> list[dict]:
+    async def scan(self, out: Path, count: int, on_event: EventCallback, until_end: bool = False) -> list[dict]:
         """Scans ``count`` frames starting at the current one; returns the image records.
 
         TWAIN auto-feed is refused by this driver, so later frames are reached with
@@ -377,10 +377,15 @@ class CyberViewBridge:
                             break
                         _, error = await self._exchange('film next', 'command_done', on_event, FILM_TIMEOUT)
                         if error:
+                            if until_end and error.get('code') != 'position_sensor':
+                                error = None  # "All frames": the film ran out
                             break
                     target = out if index == 1 else out.with_name(f'{out.stem}_{index:02d}{out.suffix}')
                     got, error = await self._exchange(f'scan 1 {target}', 'scan_done', on_event)
                     images += got
+                    if until_end and images and error and error.get('code') == 'no_film':
+                        error = None
+                        break
                     if error or not got or self.cancel_requested:
                         break
             finally:

@@ -52,8 +52,9 @@ def main():
                         browser = p.chromium.launch()
                         page = browser.new_page(viewport={'width': 1440, 'height': 1000})
                         page.on('pageerror', lambda error: errors.append(str(error)))
-                        page.goto(origin + '/?workspace=cyberscan')
+                        page.goto(origin + '/?workspace=frame')
                         expect(page.get_by_label('Scanner status')).to_contain_text('PrimeFilm')
+                        page.get_by_role('button', name='Scan', exact=True).click()
                         page.get_by_role('button', name='Scan frame', exact=True).click()
                         canvas = page.get_by_role('img', name='Frame 1 as the scanner reads it')
                         expect(canvas).to_be_visible(timeout=15000)
@@ -62,15 +63,17 @@ def main():
                         # Film base is bright in transmission; the negative preview shows it dark.
                         pixel = canvas.evaluate('c => Array.from(c.getContext("2d").getImageData(1, 1, 1, 1).data)')
                         assert pixel[3] == 255 and sum(pixel[:3]) < 200, pixel
-                        page.screenshot(path=str(ROOT / 'docs/screenshots/cyberscan-live.png'))
+                        evidence = ROOT / '.local/frame-ui'
+                        evidence.mkdir(parents=True, exist_ok=True)
+                        page.screenshot(path=str(evidence / 'scan-live.png'))
                         expect(canvas).to_be_hidden(timeout=20000)
-                        expect(page.get_by_role('button', name='Frame 1,', exact=False)).to_be_visible()
+                        expect(page.get_by_role('button', name='Frame 1', exact=True)).to_be_visible()
                         assert not errors, errors
                         browser.close()
                     print(json.dumps({'result': 'passed', 'mode': 'fake direct-capture bridge; no device access',
                                       'verified': ['live preview appears while the frame is read',
                                                    'negative preview inverted', 'saved frame replaces the preview'],
-                                      'screenshot': 'docs/screenshots/cyberscan-live.png',
+                                      'screenshot': '.local/frame-ui/scan-live.png',
                                       'javascript_exceptions': errors}))
                 finally:
                     server.should_exit = True

@@ -91,12 +91,13 @@ def test_film_base_measurement_becomes_exposure_but_scans_wait_for_validation(tm
         result=client.post('/api/cyberview/control',json={'action':'calibrate','acknowledged':True})
         assert result.status_code==200,result.text
         assert result.json()['film_base_exposure']==[151,201,318]
+        # Without a validated exposure range the measurement cannot change the exposure.
+        assert client.get('/api/cyberview/workspace').json()['settings']['exposure']==[100,100,100]
+        monkeypatch.setattr(workspace,'validation',lambda:proven|{'exposure_range':[50,300]})
+        client.post('/api/cyberview/control',json={'action':'calibrate','acknowledged':True})
         view=client.get('/api/cyberview/workspace').json()
-        assert view['settings']['exposure']==[151,201,318]
-        # Blue above 200 has not been scanned under supervision yet.
-        assert view['capabilities']['actions']['scan']['available'] is False
-        monkeypatch.setattr(workspace,'validation',lambda:proven|{'exposure_range':[50,400]})
-        assert client.get('/api/cyberview/workspace').json()['capabilities']['actions']['scan']['available'] is True
+        assert view['settings']['exposure']==[151,201,300]          # blue kept inside the scanned range
+        assert view['capabilities']['actions']['scan']['available'] is True
 
 
 def test_direct_capture_stops_and_ends_a_driver_stuck_on_a_sensor(tmp_path,bridge,monkeypatch):
@@ -126,3 +127,17 @@ def test_each_direct_scan_sets_the_next_exposure_from_its_film_base(tmp_path,bri
         measured=record['film_base']
         assert measured['exposure_used']==[100,100,100] and len(measured['measured'])==3
         assert client.get('/api/cyberview/workspace').json()['settings']['exposure']==measured['next_exposure']
+
+
+def test_all_frames_scans_until_the_film_runs_out(tmp_path,bridge,monkeypatch):
+    monkeypatch.setenv('FRAME_SCANNER_BACKEND','afl-native-experimental')
+    monkeypatch.setenv('FRAME_ALLOW_EXPERIMENTAL_SCANNER','1')
+    monkeypatch.setenv('FRAME_NATIVE_BRIDGE',__import__('os').environ['FRAME_CVBRIDGE'])
+    monkeypatch.setenv('FAKE_CVBRIDGE_FRAMES','3')   # the fake strip ends after three frames
+    monkeypatch.setattr(workspace,'validation',lambda:{'actions':['next'],'configurations':[workspace.ScanOptions().model_dump()]})
+    with TestClient(create_app(tmp_path/'library')) as client:
+        login(client)
+        assert client.post('/api/cyberview/scan',json={'until_end':True,'roll':'Strip'}).status_code==200
+        session=wait_session(client,timeout=30)
+        assert session['state']=='complete' and session['completed']==3, session
+        assert len(client.get('/api/cyberview/captures').json()['captures'])==3

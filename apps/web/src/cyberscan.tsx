@@ -1,13 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CyberScanDiagnostics, ScannerEvidence, CyberScanOptions, CyberScanWorkspace, FilmProfile } from '../../../packages/contracts/schema';
+import type { CyberScanDiagnostics, ScannerEvidence, CyberScanOptions, CyberScanWorkspace, FilmProfile, CyberScanAdjustments } from '../../../packages/contracts/schema';
 import './cyberscan.css';
 
-// CyberScan X: standalone film scanning for the PrimeFilm 1800 AFL. Live mode talks to the
-// local FRAME service, which drives the scanner's own driver (SCAN08) directly; CyberView X
-// is not used. (A hidden-CyberView path remains for tests and research only.) Demo mode
-// (?demo=1, used by the static preview) makes no network requests at all.
+// FRAME's scanner workspace uses the local service. The legacy CyberScan URL and
+// API names remain supported. Demo mode makes no network requests.
 
-type Adjust = { exposure: number; contrast: number; saturation: number; temperature: number; rotation: number; mirror: boolean; invert?: boolean; film_base?: number[]; black_point?: number; white_point?: number; gamma?: number; rgb_balance?: number[]; curve?: number[]; crop?: { left: number; top: number; right: number; bottom: number }; monochrome?: boolean; film_profile?: string | null; auto_color?: number[] | null };
+type Adjust = CyberScanAdjustments;
 type Alignment = { confidence: 'frame_found' | 'one_edge' | 'centered'; exact: boolean; crop_mm: number[]; skew_deg: number | null; bleed_mm: number; note?: string | null };
 type AlignInfo = { settings: { auto: boolean; bleed_mm: number; offset_mm: number; steps_per_mm: number | null }; stitched_scan: { available: boolean; reason: string }; max_window_mm: number[] };
 const ALIGN_LABEL: Record<Alignment['confidence'], string> = { frame_found: 'Both frame edges found', one_edge: 'One frame edge found', centered: 'No edge visible · centred' };
@@ -15,9 +13,10 @@ type Capture = {
   id: string; index: number; title: string; roll: string; created_at: number; width: number; height: number;
   bits: number; dpi: number; sha256: string; favorite: boolean; adjustments: Adjust; demo?: boolean; src?: string;
   cyberview?: Settings;
-  backend?: string; image_kind?: string;
+  backend?: string; image_kind?: string; hardware?: boolean;
   purpose?: 'scan' | 'prescan' | 'stitched';
   alignment?: Alignment;
+  derived?: { kind: string; sources?: { label: string }[] };
 };
 type Settings = { found: boolean; film_term?: string | null; film_type?: 'negative' | 'positive' | null; auto_exposure?: boolean | null; auto_gamma?: boolean; scan_depth?: number; crop_inches?: number[] | null };
 type Session = {
@@ -25,17 +24,18 @@ type Session = {
   count: number; completed: number; frame: number; rows: number; height: number; started_at: number; roll: string; error: string | null;
   driver_status?: string | null; driver_dialog?: string | null;
   backend?: string;
-  purpose?: 'scan' | 'prescan';
+  purpose?: 'scan' | 'prescan' | 'stitched';
+  until_end?: boolean;
 };
 type Status = { bridge_built: boolean; busy: boolean; session_open: boolean; auto_reset: boolean; vendor_open: boolean; scanner_present: boolean | null; settings: Settings; session: Session | null; backend?: string; supports_next?: boolean; max_count?: number; experimental_enabled?: boolean };
 type ScanOptions = CyberScanOptions;
 type ActionName = 'next' | 'previous' | 'eject_forward' | 'eject_backward' | 'goto' | 'prescan' | 'autofocus' | 'focus' | 'calibrate';
 type ScannerWorkspace = CyberScanWorkspace<Capture>;
 type Histogram = { bins: number[][]; percentiles: { black: number; white: number }; original: boolean; stage?: string };
-type View = 'scan' | 'library' | 'settings';
+type View = 'home' | 'scan' | 'library' | 'settings';
 // Rows the scanner streams while it reads a frame: 1/8 size, 8-bit RGB, raw transmission (base64 per row).
 type Live = { session_id: string; frame: number; pass: number; width: number; rows: string[] };
-type IconName = 'scan' | 'library' | 'settings' | 'rotate' | 'mirror' | 'download' | 'stop' | 'star' | 'reset' | 'alert' | 'check' | 'film' | 'minus' | 'plus' | 'fit' | 'close';
+type IconName = 'home' | 'develop' | 'scan' | 'library' | 'settings' | 'rotate' | 'mirror' | 'download' | 'stop' | 'star' | 'reset' | 'alert' | 'check' | 'film' | 'minus' | 'plus' | 'fit' | 'close';
 
 const NEUTRAL: Adjust = { exposure: 0, contrast: 0, saturation: 0, temperature: 0, rotation: 0, mirror: false, invert: false, film_base: [1, 1, 1], black_point: 0, white_point: 1, gamma: 1, rgb_balance: [1, 1, 1], curve: [0, .25, .5, .75, 1], crop: { left: 0, top: 0, right: 1, bottom: 1 }, monochrome: false, film_profile: null };
 const DEMO: Capture[] = [
@@ -49,6 +49,8 @@ const DEFAULT_OPTIONS: ScanOptions = { dpi: 1800, bits: 16, channel: 'rgb', film
 const ACTION_NAMES: Record<ActionName, string> = { next: 'Next frame', previous: 'Previous frame', eject_forward: 'Eject forward', eject_backward: 'Eject backward', goto: 'Go to frame', prescan: 'Prescan frame', autofocus: 'Autofocus', focus: 'Set focus', calibrate: 'Calibrate' };
 
 const paths: Record<IconName, React.ReactNode> = {
+  home: <><path d="m3 11 9-7 9 7M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></>,
+  develop: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2M9 2h6" /></>,
   scan: <><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 6V4h10v2M3 12h18" /></>,
   library: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
   settings: <><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>,
@@ -124,6 +126,13 @@ const edgeNumber = (n: number) => String(n).padStart(2, '0') + 'A';
 const signed = (v: number, digits = 0) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(digits);
 const shortDate = (ms: number) => ms ? new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Sample';
 const imageUrl = (c: Capture, kind: 'preview' | 'thumb') => c.src || `/api/cyberview/captures/${c.id}/${kind}`;
+// A short fingerprint refreshes rendered thumbnails after their edit has saved.
+function editStamp(adjustments: Adjust) {
+  const data = JSON.stringify(adjustments); let first = 2166136261, second = 2246822519;
+  for (let i = 0; i < data.length; i++) { first = Math.imul(first ^ data.charCodeAt(i), 16777619); second = Math.imul(second ^ data.charCodeAt(i), 3266489917); }
+  return `${first >>> 0}-${second >>> 0}`;
+}
+const displayUrl = (c: Capture, kind: 'preview' | 'thumb', stamp: string) => c.src || `/api/cyberview/captures/${c.id}/rendered/${kind}?v=${stamp}`;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
@@ -290,9 +299,17 @@ function Slider({ label, value, min, max, step, unit = '', digits = 0, onChange 
 export function CyberScanSkin() {
   const demo = useMemo(() => new URLSearchParams(location.search).get('demo') === '1', []);
   const { mode, status, captures, setCaptures, session, setSession, refresh, live } = useScanner(demo);
-  const [view, setView] = useState<View>('scan');
+  const [view, setView] = useState<View>(() => {
+    const page = new URLSearchParams(location.search).get('page');
+    return page === 'scan' || page === 'settings' ? page : page === 'rolls' ? 'library' : 'home';
+  });
+  const [featured, setFeatured] = useState<string | null>(null);
+  const [renderStamps, setRenderStamps] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [count, setCount] = useState(1);
+  const [scanAll, setScanAll] = useState(false);
+  const [newRoll, setNewRoll] = useState<string | null>(null);
+  const [sourceView, setSourceView] = useState<number | null>(null);
   const [roll, setRoll] = useState('');
   const [zoom, setZoom] = useState(1);
   const [message, setMessage] = useState<{ text: string; tone: 'info' | 'error' } | null>(null);
@@ -320,14 +337,28 @@ export function CyberScanSkin() {
   const pendingSaves = useRef(new Map<string, { timer: number; adjustments: Adjust }>());
   const inFlightSaves = useRef(new Map<string, Promise<void>>());
 
-  const current = captures.find((c) => c.id === selected) || captures[captures.length - 1] || null;
+  // With nothing selected, show the newest frame of the chosen roll, or a newer quick preview.
+  const rollFrames = captures.filter((c) => (c.roll || '') === roll && c.purpose !== 'prescan');
+  const rollPreview = [...captures].reverse().find((c) => c.purpose === 'prescan' && (c.roll || '') === roll);
+  const newestOnRoll = rollPreview && (!rollFrames.length || rollPreview.created_at > rollFrames[rollFrames.length - 1].created_at) ? rollPreview : rollFrames[rollFrames.length - 1];
+  const current = captures.find((c) => c.id === selected) || newestOnRoll || null;
+  // Open on the roll that was scanned last.
+  const rollChosen = useRef(false);
+  useEffect(() => {
+    if (rollChosen.current || !captures.length) return;
+    rollChosen.current = true;
+    const last = [...captures].reverse().find((c) => c.purpose !== 'prescan');
+    if (last) setRoll(last.roll || '');
+  }, [captures]);
   const adjust = current?.adjustments || NEUTRAL;
   const ready = readiness(mode, status);
   const scanning = !!session && ACTIVE.has(session.state);
   const showLive = scanning && !!live && live.session_id === session?.id && live.rows.length > 0 && session?.state !== 'saving';
   const nativeMode = status?.backend === 'afl-native-experimental';
   const profilePreview = !showOriginal && !!adjust.film_profile && !!current && !current.demo && mode === 'live';
-  const imageSrc = current && profilePreview ? `/api/cyberview/captures/${current.id}/profile-preview?${new URLSearchParams({ profile_id: adjust.film_profile || '', invert: String(!!adjust.invert), base_r: String(adjust.film_base?.[0] ?? 1), base_g: String(adjust.film_base?.[1] ?? 1), base_b: String(adjust.film_base?.[2] ?? 1) }).toString()}` : current ? imageUrl(current, 'preview') : '';
+  const vendorProfile = profiles.some((p) => p.id === adjust.film_profile && p.kind === 'vendor-negative');
+  const viewingSource = !!current && current.purpose === 'stitched' && sourceView !== null;
+  const imageSrc = viewingSource ? `/api/cyberview/captures/${current!.id}/sources/${sourceView}/preview` : current && profilePreview ? `/api/cyberview/captures/${current.id}/profile-preview?${new URLSearchParams({ profile_id: adjust.film_profile || '', invert: String(!!adjust.invert), base_r: String(adjust.film_base?.[0] ?? 1), base_g: String(adjust.film_base?.[1] ?? 1), base_b: String(adjust.film_base?.[2] ?? 1), negative_response: String(adjust.negative_response ?? 1.6) }).toString()}` : current ? imageUrl(current, 'preview') : '';
   const optionsChanged = JSON.stringify(options) !== JSON.stringify(workspace?.settings);
   const can = (name: string) => workspace?.capabilities.actions[name]?.available === true;
   const reason = (name: string) => workspace?.capabilities.actions[name]?.reason || 'Not available with the selected scanner interface.';
@@ -335,10 +366,35 @@ export function CyberScanSkin() {
   const matrix = useMemo(() => colorMatrix(adjust), [adjust]);
   const tone = useMemo(() => toneTable(adjust), [adjust]);
   const autoTables = useMemo(() => adjust.auto_color && !showOriginal ? autoColorTables(adjust.auto_color) : null, [adjust, showOriginal]);
-  const rollCaptures = useMemo(() => {
-    if (!current) return captures;
-    return captures.filter((c) => c.roll === current.roll);
-  }, [captures, current]);
+  // The strip shows the chosen roll's frames (quick previews excluded), numbered in scan order.
+  const rollCaptures = useMemo(() => captures.filter((c) => (c.roll || '') === roll && c.purpose !== 'prescan')
+    .sort((a, b) => a.created_at - b.created_at), [captures, roll]);
+  const frameNumber = (c: Capture) => rollCaptures.findIndex((item) => item.id === c.id) + 1;
+  const frameLabel = (c: Capture) => c.purpose === 'prescan' ? 'Quick preview' : `Frame ${frameNumber(c) || c.index}${c.purpose === 'stitched' ? ' · stitched' : ''}`;
+  const rolls = useMemo(() => [...new Set(['', ...captures.filter((c) => !c.demo).map((c) => c.roll || ''), roll])], [captures, roll]);
+  const homeCaptures = useMemo(() => captures.filter((c) => c.purpose !== 'prescan' && (demo || (!c.demo && c.hardware !== false))), [captures, demo]);
+  const homePhoto = homeCaptures.find((c) => c.id === featured) || null;
+
+  // Home shows an actual saved frame. Demo photographs are explicitly marked as samples.
+  useEffect(() => {
+    if (view !== 'home') return;
+    if (!homeCaptures.length) { if (featured) setFeatured(null); return; }
+    if (!featured || !homeCaptures.some((c) => c.id === featured)) {
+      const photo = homeCaptures[Math.floor(Math.random() * homeCaptures.length)];
+      setFeatured(photo.id);
+    }
+  }, [view, homeCaptures, featured]);
+
+  const shuffleHome = () => {
+    const choices = homeCaptures.filter((c) => c.id !== featured);
+    if (!choices.length) return;
+    const photo = choices[Math.floor(Math.random() * choices.length)];
+    setFeatured(photo.id);
+  };
+  const rendered = (capture: Capture, kind: 'preview' | 'thumb') => displayUrl(capture, kind, renderStamps[capture.id] ?? editStamp(capture.adjustments));
+  const rememberRendered = (items: Capture[]) => setRenderStamps((previous) => {
+    const next = { ...previous }; for (const item of items) next[item.id] = editStamp(item.adjustments); return next;
+  });
 
   useEffect(() => { if (!scanning) return; const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id); }, [scanning]);
   useEffect(() => {
@@ -370,11 +426,11 @@ export function CyberScanSkin() {
         .catch(() => { if (!cancelled) setHistogram(null); });
     }, 800);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [mode, current?.id, adjust.invert, adjust.film_profile, (adjust.film_base || []).join(',')]);
+  }, [mode, current?.id, adjust.invert, adjust.film_profile, adjust.negative_response, (adjust.film_base || []).join(',')]);
   useEffect(() => {
     if (mode !== 'live') return;
     let cancelled = false;
-    api<{ profiles: FilmProfile[] }>('/api/film-profiles')
+    api<{ profiles: FilmProfile[] }>('/api/film-profiles?include_reference=true&include_vendor=true')
       .then((data) => { if (!cancelled) { setProfiles(data.profiles); setProfileError(''); } })
       .catch(() => { if (!cancelled) { setProfiles([]); setProfileError('Film profiles could not be loaded.'); } });
     return () => { cancelled = true; };
@@ -421,6 +477,7 @@ export function CyberScanSkin() {
     const prior = inFlightSaves.current.get(id) || Promise.resolve();
     const request = prior.catch(() => undefined).then(async () => {
       await api(`/api/cyberview/captures/${id}`, { method: 'PATCH', body: JSON.stringify({ adjustments: pending.adjustments }) });
+      setRenderStamps((previous) => ({ ...previous, [id]: editStamp(pending.adjustments) }));
     });
     inFlightSaves.current.set(id, request);
     return request;
@@ -428,6 +485,7 @@ export function CyberScanSkin() {
   const updateAdjust = (patch: Partial<Adjust>) => {
     if (!current) return;
     const next = { ...current.adjustments, ...patch };
+    if (mode === 'live' && !current.demo) setRenderStamps((previous) => current.id in previous ? previous : { ...previous, [current.id]: editStamp(current.adjustments) });
     setCaptures((list) => list.map((c) => c.id === current.id ? { ...c, adjustments: next } : c));
     if (mode !== 'live' || current.demo) return;
     const existing = pendingSaves.current.get(current.id);
@@ -448,6 +506,7 @@ export function CyberScanSkin() {
     try {
       await flushSave(current.id);
       const updated = await api<Capture>(`/api/cyberview/captures/${current.id}/auto-color`, { method: 'POST', body: JSON.stringify({ enabled }) });
+      rememberRendered([updated]);
       setCaptures((list) => list.map((item) => item.id === updated.id ? updated : item));
     } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
     finally { setAutoLevelBusy(false); }
@@ -458,8 +517,21 @@ export function CyberScanSkin() {
     try {
       await flushSave(current.id);
       const updated = await api<Capture>(`/api/cyberview/captures/${current.id}/auto-levels`, { method: 'POST' });
+      rememberRendered([updated]);
       setCaptures((list) => list.map((item) => item.id === updated.id ? updated : item));
       setMessage({ text: 'Auto levels applied to this edit. The original is unchanged.', tone: 'info' });
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+    finally { setAutoLevelBusy(false); }
+  };
+  const balanceNegative = async () => {
+    if (!current || current.demo || mode !== 'live') return;
+    setAutoLevelBusy(true);
+    try {
+      await flushSave(current.id);
+      const updated = await api<Capture>(`/api/cyberview/captures/${current.id}/balance-negative`, { method: 'POST' });
+      rememberRendered([updated]);
+      setCaptures((list) => list.map((item) => item.id === updated.id ? updated : item));
+      setMessage({ text: 'Suggested film base and response applied. Review the colour and adjust as needed.', tone: 'info' });
     } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
     finally { setAutoLevelBusy(false); }
   };
@@ -481,6 +553,7 @@ export function CyberScanSkin() {
       const ids = new Set([...pendingSaves.current.keys(), ...inFlightSaves.current.keys()]);
       await Promise.all([...ids].map(flushSave));
       const result = await api<{ captures: Capture[]; count: number }>(`/api/cyberview/captures/${current.id}/apply-to-roll`, { method: 'POST', body: JSON.stringify({ adjustments: current.adjustments }) });
+      rememberRendered(result.captures);
       setCaptures((list) => list.map((item) => result.captures.find((updated) => updated.id === item.id) || item));
       setMessage({ text: `Color settings applied to ${result.count} ${result.count === 1 ? 'frame' : 'frames'}.`, tone: 'info' });
     } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
@@ -515,6 +588,7 @@ export function CyberScanSkin() {
     setAligning(true);
     try {
       const result = await api<{ alignment: Alignment; capture: Capture }>(`/api/cyberview/captures/${current.id}/auto-align`, { method: 'POST', body: JSON.stringify({ bleed_mm: alignInfo?.settings.bleed_mm ?? 0 }) });
+      rememberRendered([result.capture]);
       setCaptures((list) => list.map((c) => c.id === current.id ? result.capture : c));
       const a = result.alignment;
       setMessage(a.exact ? { text: `${ALIGN_LABEL[a.confidence]}. Cropped to ${a.crop_mm[0]} × ${a.crop_mm[1]} mm.`, tone: 'info' }
@@ -539,7 +613,7 @@ export function CyberScanSkin() {
   const startScan = async () => {
     try {
       setMessage(null);
-      const started = await api<Session>('/api/cyberview/scan', { method: 'POST', body: JSON.stringify({ count, roll, ...(workspace ? { settings: workspace.settings } : {}) }) });
+      const started = await api<Session>('/api/cyberview/scan', { method: 'POST', body: JSON.stringify({ count: 1, until_end: scanAll, roll, ...(workspace ? { settings: workspace.settings } : {}) }) });
       setSession(started);
       setSelected(null);
       setNow(Date.now());
@@ -585,8 +659,13 @@ export function CyberScanSkin() {
       const filmAction = ['next', 'previous', 'eject_forward', 'eject_backward', 'goto'].includes(action);
       const payload = filmAction ? { action, ...(action === 'goto' ? { frame: targetFrame } : {}), acknowledged } : { action, ...(action === 'focus' ? { value: targetFocus } : {}), acknowledged };
       await api(filmAction ? '/api/cyberview/film' : '/api/cyberview/control', { method: 'POST', body: JSON.stringify(payload) });
-      await Promise.all([refresh(), refreshWorkspace()]);
-      setMessage({ text: `${ACTION_NAMES[action]} complete.`, tone: 'info' });
+      const [, next] = await Promise.all([refresh(), refreshWorkspace()]);
+      if (action === 'next' && next?.capabilities.actions.prescan?.available) {
+        // A quick 300 dpi pass shows what is now in the window; it is not saved as a frame.
+        const started = await api<Session>('/api/cyberview/prescan', { method: 'POST', body: JSON.stringify({ roll, settings: next.settings }) });
+        setSession(started); setSelected(null); setNow(Date.now());
+        setMessage({ text: 'Moved to the next frame. Showing a quick preview.', tone: 'info' });
+      } else setMessage({ text: `${ACTION_NAMES[action]} complete.`, tone: 'info' });
     } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
     finally { setMoving(null); }
   };
@@ -604,7 +683,15 @@ export function CyberScanSkin() {
     } finally { setSwitchingBackend(false); }
   };
 
-  const nav: [View, string, IconName][] = [['scan', 'Scan', 'scan'], ['library', 'Library', 'library'], ['settings', 'Settings', 'settings']];
+  const nav: [View | 'develop', string, IconName][] = [['home', 'Home', 'home'], ['scan', 'Scan', 'scan'], ['develop', 'Develop', 'develop'], ['library', 'Rolls', 'library'], ['settings', 'Settings', 'settings']];
+  const openDevelop = async () => {
+    if (mode !== 'live') return;
+    try {
+      const ids = new Set([...pendingSaves.current.keys(), ...inFlightSaves.current.keys()]);
+      await Promise.all([...ids].map(flushSave));
+      window.location.assign('/?page=Develop&from=scanner');
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+  };
   const transform = showOriginal ? `scale(${zoom})` : `scale(${zoom}) rotate(${adjust.rotation}deg) scaleX(${adjust.mirror ? -1 : 1})`;
   const crop = adjust.crop || { left: 0, top: 0, right: 1, bottom: 1 };
   const cropped = !showOriginal && (crop.left !== 0 || crop.top !== 0 || crop.right !== 1 || crop.bottom !== 1);
@@ -614,9 +701,9 @@ export function CyberScanSkin() {
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
       <filter id="cx-adjust" colorInterpolationFilters="sRGB">
         <feComponentTransfer>
-          <feFuncR type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[0] ?? 1, 1.6) : 1} exponent={adjust.invert && !profilePreview ? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
-          <feFuncG type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[1] ?? 1, 1.6) : 1} exponent={adjust.invert && !profilePreview ? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
-          <feFuncB type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[2] ?? 1, 1.6) : 1} exponent={adjust.invert && !profilePreview ? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
+          <feFuncR type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[0] ?? 1, adjust.negative_response ?? 1.6) : 1} exponent={adjust.invert && !profilePreview ? adjust.negative_response ?? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
+          <feFuncG type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[1] ?? 1, adjust.negative_response ?? 1.6) : 1} exponent={adjust.invert && !profilePreview ? adjust.negative_response ?? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
+          <feFuncB type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[2] ?? 1, adjust.negative_response ?? 1.6) : 1} exponent={adjust.invert && !profilePreview ? adjust.negative_response ?? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
         </feComponentTransfer>
         {autoTables && <feComponentTransfer>
           <feFuncR type="table" tableValues={autoTables[0]} />
@@ -636,18 +723,49 @@ export function CyberScanSkin() {
       </filter>
     </svg>
     <aside className="cx-sidebar">
-      <div className="cx-wordmark"><span className="cx-mark" aria-hidden="true" />CyberScan X</div>
+      <div className="cx-wordmark"><span className="cx-mark" aria-hidden="true" />FRAME<span className="cx-wordmark-dot">.</span></div>
+      <p className="cx-sidebar-intro">A little more time<br />with your photographs.</p>
       <nav aria-label="Sections">
-        {nav.map(([id, label, icon]) => <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined} onClick={() => setView(id)}><Icon name={icon} />{label}</button>)}
+        {nav.map(([id, label, icon]) => <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined}
+          disabled={id === 'develop' && mode !== 'live'} title={id === 'develop' && mode !== 'live' ? 'Open the live app to develop a roll' : undefined}
+          onClick={() => id === 'develop' ? void openDevelop() : setView(id)}><Icon name={icon} />{label}</button>)}
       </nav>
       <div className="cx-device" aria-label="Scanner status">
         <span className={'cx-dot ' + (scanning || moving ? 'busy' : ready.ok ? 'ok' : 'off')} />
         <div><strong>{scanning ? 'Scanning' : ready.title}</strong><span>{scanning ? (nativeMode ? 'Direct capture' : 'Through CyberView X') : ready.detail}</span></div>
       </div>
-      <p className="cx-sidebar-note">{mode === 'demo' ? 'Sample photos, not scans' : nativeMode ? 'Direct capture · transmission image' : 'Scans run through CyberView X with its window hidden'}</p>
+      <p className="cx-sidebar-note">{mode === 'demo' ? 'Sample photos, not scans' : nativeMode ? 'Direct capture · transmission image' : 'Scanner connection'}</p>
     </aside>
 
     <main className="cx-main">
+      {view === 'home' && <section className="cx-home" aria-label="Home">
+        <div className="cx-home-top"><span>YOUR FILM JOURNAL</span><span>{mode === 'demo' ? 'SAMPLE MODE' : 'LOCAL WORKSPACE'}</span></div>
+        <div className="cx-home-intro">
+          <div className="cx-home-copy">
+            <p className="cx-eyebrow">THE ANALOGUE WORKFLOW</p>
+            <h1>Good things<br /><em>take their time.</em></h1>
+            <p>From the first frame to the final scan. A home for every roll, and the stories on it.</p>
+            <div className="cx-home-actions"><button className="cx-button primary" onClick={() => setView('scan')}>Open scanner <span aria-hidden="true">↗</span></button>
+              <button className="cx-home-link" onClick={() => void openDevelop()} disabled={mode !== 'live'}>Develop a roll <span aria-hidden="true">↗</span></button></div>
+            <div className="cx-home-status"><span className={'cx-dot ' + (scanning ? 'busy' : ready.ok ? 'ok' : 'off')} />
+              <div><strong>{scanning ? 'Scan in progress' : ready.title}</strong><span>{scanning ? `${session?.completed ?? 0} of ${session?.count ?? 0} frames saved` : ready.detail}</span></div></div>
+          </div>
+          <div className="cx-feature">
+            <div className="cx-feature-head"><span>THE FRAME COLLECTION</span><button onClick={shuffleHome} disabled={homeCaptures.length < 2}>Shuffle ↻</button></div>
+            <div className="cx-feature-image">{homePhoto
+              ? <button className="cx-feature-open" aria-label={`Open ${homePhoto.title}`} onClick={() => { setSelected(homePhoto.id); setView('scan'); }}><img src={rendered(homePhoto, 'preview')} alt={`${homePhoto.demo ? 'Sample photograph' : 'Saved photograph'} · ${homePhoto.title}`} /></button>
+              : <div className="cx-feature-empty"><Icon name="film" size={28} /><strong>Your photographs<br />will live here.</strong><span>Scan a frame to begin.</span></div>}</div>
+            <div className="cx-feature-caption"><div><strong>{homePhoto ? homePhoto.roll || 'Untitled roll' : 'A space for your work'}</strong>
+              <span>{homePhoto ? `${homePhoto.demo ? 'SAMPLE IMAGE' : 'SAVED FRAME'} · ${shortDate(homePhoto.created_at)}` : 'YOUR LIBRARY IS EMPTY'}</span></div><span>{homePhoto ? edgeNumber(homePhoto.index) : '—'}</span></div>
+          </div>
+        </div>
+        <div className="cx-home-section-title"><span>YOUR WORKSPACE</span><span>01 — 03</span></div>
+        <div className="cx-home-cards">
+          <button onClick={() => setView('scan')}><span>01 / SCAN</span><strong>Bring it to light.</strong><small>{scanning ? `${session?.completed ?? 0} of ${session?.count ?? 0} frames saved` : 'Your scanner workspace'}</small><b>OPEN SCANNER ↗</b></button>
+          <button onClick={() => void openDevelop()} disabled={mode !== 'live'}><span>02 / DEVELOP</span><strong>In the darkroom.</strong><small>Recipes and developing sessions</small><b>OPEN TIMER ↗</b></button>
+          <button onClick={() => setView('library')}><span>03 / ROLLS</span><strong>Keep the memories.</strong><small>{homeCaptures.length} {demo ? (homeCaptures.length === 1 ? 'sample photograph' : 'sample photographs') : (homeCaptures.length === 1 ? 'saved frame' : 'saved frames')}</small><b>EXPLORE ROLLS ↗</b></button>
+        </div>
+      </section>}
       {view === 'scan' && <>
         <header className="cx-topbar">
           <div className="cx-title">
@@ -655,14 +773,23 @@ export function CyberScanSkin() {
             <span className="cx-meta">{current ? (current.demo ? 'Sample image' : `${current.width} × ${current.height} · ${current.dpi} dpi · ${current.bits}-bit · ${shortDate(current.created_at)}`) : 'Load film, then scan the current frame'}</span>
           </div>
           <div className="cx-scanbar">
-            <label className="cx-field"><span>Roll</span><input value={roll} maxLength={120} placeholder="Untitled roll" onChange={(e) => setRoll(e.target.value)} disabled={scanning || mode !== 'live'} /></label>
-            <label className="cx-field cx-count"><span>Frames</span>
-              <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={scanning || mode !== 'live'} aria-label="Frames to scan">
-                {[1, 2, 3, 4, 6, 12, 24, 36].filter((n) => n <= (status?.max_count ?? 40)).map((n) => <option key={n} value={n}>{n === 1 ? 'Current frame' : `Next ${n}`}</option>)}
+            {newRoll === null
+              ? <label className="cx-field"><span>Roll</span><select value={roll} onChange={(e) => { setRoll(e.target.value); setSelected(null); setSourceView(null); }} disabled={scanning || mode !== 'live'} aria-label="Roll">
+                  {rolls.map((name) => <option key={name} value={name}>{name || 'Untitled roll'}</option>)}
+                </select></label>
+              : <form className="cx-field" onSubmit={(e) => { e.preventDefault(); const name = newRoll.trim(); if (name) { setRoll(name); setSelected(null); setSourceView(null); } setNewRoll(null); }}>
+                  <span>New roll</span><input autoFocus value={newRoll} maxLength={120} onChange={(e) => setNewRoll(e.target.value)} aria-label="New roll name" onBlur={() => setNewRoll(null)} />
+                </form>}
+            <button className="cx-text-button" onClick={() => setNewRoll(`Roll ${rolls.filter(Boolean).length + 1}`)} onMouseDown={(e) => e.preventDefault()} disabled={scanning || mode !== 'live'}>New roll</button>
+            <label className="cx-field cx-count"><span>Scan</span>
+              <select value={scanAll ? 'all' : 'current'} onChange={(e) => setScanAll(e.target.value === 'all')} disabled={scanning || mode !== 'live' || (status?.max_count ?? 1) < 2} aria-label="Frames to scan">
+                <option value="current">Current frame</option>
+                <option value="all">All frames</option>
               </select>
             </label>
             {alignInfo?.stitched_scan.available && <button className="cx-button" onClick={startStitched} disabled={!ready.ok || scanning} title="Three scans with the film nudged back and forward, stitched and cropped to 36 × 24 mm">{stitchArmed ? `Move film ±${alignInfo.settings.offset_mm} mm and scan?` : 'Stitched scan'}</button>}
-            <button className="cx-button primary" onClick={startScan} disabled={!ready.ok || controlsBusy || !!moving || (!!workspace && (!can('scan') || optionsChanged))}><Icon name="scan" />{count === 1 ? 'Scan frame' : `Scan ${count} frames`}</button>
+            <button className="cx-button primary" onClick={startScan} disabled={!ready.ok || controlsBusy || !!moving || (!!workspace && (!can('scan') || optionsChanged))}><Icon name="scan" />{scanAll ? 'Scan all frames' : 'Scan frame'}</button>
+            {mode === 'live' && workspace && !can('scan') && !scanning && <span className="cx-scan-reason" role="status">{reason('scan')}</span>}
           </div>
         </header>
 
@@ -681,7 +808,7 @@ export function CyberScanSkin() {
               {session && scanning && <ScanProgress session={session} onCancel={stopScan} now={now} />}
               {previewError && <p className="cx-preview-error" role="alert">The selected film profile preview could not be loaded. Check the profile and try again.</p>}
               {showOriginal && current && !showLive && <span className="cx-original-badge">Original · full frame</span>}
-              {current && <span className="cx-edge cx-viewer-edge">{edgeNumber(current.index)}</span>}
+              {current && <span className="cx-edge cx-viewer-edge">{viewingSource ? `${frameLabel(current)} · source ${sourceView} of 3` : frameLabel(current)}</span>}
             </div>
             <div className="cx-toolbar" role="toolbar" aria-label="View">
               <div className="cx-group">
@@ -701,27 +828,36 @@ export function CyberScanSkin() {
                 <button className="cx-icon" aria-label={current?.favorite ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={!!current?.favorite} disabled={!current} onClick={toggleFavorite}><Icon name="star" /></button>
               </div>
             </div>
+            {current?.purpose === 'stitched' && (current.derived?.sources?.length ?? 0) > 0 && <div className="cx-sources" role="group" aria-label="Source scans of this stitched frame">
+              <span className="cx-meta">Built from {current.derived!.sources!.length} scans</span>
+              <button className={sourceView === null ? 'active' : ''} aria-pressed={sourceView === null} onClick={() => setSourceView(null)}>Stitched</button>
+              {current.derived!.sources!.map((source, i) => <button key={source.label} className={sourceView === i + 1 ? 'active' : ''} aria-pressed={sourceView === i + 1} onClick={() => setSourceView(i + 1)} aria-label={`Source scan ${i + 1}: ${source.label}`}>
+                <img src={`/api/cyberview/captures/${current.id}/sources/${i + 1}/preview`} alt="" loading="lazy" style={{ filter: 'url(#cx-adjust)' }} />
+                <span>{source.label}</span>
+              </button>)}
+            </div>}
             <div className="cx-compare-bar"><button className="cx-text-button" aria-pressed={showOriginal} disabled={!current} onClick={() => setShowOriginal((value) => !value)}>{showOriginal ? 'Show adjustments' : 'Show original'}</button><span className="cx-meta">{showOriginal ? 'Original image before edits' : 'Edited preview'}</span></div>
             <div className="cx-strip" aria-label="Frames on this roll">
-              {rollCaptures.map((c) => <button key={c.id} className={c.id === current?.id ? 'active' : ''} aria-pressed={c.id === current?.id} aria-label={`Frame ${c.index}, ${c.title}`} onClick={() => setSelected(c.id)}>
-                <img src={imageUrl(c, 'thumb')} alt="" loading="lazy" />
-                <span className="cx-edge">{c.purpose === 'prescan' ? 'PRE' : edgeNumber(c.index)}</span>
+              {rollCaptures.length === 0 && !scanning && <span className="cx-meta cx-strip-empty">{roll ? `${roll} has no frames yet` : 'No frames on this roll yet'}</span>}
+              {rollCaptures.map((c) => <button key={c.id} className={c.id === current?.id ? 'active' : ''} aria-pressed={c.id === current?.id} aria-label={frameLabel(c)} onClick={() => { setSelected(c.id); setSourceView(null); }}>
+                <img src={rendered(c, 'thumb')} alt="" loading="lazy" />
+                <span className="cx-frame-label">{frameLabel(c)}</span>
               </button>)}
-              {scanning && session && Array.from({ length: session.count - session.completed }, (_, i) => <div key={i} className="cx-strip-pending" aria-hidden="true"><span className="cx-edge">{edgeNumber(rollCaptures.length + i + 1)}</span></div>)}
+              {scanning && session && session.purpose !== 'prescan' && Array.from({ length: session.until_end ? 1 : Math.max(0, session.count - session.completed) }, (_, i) => <div key={i} className="cx-strip-pending" aria-hidden="true"><span className="cx-frame-label">Frame {rollCaptures.length + i + 1}</span></div>)}
             </div>
           </section>
 
           <aside className="cx-inspector" aria-label="Adjustments">
             {/* Only working controls are shown. Everything else stays hidden until it has been
                 tested on the scanner (services/scanner_host/native_validation.json). */}
-            <details className="cx-scanner-panel" open={nativeMode}>
+            <details className="cx-scanner-panel">
               <summary><span>Scanner controls</span><span className="cx-meta">{nativeMode ? 'Direct capture' : mode === 'demo' ? 'Sample mode' : 'CyberView capture'}</span></summary>
               {mode === 'demo' && <p className="cx-help">Sample photos are shown here. Scanner controls are disabled.</p>}
               {workspaceError && <p className="cx-help" role="status">Scanner settings unavailable: {workspaceError}</p>}
               {!nativeMode && mode !== 'demo' && <p className="cx-help">CyberView capture scans the current frame or the next several, and moves to the next frame from the toolbar. Native capture in Settings adds prescan, focus and film-base controls.</p>}
               {can('prescan') && <button className="cx-button cx-prescan" onClick={startPrescan} disabled={!ready.ok || controlsBusy || !!moving || optionsChanged}>Prescan frame</button>}
               {workspace?.prescan && <button className="cx-last-prescan" onClick={() => setSelected(workspace.prescan?.id || null)}>
-                <img src={imageUrl(workspace.prescan, 'thumb')} alt="" /><span><strong>Last prescan</strong><small>View the acquired preview</small></span>
+                <img src={rendered(workspace.prescan, 'thumb')} alt="" /><span><strong>Last prescan</strong><small>View the acquired preview</small></span>
               </button>}
               {(['previous', 'eject_forward', 'eject_backward', 'goto'] as ActionName[]).some(can) && <>
                 <div className="cx-control-title">Film transport</div>
@@ -759,38 +895,50 @@ export function CyberScanSkin() {
                 {workspace && !can('scan') && <p className="cx-help" role="status">{reason('scan')}</p>}
               </details>}
             </details>
-            <div className="cx-panel-head"><h2>Adjust</h2><button className="cx-text-button" onClick={() => updateAdjust({ ...NEUTRAL, rotation: adjust.rotation, mirror: adjust.mirror, invert: adjust.invert, film_base: adjust.film_base, film_profile: adjust.film_profile })} disabled={!current || rollApplying || autoLevelBusy}>Reset</button></div>
+            <div className="cx-panel-head"><h2>Adjust</h2><button className="cx-text-button" onClick={() => updateAdjust({ ...NEUTRAL, negative_response: adjust.negative_response ?? 1.6, rotation: adjust.rotation, mirror: adjust.mirror, invert: adjust.invert, film_base: adjust.film_base, film_profile: adjust.film_profile })} disabled={!current || rollApplying || autoLevelBusy}>Reset</button></div>
             <fieldset disabled={!current || rollApplying || autoLevelBusy}>
               <Slider label="Exposure" value={adjust.exposure} min={-2} max={2} step={.05} unit=" EV" digits={2} onChange={(v) => updateAdjust({ exposure: v })} />
               <Slider label="Contrast" value={adjust.contrast} min={-100} max={100} step={1} onChange={(v) => updateAdjust({ contrast: v })} />
               <Slider label="Saturation" value={adjust.saturation} min={-100} max={100} step={1} onChange={(v) => updateAdjust({ saturation: v })} />
               <Slider label="Temperature" value={adjust.temperature} min={-100} max={100} step={1} onChange={(v) => updateAdjust({ temperature: v })} />
-              <label className="cx-native-check"><input type="checkbox" checked={!!adjust.invert} onChange={(e) => updateAdjust({ invert: e.target.checked })} />Invert negative</label>
+              <label className="cx-native-check"><input type="checkbox" checked={!!adjust.invert} disabled={vendorProfile} onChange={(e) => updateAdjust({ invert: e.target.checked, auto_color: null })} />Invert negative</label>
+              {current?.image_kind === 'vendor-calibrated-transmission' && <button type="button" className="cx-button" disabled={mode !== 'live' || !!current.demo} onClick={balanceNegative}>Balance negative</button>}
               <label className="cx-native-check" title="CyberView's automatic colour (Auto Gamma), computed from this frame"><input type="checkbox" checked={!!adjust.auto_color} disabled={!current || !!current.demo || mode !== 'live'} onChange={(e) => toggleAutoColor(e.target.checked)} />Auto colour</label>
               <label className="cx-native-check"><input type="checkbox" checked={!!adjust.monochrome} onChange={(e) => updateAdjust({ monochrome: e.target.checked })} />Threshold black and white</label>
               <details className="cx-subpanel cx-image-controls"><summary>Variations</summary>
                 <p className="cx-help">Make a small change to the current edit.</p>
                 <div className="cx-variations">{['Lighter', 'Darker', 'Warmer', 'Cooler', 'More red', 'More green', 'More blue'].map((kind) => <button type="button" key={kind} className="cx-button" onClick={() => variation(kind)}>{kind}</button>)}</div>
               </details>
+              <details className="cx-subpanel cx-image-controls"><summary>Film &amp; colour</summary>
               <label className="cx-profile-field">Film rendering profile
-                <select aria-label="Film rendering profile" value={adjust.film_profile || ''} disabled={mode !== 'live' || !!current?.demo} onChange={(event) => updateAdjust({ film_profile: event.target.value || null })}>
+                <select aria-label="Film rendering profile" value={adjust.film_profile || ''} disabled={mode !== 'live' || !!current?.demo} onChange={(event) => {
+                  const profile = profiles.find((p) => p.id === event.target.value);
+                  updateAdjust({ film_profile: event.target.value || null, auto_color: null,
+                    ...(profile?.kind === 'vendor-negative' ? { invert: true } : {}),
+                    ...(profile?.kind === 'reference-tone' ? { negative_response: profile.input_response ?? .5, invert: true } : {}) });
+                }}>
                   <option value="">None</option>
                   {adjust.film_profile && !profiles.some((profile) => profile.id === adjust.film_profile) && <option value={adjust.film_profile}>Saved profile · {adjust.film_profile.slice(0, 8)}</option>}
-                  {profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}{profile.maker ? ` · ${profile.maker}` : ''}</option>)}
+                  {profiles.map((profile) => <option value={profile.id} key={profile.id} disabled={!!profile.kind && current?.image_kind !== 'vendor-calibrated-transmission'}>{profile.name}{profile.maker ? ` · ${profile.maker}` : ''}</option>)}
                 </select>
               </label>
               <p className="cx-help">Profiles apply to this edit. Their color response is an approximation, not a calibrated scanner profile.</p>
+              {profiles.find((p) => p.id === adjust.film_profile)?.kind === 'reference-tone' &&
+                <p className="cx-help">Experimental reference appearance. For an older scan, use Balance negative first, then select this profile. Other film and scenes still need comparison.</p>}
               {profileError && <p className="cx-help" role="status">{profileError}</p>}
-              {adjust.invert && <>
-                <p className="cx-help">Manual film-base transmission. This conversion uses a nominal response, without scanner color calibration.</p>
+              {vendorProfile && <p className="cx-help">Uses the AFL model curve and this film stock’s colour term. Best with a scan acquired at balanced exposure. This method is still being compared with CyberView.</p>}
+              {adjust.invert && !vendorProfile && <>
+                <p className="cx-help">Film base may be suggested from the brightest area. Review it here; this is a starting point without scanner colour calibration.</p>
+                <Slider label="Negative response" value={adjust.negative_response ?? 1.6} min={.1} max={3} step={.05} digits={2} onChange={(v) => updateAdjust({ negative_response: v, auto_color: null })} />
                 {['Red', 'Green', 'Blue'].map((name, channel) => <label key={name} className="cx-base-field">{name} base
                   <input type="number" min="0.01" max="1" step="0.01" value={adjust.film_base?.[channel] ?? 1} onChange={(e) => {
                     const value = Number(e.target.value);
                     if (!Number.isFinite(value) || value < .01 || value > 1) return;
-                    const base = [...(adjust.film_base ?? [1, 1, 1])]; base[channel] = value; updateAdjust({ film_base: base });
+                    const base = [...(adjust.film_base ?? [1, 1, 1])]; base[channel] = value; updateAdjust({ film_base: base, auto_color: null });
                   }} />
                 </label>)}
               </>}
+              </details>
               <details className="cx-subpanel cx-image-controls">
                 <summary>Levels and color</summary>
                 <p className="cx-help">Adjust the saved edit; the acquisition stays unchanged.</p>
@@ -867,14 +1015,14 @@ export function CyberScanSkin() {
       </>}
 
       {view === 'library' && <section className="cx-page">
-        <header className="cx-page-head"><h1>Library</h1><span className="cx-meta">{captures.length} {captures.length === 1 ? 'frame' : 'frames'}</span></header>
+        <header className="cx-page-head"><div><p className="cx-eyebrow">THE COLLECTION</p><h1>Every roll has <em>a story.</em></h1></div><span className="cx-meta">{captures.length} {captures.length === 1 ? 'frame' : 'frames'}</span></header>
         {captures.length === 0 && <p className="cx-help">Scans appear here once saved.</p>}
         {Object.entries(captures.reduce<Record<string, Capture[]>>((groups, c) => { (groups[c.roll || 'Untitled roll'] ||= []).push(c); return groups; }, {})).map(([name, list]) =>
           <div key={name} className="cx-roll">
             <h2>{name}<span className="cx-meta">{list.length} · {shortDate(list[0].created_at)}</span></h2>
             <div className="cx-grid">
-              {list.map((c) => <button key={c.id} onClick={() => { setSelected(c.id); setView('scan'); }} aria-label={`Open ${c.title}`}>
-                <img src={imageUrl(c, 'thumb')} alt="" loading="lazy" />
+              {list.map((c) => <button key={c.id} onClick={() => { setRoll(c.roll || ''); setSelected(c.id); setSourceView(null); setView('scan'); }} aria-label={`Open ${c.title}`}>
+                <img src={rendered(c, 'thumb')} alt="" loading="lazy" />
                 <span><span className="cx-edge">{edgeNumber(c.index)}</span>{c.favorite && <Icon name="star" size={14} />}</span>
               </button>)}
             </div>
@@ -882,7 +1030,7 @@ export function CyberScanSkin() {
       </section>}
 
       {view === 'settings' && <section className="cx-page">
-        <header className="cx-page-head"><h1>Settings</h1></header>
+        <header className="cx-page-head"><div><p className="cx-eyebrow">THE DETAILS</p><h1>Keep things <em>considered.</em></h1></div></header>
         <div className="cx-settings">
           <section>
             <h2>{nativeMode ? 'Acquisition' : 'CyberView X (test path)'}</h2>
@@ -904,8 +1052,8 @@ export function CyberScanSkin() {
               <dt>Automatic recovery</dt><dd>{status ? (status.auto_reset ? 'On' : 'Off') : '—'}</dd>
             </dl>
             <p className="cx-help">{nativeMode ? 'Native capture requests cancellation if the driver stops responding and reserves the session until the driver returns.' : status?.auto_reset
-              ? 'If a scan stalls at "Preparing film scanner", CyberScan X restarts the scanner’s USB connection and continues.'
-              : 'If a scan never starts, the scanner may be stuck at "Preparing film scanner". Turn it off and on, or run scripts\\install-scanner-reset.ps1 once as administrator so CyberScan X can restart it for you.'}</p>
+              ? 'If a scan stalls at "Preparing film scanner", FRAME restarts the scanner’s USB connection and continues.'
+              : 'If a scan never starts, the scanner may be stuck at "Preparing film scanner". Turn it off and on, or run scripts\\install-scanner-reset.ps1 once as administrator so FRAME can restart it for you.'}</p>
           </section>
           {diagnostics?.scanner && <section>
             <h2>Scanner diagnostics</h2>
@@ -927,7 +1075,7 @@ export function CyberScanSkin() {
           </section>}
           <section>
             <h2>Scanner driver</h2>
-            <p className="cx-help">CyberScan X drives the scanner's own driver directly; CyberView X is not used. This page reads installed files and the driver's log; it never starts or moves the scanner.</p>
+            <p className="cx-help">FRAME drives the scanner's own driver directly; CyberView X is not used. This page reads installed files and the driver's log; it never starts or moves the scanner.</p>
             {diagnosticError && <p className="cx-help" role="alert">{diagnosticError}</p>}
             {diagnostics && <>
               <dl className="cx-facts">
@@ -954,7 +1102,7 @@ export function CyberScanSkin() {
           </section>
           <section>
             <h2>Driver session</h2>
-            <p className="cx-help">CyberScan X keeps the scanner driver open between captures. Release it before using other scanner software, such as CyberView X or VueScan.</p>
+            <p className="cx-help">FRAME keeps the scanner driver open between captures. Release it before using other scanner software, such as CyberView X or VueScan.</p>
             <dl className="cx-facts"><dt>Session</dt><dd>{status?.session_open ? 'Open' : 'Closed'}</dd></dl>
             <button className="cx-button cx-release" disabled={mode !== 'live' || !status?.session_open || scanning}
               onClick={() => api<Status>('/api/cyberview/release', { method: 'POST' }).then(() => refresh()).then(() => setMessage({ text: 'Scanner released. CyberView X can be opened now.', tone: 'info' })).catch((e: Error) => setMessage({ text: e.message, tone: 'error' }))}>

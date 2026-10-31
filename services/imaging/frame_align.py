@@ -70,6 +70,9 @@ def phase_shift(reference: np.ndarray, moving: np.ndarray, guess: tuple[float, f
     return float(dy), float(dx), float(peak)
 
 
+MAX_FILLED_FRACTION = .0005
+
+
 def stitch(scans: list[np.ndarray], nominal_dx: list[float], reference: int | None = None,
            search_px: float = 120, downsample: int = 4) -> dict:
     """Registers scans that overlap along x and blends them into one strip.
@@ -139,6 +142,13 @@ def stitch(scans: list[np.ndarray], nominal_dx: list[float], reference: int | No
         weight[y0:y0 + im.shape[0], x0:x0 + im.shape[1]] += f
     covered = weight[..., 0] > 0
     mosaic = np.where(weight > 0, acc / np.maximum(weight, 1e-9), 0)
+    # Ragged top and bottom edges (each scan sits a few px higher or lower) are filled from
+    # the nearest acquired row of the same column; `covered` still records what was scanned.
+    for x in np.where(~covered.all(axis=0))[0]:
+        rows = np.where(covered[:, x])[0]
+        if len(rows):
+            mosaic[:rows[0], x] = mosaic[rows[0], x]
+            mosaic[rows[-1] + 1:, x] = mosaic[rows[-1], x]
     if channels == 1:
         mosaic = mosaic[..., 0]
     return {'image': mosaic, 'covered': covered, 'reference': ref,
@@ -277,7 +287,9 @@ def align_35mm(samples: np.ndarray, dpi: float, transmission: bool, bleed_mm: fl
     if not -2 <= bleed_mm <= 2:
         raise ValueError('Bleed must be between -2 and 2 mm')
     base = base_likeness(samples, transmission)
-    covered = np.ones(base.shape, bool) if covered is None else covered
+    covered = np.ones(base.shape, bool) if covered is None else np.asarray(covered, dtype=bool)
+    if covered.shape != base.shape:
+        raise ValueError('Coverage must match the image dimensions')
     h, w = base.shape
     want_w, want_h = mm_to_px(frame_mm[0], dpi), mm_to_px(frame_mm[1], dpi)
     crop_w, crop_h = round(mm_to_px(frame_mm[0] + 2 * bleed_mm, dpi)), round(mm_to_px(frame_mm[1] + 2 * bleed_mm, dpi))
@@ -302,16 +314,49 @@ def align_35mm(samples: np.ndarray, dpi: float, transmission: bool, bleed_mm: fl
     clamped = x0 < 0 or y0 < 0 or x0 + crop_w > w or y0 + crop_h > h
     x0 = min(max(x0, 0), max(w - crop_w, 0)); y0 = min(max(y0, 0), max(h - crop_h, 0))
     cw, ch = min(crop_w, w), min(crop_h, h)
+    if np.count_nonzero(~covered[y0:y0 + ch, x0:x0 + cw]):
+        # Stitched mosaics have ragged corners (each scan sits a few px higher or lower).
+        # Slide the exact-size crop by at most 0.2 mm, vertically first, onto covered pixels.
+        reach = int(round(mm_to_px(.2, dpi)))
+        moves = sorted(((dy, dx) for dy in range(-reach, reach + 1) for dx in range(-reach, reach + 1)
+                        if 0 <= y0 + dy <= h - ch and 0 <= x0 + dx <= w - cw), key=lambda m: (abs(m[1]), abs(m[0])))
+        for dy, dx in moves:
+            if covered[y0 + dy:y0 + dy + ch, x0 + dx:x0 + dx + cw].all():
+                y0, x0 = y0 + dy, x0 + dx
+                break
+    missing_pixels = int(np.count_nonzero(~covered[y0:y0 + ch, x0:x0 + cw]))
+    edge_filled = 0
+    if missing_pixels:
+        rows = np.arange(h)[:, None]
+        first = np.where(covered.any(axis=0), covered.argmax(axis=0), h)
+        last = np.where(covered.any(axis=0), h - 1 - covered[::-1].argmax(axis=0), -1)
+        outside = (rows < first[None, :]) | (rows > last[None, :])
+        edge_filled = int(np.count_nonzero((~covered & outside & (last[None, :] >= 0))[y0:y0 + ch, x0:x0 + cw]))
+    coverage_fraction = 1 - missing_pixels / (cw * ch)
+    dimensions_exact = not clamped and cw == crop_w and ch == crop_h
     found = (result['x']['found'], result['y']['found'])
     confidence = 'frame_found' if found[0] == 'both' else 'one_edge' if found[0] in ('start', 'end') else 'centered'
     result.update(
         crop_px={'left': x0, 'top': y0, 'width': cw, 'height': ch},
         crop={'left': x0 / w, 'top': y0 / h, 'right': (x0 + cw) / w, 'bottom': (y0 + ch) / h},
         crop_mm=[round(cw / dpi * MM_PER_INCH, 3), round(ch / dpi * MM_PER_INCH, 3)],
-        exact=not clamped and cw == crop_w and ch == crop_h,
+        dimensions_exact=dimensions_exact,
+        missing_pixels=missing_pixels,
+        coverage_fraction=coverage_fraction,
+        # A stitched crop may include a few ragged-edge pixels that stitch() fills from the
+        # nearest scanned row (at most 0.05 %); any hole inside the scanned area blocks it.
+        exact=dimensions_exact and missing_pixels == edge_filled and edge_filled <= MAX_FILLED_FRACTION * cw * ch,
+        filled_pixels=edge_filled,
         confidence=confidence,
         skew_deg=_skew(base, covered, result['x'].get('start'), result['x'].get('end'), dpi) if found[0] != 'none' else None)
-    if not result['exact']:
+    if missing_pixels and result['exact']:
+        result['note'] = (f'{missing_pixels} corner pixels ({1 - coverage_fraction:.4%}) lie just outside the '
+                          'scans and are filled from the nearest scanned row.')
+    elif missing_pixels:
+        result['note'] = (f'The requested crop contains {missing_pixels} unacquired pixels '
+                          f'({coverage_fraction:.6%} coverage); the crop was not applied. '
+                          'Adjust the crop or acquire more coverage.')
+    elif not result['exact']:
         result['note'] = (f"The scan is {result['image_mm'][0]} x {result['image_mm'][1]} mm, smaller than the "
                           f"{frame_mm[0] + 2 * bleed_mm:g} x {frame_mm[1] + 2 * bleed_mm:g} mm crop; scan the full window or stitch.")
     elif confidence == 'centered':

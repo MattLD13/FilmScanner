@@ -65,6 +65,12 @@ def validation() -> dict:
         return {}
 
 
+def clamp_exposure(values) -> list[int]:
+    """Keeps an automatic exposure inside what has been scanned under supervision."""
+    low, high = validation().get('exposure_range', [100, 100])
+    return [int(min(high, max(low, round(v)))) for v in values]
+
+
 def validated_options(options: dict) -> bool:
     """A configuration is proven, or a proven one with a film-base exposure inside the
     validated ``exposure_range`` (recorded only after a supervised scan)."""

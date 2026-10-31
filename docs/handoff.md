@@ -4,7 +4,15 @@ For the next agent. Read [AGENTS.md](../AGENTS.md) and FRAME_SPEC.md first. This
 says what exists, what is proven on the scanner, what is only proven in tests, and
 what to do next.
 
-## State of the branch
+## Current handoff
+
+**Use [handoff-current.md](handoff-current.md) first.** The scanner session was
+committed as `5fb63e2`; software colour work followed it. The earlier branch state,
+uncommitted-work list and numbered scanner plan below are historical. Do not repeat
+those completed actions. Current implementation, checks and remaining work are in
+the current handoff and [negative-conversion.md](negative-conversion.md).
+
+## Historical state of the branch
 
 - Branch `cyberscan-x-cyberview-bridge`. Last commit `8fe705f` (Start menu shortcuts).
 - **Everything below is uncommitted** (about 56 changed or new paths): the native AFL

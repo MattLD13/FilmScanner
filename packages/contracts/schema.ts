@@ -56,6 +56,7 @@ export interface ScanSettings {
 export interface FilmProfile {
   id: string; name: string; maker: string; film_class: 'negative' | 'reversal' | 'bw';
   rows: 256 | 4096; source_file: string; source_folder: string;
+  kind?: 'reference-tone' | 'vendor-negative'; input_response?: number;
 }
 export interface EditRecipe {
   exposure: number; contrast: number; rotation: number; invert: boolean;
@@ -82,4 +83,13 @@ export interface ScanSession {
   media: 'uncut' | 'strip'; speed: 'fast' | 'realtime'; fault: string | null;
   fault_frame: number; eta_seconds?: number; simulated: true;
   positions?: Array<Record<string, unknown>>; frames?: number[] | null; settings?: ScanSettings | null;
+}
+/** CyberScan viewing recipe; omitted conversion fields retain legacy rendering. */
+export interface CyberScanAdjustments {
+  exposure: number; contrast: number; saturation: number; temperature: number;
+  rotation: number; mirror: boolean; invert?: boolean; film_base?: number[];
+  negative_response?: number; black_point?: number; white_point?: number; gamma?: number;
+  rgb_balance?: number[]; curve?: number[];
+  crop?: { left: number; top: number; right: number; bottom: number };
+  monochrome?: boolean; film_profile?: string | null; auto_color?: number[] | null;
 }

@@ -12,12 +12,12 @@ const {
 } = require('./service');
 
 const smoke = process.argv.includes('--smoke');
-// --cyberscan opens the CyberScan X front end for CyberView X instead of the FRAME library.
-// It is its own app to Windows: own icon, taskbar group, logs and single-instance lock.
-const cyberscan = process.argv.includes('--cyberscan');
-const icon = cyberscan ? path.join(__dirname, '..', 'assets', 'cyberscan.ico') : undefined;
+// Keep the legacy flag and runtime identity so existing shortcuts and local state
+// continue to open the same scanner workspace after the FRAME rename.
+const cyberscan = process.argv.includes('--frame-scanner') || process.argv.includes('--cyberscan');
+const icon = cyberscan ? path.join(__dirname, '..', 'assets', 'frame.ico') : undefined;
 if (cyberscan) {
-  app.setName('CyberScan X');
+  app.setName('FRAME');
   app.setPath('userData', path.join(app.getPath('appData'), 'cyberscan-x'));
   app.setAppUserModelId('FRAME.CyberScanX');
 }
@@ -97,7 +97,7 @@ function harden(allowedOrigin) {
 function createWindow() {
   window = new BrowserWindow({
     width: cyberscan ? 1440 : 1320, height: cyberscan ? 900 : 880, minWidth: 380, minHeight: 600, show: false,
-    title: cyberscan ? 'CyberScan X' : 'FRAME', backgroundColor: cyberscan ? '#161513' : '#111418', autoHideMenuBar: true, icon,
+    title: 'FRAME', backgroundColor: cyberscan ? '#2c1b17' : '#111418', autoHideMenuBar: true, icon,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, spellcheck: false },
   });
   window.once('ready-to-show', () => { if (!smoke) window.show(); });
@@ -149,7 +149,7 @@ if (!app.requestSingleInstanceLock()) {
       origin = service.origin;
       harden(origin);
       const win = createWindow();
-      await win.loadURL(cyberscan ? `${origin}/?workspace=cyberscan` : `${origin}/`);
+      await win.loadURL(cyberscan ? `${origin}/?workspace=frame` : `${origin}/`);
       if (smoke) {
         const result = await runSmoke(win);
         process.stdout.write(`${JSON.stringify({ ...result, owned: service.owned })}\n`);

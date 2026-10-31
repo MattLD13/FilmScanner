@@ -1,17 +1,31 @@
 # FRAME desktop shell
 
-A native Windows 11 window around the existing FRAME React client and local
-Python service. It adds no scanner capability of its own. The service decides
-the backend, which today is the simulator. Real PF1800 AFL USB support remains
-disabled until verified on the physical unit (milestones M3–M5).
+A native Windows 11 window around the FRAME React client and local Python
+service. The service selects the scanner backend; the shell does not issue
+scanner commands itself. Direct PF1800 AFL capture has been tested on the user's
+unit, with enabled actions and limitations recorded in
+[native-scanner.md](../../docs/native-scanner.md) and
+[standalone-plan.md](../../docs/standalone-plan.md). The main FRAME workflow
+still includes a clearly labeled simulator.
 
 ```powershell
 npm run setup          # once, from the repository root
 npm run build          # build the React client the service serves
-npm run desktop        # open FRAME in its own window
+npm run frame          # open FRAME's scanner workspace
+npm run desktop        # open the original FRAME journal and simulator
 npm run test:desktop   # unit tests (no GUI)
 npm run smoke:desktop  # launch Electron headlessly against a throwaway library
 ```
+
+The scanner window has Home, Scan, Develop, Rolls and Settings navigation. The
+Develop link opens the existing FRAME developing workflow; developing records
+and scanner-workspace rolls are currently separate. The legacy `--cyberscan` flag
+and `?workspace=cyberscan` URL remain supported as aliases for the renamed
+scanner workspace. `--frame-scanner` and `?workspace=frame` are preferred.
+
+Create per-user FRAME desktop and Start-menu shortcuts with
+`powershell -ExecutionPolicy Bypass -File scripts\install-cyberscan-shortcut.ps1`.
+This creates new FRAME shortcuts; it does not remove older CyberScan shortcuts.
 
 ## Behavior
 
@@ -20,7 +34,9 @@ npm run smoke:desktop  # launch Electron headlessly against a throwaway library
   Otherwise it starts `python -m uvicorn services.api.main:app` on a free loopback
   port and ends it on quit, so two services never share one library.
   `FRAME_PYTHON` selects the interpreter; `FRAME_DATA_DIR` the library.
-* **Logs.** Service output goes to `%APPDATA%\frame-desktop\logs\service.log`.
+* **Logs.** The original journal window uses
+  `%APPDATA%\frame-desktop\logs\service.log`; the scanner workspace retains
+  `%APPDATA%\cyberscan-x\logs\service.log` for compatibility with existing state.
 * **Hardening.**
   * The page runs sandboxed and context-isolated, without Node.
   * Navigation is limited to the service origin, and webviews and popups are refused.

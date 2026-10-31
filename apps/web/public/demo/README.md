@@ -1,6 +1,6 @@
 # UI sample photographs
 
-These Unsplash photographs are demonstration assets for the local CyberScan X
+These Unsplash photographs are demonstration assets for the local FRAME scanner
 skin. They are not the user's photographs, Gold 200 captures or scanner output.
 The client labels them as demo images. Local imports stay in browser memory.
 

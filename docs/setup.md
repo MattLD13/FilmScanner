@@ -12,6 +12,13 @@ npm start
 
 Open http://127.0.0.1:8765, or run `npm run desktop` for the Windows desktop window (Electron; see `apps/desktop-shell/README.md`). The server binds only to this computer. `powershell -File scripts/start.ps1` also builds a missing client and starts the server. After changing client source, rebuild; after Python changes, restart the service. Avoid multiple service processes sharing the same data directory.
 
+For the real-scanner workspace, use `npm run frame` or open
+`http://127.0.0.1:8765/?workspace=frame`. Its Home, Scan and Rolls views use saved
+scanner photographs and edits. Develop opens the existing developing workflow;
+developing records and scanner rolls remain separate. Prior `cyberscan` URLs and
+desktop flags remain compatible. Per-user FRAME shortcuts can be installed with
+`powershell -ExecutionPolicy Bypass -File scripts/install-cyberscan-shortcut.ps1`.
+
 ```powershell
 npm test
 npm run lint

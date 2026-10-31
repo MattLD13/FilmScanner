@@ -17,6 +17,9 @@ if ($LASTEXITCODE -ne 0) { throw "build failed" }
 # CyberView's own automatic colour, called outside a scan (docs/auto-color-re.md).
 cmd /c "`"$vcvars`" x86 >nul && cd /d `"$out`" && cl /nologo /W3 /O2 /MT /D_CRT_SECURE_NO_WARNINGS `"$source\autocolor.c`" /link /OUT:autocolor.exe kernel32.lib shell32.lib 2>&1"
 if ($LASTEXITCODE -ne 0) { throw "autocolor build failed" }
+# CPU-only film-term oracle; exact binary hash gates its internal RVA calls.
+cmd /c "`"$vcvars`" x86 >nul && cd /d `"$out`" && cl /nologo /W3 /O2 /MT /D_CRT_SECURE_NO_WARNINGS `"$source\vendorcolour.c`" /link /OUT:vendorcolour.exe kernel32.lib shell32.lib bcrypt.lib 2>&1"
+if ($LASTEXITCODE -ne 0) { throw "vendorcolour build failed" }
 if ($Tests) {
     $harness = [IO.Path]::GetFullPath((Join-Path $source "..\..\tests\scanner\usbwatch_harness.c"))
     cmd /c "`"$vcvars`" x86 >nul && cd /d `"$out`" && cl /nologo /W3 /O2 /MT /D_CRT_SECURE_NO_WARNINGS `"$harness`" /link /OUT:usbwatch-harness.exe kernel32.lib 2>&1"

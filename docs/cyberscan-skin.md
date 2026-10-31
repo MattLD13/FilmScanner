@@ -1,84 +1,75 @@
-# CyberScan X
+# FRAME scanner workspace
 
-CyberScan X runs in FRAME's Electron shell. It supports a direct AFL module
-backend for current-frame acquisition and the existing hidden CyberView TWAIN
-backend for batch/forward operation. See [native capture](native-scanner.md)
-and the [TWAIN bridge](cyberview-bridge.md) for evidence and limits.
+The scanner interface formerly called CyberScan X is now **FRAME**. It runs in
+the FRAME desktop shell and uses the local service. Direct PF1800 AFL capture
+uses the scanner's low-level driver; the hidden CyberView TWAIN path remains
+available for research and tests. Hardware evidence and enabled settings are
+documented in [native-scanner.md](native-scanner.md) and
+[standalone-plan.md](standalone-plan.md).
 
-## Run
+## Open FRAME
 
-```powershell
-npm run build:bridge   # once; x86 TWAIN bridge
-npm run build:native   # once; direct AFL module bridge
-npm run build          # web client
-npm run cyberscan      # Electron window, starts or attaches to the local service
-```
-
-Run the `npm` commands from the FRAME folder. To open CyberScan X like any other
-program, add Start menu and desktop shortcuts once (per user, no administrator
-rights):
+From the repository root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-cyberscan-shortcut.ps1
+npm run setup          # once
+npm run build:native   # build the direct scanner bridge when required
+npm run build          # build the web client
+npm run frame          # open the scanner workspace in a FRAME window
 ```
 
-The shortcut starts this checkout's Electron shell with `--cyberscan`. In that
-mode it has its own icon (`apps/desktop-shell/assets/cyberscan.ico`), taskbar
-group, logs (`%APPDATA%\cyberscan-x\logs`) and single-instance lock, separate
-from the FRAME desktop app.
+To create per-user FRAME shortcuts in the Start menu and on the desktop, run
+`powershell -ExecutionPolicy Bypass -File scripts\install-cyberscan-shortcut.ps1`.
+The shortcuts use `--frame-scanner` and the FRAME icon. The installer replaces only
+this checkout's recognised CyberScan X shortcut; customised links are preserved.
+Older links remain usable through `--cyberscan`. The shell keeps its taskbar identity,
+single-instance behavior and `%APPDATA%\cyberscan-x\logs` location.
 
-In a browser, use `http://127.0.0.1:8765/?workspace=cyberscan` while `npm start`
-runs. `npm run preview:skin` serves an offline demo (`&demo=1`) with sample photos.
-That demo makes no network requests and cannot scan.
+While `npm start` serves the local application, the scanner workspace is at
+`http://127.0.0.1:8765/?workspace=frame`; the older `workspace=cyberscan` URL
+also works. `npm run preview:skin` opens a separate static demonstration with
+clearly labeled sample photographs and disabled scanning. The static preview
+makes no service, API, WebSocket or external requests.
 
-## What it does
+## Navigation and editing
 
-- **Scan**: scans the current frame, or the next 2–36 frames. The film is
-  advanced with CyberView's "Forward One Frame" between scans. Progress shows
-  the driver's own status ("Preparing film scanner", "Scanning frame 002"), the
-  lines received, elapsed time and frames saved. A scan can be stopped.
-- **Next frame**: moves the film one frame without scanning.
-- **Viewer and filmstrip**: the selected scan, zoom, rotate, mirror, favourite,
-  and edge-print frame numbers (01A, 02A…) for every frame on the roll.
-- **Adjust**: exposure, contrast, saturation and temperature. They are saved per
-  scan as a recipe. Previews and exports use the same colour matrix.
-- **Export**: the original TIFF (byte-identical, checked against its SHA-256),
-  a 16-bit adjusted TIFF, or an 8-bit JPEG.
-- **Library**: all scans, grouped by roll.
-- **Settings**: the CyberView settings that shape scans, scanner and bridge
-  state, automatic recovery status, and Release scanner (closes the driver
-  session so CyberView X itself can be opened).
-- **Native integration**: acknowledged, saved backend choice; passive installed
-  driver fingerprints and feature evidence. Native capture scans only the current
-  frame. Negative inversion and manual film-base references are nondestructive.
+- **Home** shows a square, randomly selected saved scanner photograph, with a
+  shuffle action that avoids immediately repeating a frame. It shows an empty
+  state when there are no saved photographs. Demonstration photographs appear
+  only in the explicitly labeled sample mode.
+- **Scan** provides the current-frame viewer, scanner status, scan and transport
+  actions, filmstrip, nondestructive adjustments, conversion profiles, alignment
+  and original/adjusted exports. Scanner controls and detailed image settings are
+  grouped in expandable panels. Available hardware actions remain governed by
+  the existing validation gates.
+- **Develop** opens the existing FRAME developing workflow, including its labeled
+  demonstration recipe and persisted physical-time timer. Developing records and
+  scanner-workspace rolls are currently separate; the interface says so. The
+  navigation returns to the scanner workspace from that page.
+- **Rolls** groups saved scanner captures by roll; **Settings** shows scanner
+  status, diagnostics and release controls.
 
-## Design
+Home, Rolls and the filmstrip request rendered versions of saved edits. The
+scanner viewer retains its interactive adjustment preview. Originals stay
+unchanged, and exports retain their separate processing recipe. Direct negative
+conversion and the locally derived reference profile have documented limitations;
+see [negative-conversion.md](negative-conversion.md) and
+[reference-tone.md](reference-tone.md).
+Recovered model/film-stock conversion is described in
+[vendor-colour-pipeline.md](vendor-colour-pipeline.md). It is selected explicitly;
+existing edits are not changed.
 
-Built to the [unslop](https://github.com/heydamir/unslop) rules (CC BY 4.0, Damir
-Sokolovsky):
+## Design and checks
 
-- **Product**: a modern front end that scans 35 mm frames from the PF1800 AFL
-  through CyberView's own driver and keeps the 16-bit originals.
-- **Character**: calm, exact, darkroom.
-- **World**: the warm neutral dark ramp. The FRAME orange is the only accent,
-  used for the primary action, the selected frame and scan progress.
-- **Moments**: the large scan in the viewer, and scan progress that fills a
-  frame outline as real lines arrive.
-- **Signature**: film edge-print frame numbers in mono (`01A`).
-- Type is Segoe UI Variable with Cascadia Mono, the Windows system fonts. The
-  Electron shell blocks network requests, so no web fonts are used.
-- 4 px spacing grid. Three text roles. Hairline borders at 8% and 14%. One
-  1.5 px icon set. Sentence case throughout. Neutral sliders. One easing curve,
-  with 120–220 ms transitions.
+The workspace follows the original FRAME brief: dark chocolate surfaces, warm
+cream text, editorial serif headings, restrained orange actions and a prominent
+photograph. Desktop uses a persistent sidebar; narrow screens use labeled bottom
+navigation and a larger fitted photograph. The existing local system fonts avoid
+an external font request.
 
-## Validation
-
-```powershell
-npm run lint; npm run build
-python -m pytest -q tests/api/test_cyberview.py   # API against a fake bridge
-npm run test:skin                                  # offline demo in Chromium, desktop and 390 px
-```
-
-Hardware results from 2026-10-30 are listed in
-[cyberview-bridge.md](cyberview-bridge.md). Screenshots: [desktop demo](screenshots/cyberscan-desktop.png),
-[phone demo](screenshots/cyberscan-phone.png).
+`npm run test:skin` checks the static demonstration in desktop and 390-pixel
+Chromium views. `npm run test:native-ui` exercises the live UI with a synthetic
+bridge, including saved-photo navigation, edit preview and export. `npm run
+test:live-preview` uses synthetic streamed rows. These are software checks, not
+evidence of physical scanner behavior. Current test screenshots are written under
+`.local/frame-ui/` and remain outside version control.

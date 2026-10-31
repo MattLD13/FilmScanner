@@ -100,3 +100,49 @@ def test_no_edges_falls_back_to_centre_and_says_so():
 def test_bleed_is_bounded():
     with pytest.raises(ValueError):
         fa.align_35mm(np.zeros((10, 10, 3)), DPI, True, bleed_mm=3)
+
+
+def test_nominal_exact_dimensions_do_not_hide_missing_acquired_pixels():
+    img, lefts, top = strip(seed=13)
+    x0 = int(round(lefts[1] - fa.mm_to_px(1, DPI)))
+    scan = window(img, x0, int(round(fa.mm_to_px(38.5, DPI))))
+    original = fa.align_35mm(scan, DPI, transmission=True)
+    assert original['exact'] and original['dimensions_exact']
+    c = original['crop_px']
+    mask = np.ones(scan.shape[:2], bool)
+    mask[c['top'] + c['height'] // 2, c['left'] + c['width'] // 2] = False
+    result = fa.align_35mm(scan, DPI, transmission=True, covered=mask)
+    assert result['dimensions_exact'] and not result['exact']
+    assert result['missing_pixels'] == 1
+    assert result['coverage_fraction'] == pytest.approx(1 - 1 / (c['width'] * c['height']))
+    assert 'unacquired pixels' in result['note']
+    assert 'not applied' in result['note']
+
+
+def test_uncovered_mosaic_margin_outside_crop_does_not_make_crop_inexact():
+    img, lefts, top = strip(seed=13)
+    x0 = int(round(lefts[1] - fa.mm_to_px(1, DPI)))
+    scan = window(img, x0, int(round(fa.mm_to_px(38.5, DPI))))
+    mask = np.ones(scan.shape[:2], bool)
+    mask[:2, :2] = False
+    result = fa.align_35mm(scan, DPI, True, covered=mask)
+    assert result['exact'] and result['missing_pixels'] == 0
+    assert result['coverage_fraction'] == 1
+    with pytest.raises(ValueError, match='Coverage'):
+        fa.align_35mm(scan, DPI, True, covered=np.ones((2, 3), bool))
+
+
+def test_ragged_stitch_edges_are_filled_and_still_crop_exactly():
+    # Seen on the scanner 2026-10-31: the forward scan sat 8 px lower, leaving 272 corner
+    # pixels outside every scan. Those edge pixels are filled; a hole inside is not.
+    img, lefts, top = strip(seed=13)
+    x0 = int(round(lefts[1] - fa.mm_to_px(1, DPI)))
+    scan = window(img, x0, int(round(fa.mm_to_px(38.5, DPI))))
+    c = fa.align_35mm(scan, DPI, transmission=True)['crop_px']
+    mask = np.ones(scan.shape[:2], bool)
+    # Left columns start 3 rows low, right columns end 3 rows high: no slide avoids both.
+    mask[:c['top'] + 3, c['left']:c['left'] + 20] = False
+    mask[c['top'] + c['height'] - 3:, c['left'] + c['width'] - 20:c['left'] + c['width']] = False
+    result = fa.align_35mm(scan, DPI, transmission=True, covered=mask)
+    assert result['exact'] and result['filled_pixels'] == result['missing_pixels'] > 0
+    assert 'filled from the nearest scanned row' in result['note']

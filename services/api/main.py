@@ -166,7 +166,10 @@ def create_app(data_dir=None):
         if not profile_id:
             return None
         try:
-            return filmterms.load(store, profile_id)
+            cached = filmterms.load(store, profile_id)
+            if cached.get('kind') in ('reference-tone', 'vendor-negative'):
+                raise HTTPException(409, 'Reference appearance profiles require the CyberScan transmission workflow')
+            return cached
         except ValueError:
             pass
         match = next((p for p in filmterms.discover() if p['id'] == profile_id), None)
@@ -358,11 +361,16 @@ def create_app(data_dir=None):
         return scanner_info()
 
     @app.get('/api/film-profiles')
-    async def film_profiles():
+    async def film_profiles(include_reference: bool = False, include_vendor: bool = False):
+        from services.imaging import vendor_negative
         found = filmterms.discover()
+        if include_vendor:
+            found += vendor_negative.discover()
+        cached = filmterms.reference_profiles(store) if include_reference else []
+        found = list({p['id']: p for p in [*found, *cached]}.values())
         return {'sources': [str(root) for root in filmterms.roots()], 'count': len(found),
                 'profiles': [filmterms.summary(p) for p in found],
-                'note': 'Read from the local CyberView install; FRAME does not distribute these files.'}
+                'note': 'Local CyberView terms and user reference profiles; FRAME does not distribute vendor files.'}
 
     @app.post('/api/rolls/{roll_id}/prescan')
     async def prescan_roll(roll_id: str, body: PrescanInput):

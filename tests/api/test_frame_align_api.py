@@ -1,5 +1,8 @@
 """35 mm auto-align through the API, against the fake bridge's synthetic film strip."""
 from pathlib import Path
+import asyncio
+import hashlib
+import threading
 import time
 
 from fastapi.testclient import TestClient
@@ -7,6 +10,9 @@ import pytest
 
 from services.api.main import create_app
 from services.scanner_host import cyberview, workspace
+from services.scanner_host.native import NativeAflBridge
+from services.scanner_host.backend import ScannerError
+from services.imaging import frame_align
 from test_cyberview import FAKE, wait_session
 from test_workflow import login
 
@@ -84,6 +90,10 @@ def test_stitched_scan_calibrates_stitches_and_crops_exactly(tmp_path, strip_bri
         assert started.status_code == 200, started.text
         session = wait_session(client, timeout=60)
         assert session['state'] == 'complete', session
+        assert session['stitch']['position']['net_completed_steps'] == 0
+        assert session['stitch']['position']['position_known'] is True
+        assert session['stitch']['position']['returned_to_start'] is True
+        assert 'not been remeasured' in session['stitch']['position']['note']
         capture = next(c for c in client.get('/api/cyberview/captures').json()['captures'] if c['purpose'] == 'stitched')
         assert len(capture['derived']['sources']) == 3
         # Learned from the probe: 600 dpi / 25.4 / 1.37 px per step = 17.2 steps per mm.
@@ -91,6 +101,9 @@ def test_stitched_scan_calibrates_stitches_and_crops_exactly(tmp_path, strip_bri
         assert capture['alignment']['confidence'] == 'frame_found' and capture['alignment']['exact']
         assert capture['alignment']['crop_mm'] == pytest.approx([36, 24], abs=.05)
         assert capture['width'] > round(36.5 / 25.4 * 600)          # longer than any single scan
+        assert capture['adjustments']['negative_response'] == .5
+        assert capture['negative_balance']['method'] == 'brightest-0.5-percent'
+        assert capture['adjustments']['film_base'][0] > capture['adjustments']['film_base'][2]
         assert client.get('/api/cyberview/align').json()['settings']['steps_per_mm'] == capture['derived']['steps_per_mm']
         exported = client.get(f"/api/cyberview/captures/{capture['id']}/export/tiff")
         assert exported.status_code == 200
@@ -128,3 +141,169 @@ def test_new_scans_get_cyberviews_auto_colour_and_it_can_be_toggled(tmp_path, st
         on = client.post(f"/api/cyberview/captures/{capture['id']}/auto-color", json={'enabled': True}).json()
         assert on['adjustments']['auto_color'] == words
         assert client.get(f"/api/cyberview/captures/{capture['id']}/export/tiff").status_code == 200
+
+
+def wait_for_event(event):
+    assert event.wait(10), 'The synthetic test did not reach its controlled boundary'
+
+
+async def held_until(release):
+    while not release.is_set():
+        await asyncio.sleep(.005)
+
+
+def test_stitched_cancel_between_scans_latches_without_further_motion(tmp_path, strip_bridge, monkeypatch):
+    native(monkeypatch)
+    entered, release = threading.Event(), threading.Event()
+    original = NativeAflBridge.scan
+    calls = []
+
+    async def hold_completed_scan(bridge, out, count, on_event):
+        calls.append(Path(out).name)
+        result = await original(bridge, out, count, on_event)
+        if Path(out).name == 'source-centre.tif':
+            assert bridge.busy is False
+            entered.set()
+            await held_until(release)
+        return result
+
+    monkeypatch.setattr(NativeAflBridge, 'scan', hold_completed_scan)
+    app = create_app(tmp_path / 'library')
+    with TestClient(app) as client:
+        login(client)
+        assert client.post('/api/cyberview/stitched-scan', json={'acknowledged': True}).status_code == 200
+        try:
+            wait_for_event(entered)
+            stopped = client.post('/api/cyberview/cancel')
+            assert stopped.status_code == 200, stopped.text
+            assert stopped.json()['cancel_requested'] is True
+        finally:
+            release.set()
+        session = wait_session(client)
+        assert session['state'] == 'cancelled'
+        assert calls == ['source-centre.tif']
+        assert session['stitch']['position']['net_completed_steps'] == 0
+        [source] = session['stitch']['sources']
+        assert app.state.store.path(source['path']).is_file()
+        assert hashlib.sha256(app.state.store.path(source['path']).read_bytes()).hexdigest() == source['sha256']
+        assert client.get('/api/cyberview/captures').json()['captures'] == []
+
+
+def test_second_stitched_acquisition_failure_reports_offset_and_does_not_return(tmp_path, strip_bridge, monkeypatch):
+    native(monkeypatch)
+    original_scan, original_control = NativeAflBridge.scan, NativeAflBridge.control
+    moves = []
+
+    async def fail_back_scan(bridge, out, count, on_event):
+        if Path(out).name == 'source-back.tif':
+            raise ScannerError('Injected synthetic second acquisition failure')
+        return await original_scan(bridge, out, count, on_event)
+
+    async def track_control(bridge, action, on_event=None, value=None):
+        moves.append(value)
+        return await original_control(bridge, action, on_event, value)
+
+    monkeypatch.setattr(NativeAflBridge, 'scan', fail_back_scan)
+    monkeypatch.setattr(NativeAflBridge, 'control', track_control)
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        client.post('/api/cyberview/stitched-scan', json={'acknowledged': True})
+        session = wait_session(client)
+        assert session['state'] == 'error'
+        assert moves == ['back 20']
+        position = session['stitch']['position']
+        assert position['position_known'] and position['net_completed_steps'] == -20
+        assert position['returned_to_start'] is False
+        assert '20 steps back' in session['error'] and 'No automatic return' in session['error']
+        assert len(session['stitch']['sources']) == 1
+
+
+def test_failed_stitched_motion_reports_uncertain_position_without_return(tmp_path, strip_bridge, monkeypatch):
+    native(monkeypatch)
+    original = NativeAflBridge.control
+    moves = []
+
+    async def fail_forward(bridge, action, on_event=None, value=None):
+        moves.append(value)
+        if value.startswith('forward'):
+            raise ScannerError('Injected synthetic motion failure')
+        return await original(bridge, action, on_event, value)
+
+    monkeypatch.setattr(NativeAflBridge, 'control', fail_forward)
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        client.post('/api/cyberview/stitched-scan', json={'acknowledged': True})
+        session = wait_session(client)
+        assert session['state'] == 'error'
+        assert len(moves) == 2 and moves[0] == 'back 20' and moves[1].startswith('forward ')
+        position = session['stitch']['position']
+        assert position['position_known'] is False and position['net_completed_steps'] == -20
+        assert position['pending_move']['direction'] == 'forward'
+        assert 'position is uncertain' in session['error'] and 'No automatic return' in session['error']
+        assert len(session['stitch']['sources']) == 2
+
+
+def test_cancel_between_stitched_nudge_chunks_prevents_following_chunks(tmp_path, strip_bridge, monkeypatch):
+    native(monkeypatch)
+    original = NativeAflBridge.control
+    entered, release = threading.Event(), threading.Event()
+    moves = []
+    # The forward move is two 20-step commands; cancel after the first.
+    monkeypatch.setattr(frame_align, 'phase_shift', lambda *args, **kwargs: (0, 2, .9))
+
+    async def hold_forward_chunk(bridge, action, on_event=None, value=None):
+        moves.append(value)
+        result = await original(bridge, action, on_event, value)
+        if value.startswith('forward'):
+            assert value == 'forward 20' and bridge.busy is False
+            entered.set()
+            await held_until(release)
+        return result
+
+    monkeypatch.setattr(NativeAflBridge, 'control', hold_forward_chunk)
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        client.post('/api/cyberview/stitched-scan', json={'acknowledged': True, 'offset_mm': 3})
+        try:
+            wait_for_event(entered)
+            assert client.post('/api/cyberview/cancel').status_code == 200
+        finally:
+            release.set()
+        session = wait_session(client)
+        assert session['state'] == 'cancelled'
+        assert moves == ['back 20', 'forward 20']
+        assert session['stitch']['position']['position_known'] is True
+        assert session['stitch']['position']['net_completed_steps'] == 0
+
+
+def test_unreliable_forward_registration_never_publishes_stitched_image(tmp_path, strip_bridge, monkeypatch):
+    native(monkeypatch)
+    original = frame_align.stitch
+
+    def unreliable_forward(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result['match_strength'][-1] = .01
+        return result
+
+    monkeypatch.setattr(frame_align, 'stitch', unreliable_forward)
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        client.post('/api/cyberview/stitched-scan', json={'acknowledged': True})
+        session = wait_session(client, timeout=60)
+        assert session['state'] == 'error' and 'matched reliably' in session['error']
+        assert len(session['stitch']['sources']) == 3
+        assert session['stitch']['position']['net_completed_steps'] == 0
+        assert client.get('/api/cyberview/captures').json()['captures'] == []
+
+
+def test_stitched_capture_serves_its_three_source_previews(tmp_path, strip_bridge, monkeypatch):
+    native(monkeypatch)
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        assert client.post('/api/cyberview/stitched-scan', json={'acknowledged': True, 'offset_mm': 1.5}).status_code == 200
+        assert wait_session(client, timeout=60)['state'] == 'complete'
+        capture = next(c for c in client.get('/api/cyberview/captures').json()['captures'] if c['purpose'] == 'stitched')
+        for number in (1, 2, 3):
+            preview = client.get(f"/api/cyberview/captures/{capture['id']}/sources/{number}/preview")
+            assert preview.status_code == 200 and preview.headers['content-type'] == 'image/jpeg'
+        assert client.get(f"/api/cyberview/captures/{capture['id']}/sources/4/preview").status_code == 404

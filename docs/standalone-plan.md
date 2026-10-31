@@ -59,8 +59,10 @@ Direct capture only (aflbridge, CyberScan's own driver copy, USB trace on). Resu
 | Stitched scan through the app code | Back 20, forward 28, back 8; 2648 x 1713 px mosaic, one edge found, exact 36.00 x 24.00 mm crop, skew -0.46 deg, 15.3 steps per mm learned |
 
 Recorded in `native_validation.json`: `nudge`, and `exposure_range` 50-300 (nothing above 269
-was scanned). Not yet compared side by side with CyberView's own output: the tone of
-CyberScan's negative conversion (bright, slightly cyan highlights after auto colour).
+was scanned). The bright, slightly cyan tone was the next software task at this
+checkpoint. A subsequent offline comparison and adjustable conversion are in
+[negative-conversion.md](negative-conversion.md). Broader photographic colour
+validation remains open.
 
 ## Order of work (original plan)
 

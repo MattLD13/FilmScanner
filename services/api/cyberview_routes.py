@@ -1,4 +1,4 @@
-"""CyberScan X API: real scans from CyberView X's hidden TWAIN driver.
+"""FRAME scanner API: direct AFL capture and the retained research TWAIN path.
 
 Each delivered TIFF is kept unchanged as the original, hashed and recorded. Viewing
 adjustments are a recipe stored next to it and applied only to previews and exports.
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from functools import lru_cache
 from io import BytesIO
 import json
 import os
@@ -24,7 +25,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 import tifffile
 
 from services.api.store import atomic_write
-from services.imaging import autocolor, frame_align, pipeline, filmterms
+from services.imaging import autocolor, frame_align, pipeline, filmterms, negative, vendor_negative
 from services.scanner_host import cyberview
 from services.scanner_host import vendor_evidence
 from services.native_bridge import driver
@@ -37,11 +38,13 @@ SOURCE = 'CyberView X - MF (TWAIN, hidden) on PrimeFilm PF1800 AFL'
 PREVIEW_EDGE = 1800
 THUMB_EDGE = 360
 NATIVE_SOURCE = 'PF1800 AFL direct capture (SCAN08 driver, vendor-calibrated transmission)'
+NUDGE_CHUNK = 20      # film nudge steps per command (see run_stitched)
 LIVE_MAX_ROWS = 300  # 1708 lines / 8, with room to spare
 
 
 class ScanRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=40)
+    until_end: bool = False   # "All frames": scan, advance, repeat until the film runs out
     roll: str = Field(default='', max_length=120)
     settings: ScanOptions | None = None
     purpose: Literal['scan', 'prescan'] = 'scan'
@@ -86,6 +89,8 @@ class Adjustments(BaseModel):
     mirror: bool = False
     invert: bool = False
     film_base: list[float] = Field(default_factory=lambda: [1., 1., 1.], min_length=3, max_length=3)
+    # Missing on old recipes: retain their original conversion exactly.
+    negative_response: float = Field(default=negative.LEGACY_RESPONSE, ge=.1, le=3, allow_inf_nan=False)
     black_point: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
     white_point: float = Field(default=1, ge=0, le=1, allow_inf_nan=False)
     gamma: float = Field(default=1, ge=.1, le=4, allow_inf_nan=False)
@@ -178,17 +183,33 @@ def color_matrix(adjust: Adjustments) -> tuple[np.ndarray, float]:
 
 
 def before_levels(samples: np.ndarray, adjust: Adjustments, profile=None) -> np.ndarray:
-    if adjust.invert:
-        # Same nominal optical-density response as frame-density-2. The manually
-        # selected base is a display reference, not a calibrated scanner profile.
-        samples = 1 - np.power(np.clip(samples / np.asarray(adjust.film_base), 0, 1), 1.6)
-    if adjust.film_profile:
+    if adjust.film_profile and (not profile or profile['id'] != adjust.film_profile):
+        raise ValueError('The chosen film rendering profile is unavailable')
+    vendor = profile and profile.get('kind') == 'vendor-negative'
+    if vendor:
+        if not adjust.invert:
+            raise ValueError('AFL negative conversion requires negative transmission')
+        samples = vendor_negative.apply(samples, profile)
+    elif adjust.invert:
+        # Nominal transmission response, with the legacy exponent retained on old
+        # recipes. Suggested/manual base is a display reference, not a scanner profile.
+        samples = negative.invert(samples, adjust.film_base, adjust.negative_response)
+    if adjust.film_profile and not vendor:
         if not profile or profile['id']!=adjust.film_profile:
             raise ValueError('The chosen film rendering profile is unavailable')
         samples=filmterms.apply(samples,profile)
     if adjust.auto_color:
         samples = autocolor.apply(samples, adjust.auto_color)
     return samples
+
+
+def auto_color_for(samples: np.ndarray, covered: np.ndarray | None = None):
+    """Compute from a bounded preview, excluding uncovered stitch margins."""
+    if covered is None:
+        return autocolor.for_positive(samples)
+    step = max(1, int(np.ceil(samples.shape[1] / 900)))
+    pixels = samples[::step, ::step][covered[::step, ::step]]
+    return autocolor.for_positive(pixels[:, None, :]) if pixels.size else None
 
 
 def apply(samples: np.ndarray, adjust: Adjustments, profile=None) -> np.ndarray:
@@ -231,10 +252,12 @@ def register(app, store, publish):
     bridge = configured_bridge()
     # The saved preference only mattered while CyberView capture was offered.
     operation_lock = asyncio.Lock()
+    preview_lock = asyncio.Semaphore(1)
     source = SOURCE if bridge.kind == 'cyberview-twain' else NATIVE_SOURCE
     runtime = {'session': None, 'task': None, 'present': (0.0, None), 'live': None}
     saved_workspace = next((p for p in store.all('cv_preferences') if p['id'] == 'workspace'), {})
     scan_options = ScanOptions(**saved_workspace.get('settings', {})).model_dump()
+    scan_options['exposure'] = workspace.clamp_exposure(scan_options['exposure'])
     saved_align = next((p for p in store.all('cv_preferences') if p['id'] == 'align'), {})
     align_settings = AlignSettings(**{k: v for k, v in saved_align.items() if k in AlignSettings.model_fields}).model_dump()
 
@@ -251,7 +274,7 @@ def register(app, store, publish):
         try:
             return filmterms.load(store,profile_id)
         except ValueError:
-            profile=next((p for p in filmterms.discover() if p['id']==profile_id),None)
+            profile=next((p for p in [*filmterms.discover(), *vendor_negative.discover()] if p['id']==profile_id),None)
             if profile is None:raise HTTPException(409,'The film rendering profile is no longer installed or cached')
             filmterms.remember(store,profile)
             return profile
@@ -261,6 +284,28 @@ def register(app, store, publish):
             return store.get('cv_captures', capture_id)
         except KeyError:
             raise HTTPException(404, 'Capture not found')
+
+    def coverage(record):
+        if not record.get('coverage_path'):
+            return None
+        with Image.open(store.path(record['coverage_path'])) as image:
+            return np.asarray(image) > 0
+
+    def compatible_profile(record, adjust, profile):
+        if profile and profile.get('kind') == 'vendor-negative':
+            if (not adjust.invert or record.get('image_kind') != 'vendor-calibrated-transmission' or
+                    (record.get('requested_settings') or {}).get('film', 'negative') != 'negative'):
+                raise HTTPException(422, 'AFL conversion needs an original direct negative transmission scan')
+
+    @lru_cache(maxsize=48)
+    def rendered_preview(original_path, digest, recipe, kind, original_stamp):
+        """Bound cached JPEG bytes; full-resolution processing is serialized below."""
+        data = store.path(original_path).read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise HTTPException(409, 'The original no longer matches its recorded checksum')
+        adjust = Adjustments(**json.loads(recipe))
+        samples = apply(to_float(read_original(BytesIO(data))), adjust, resolve_profile(adjust.film_profile))
+        return jpeg(samples, THUMB_EDGE if kind == 'thumb' else PREVIEW_EDGE)
 
     def present():
         checked, value = runtime['present']
@@ -315,11 +360,23 @@ def register(app, store, publish):
         base = rgb[luminance >= np.percentile(luminance, 99.5)].mean(axis=0)
         if np.any(base <= .02):
             return
-        exposure = [int(min(workspace.EXPOSURE_MAX, max(50, round(e * .85 / b)))) for e, b in zip(used, base)]
+        exposure = workspace.clamp_exposure([round(e * .85 / b) for e, b in zip(used, base)])
         record['film_base'] = {'measured': [round(float(b), 4) for b in base], 'exposure_used': used, 'next_exposure': exposure}
         if exposure != scan_options['exposure'] and workspace.validated_options(scan_options | {'exposure': exposure}):
             scan_options = ScanOptions(**(scan_options | {'exposure': exposure})).model_dump()
             store.save('cv_preferences', {'id': 'workspace', 'settings': scan_options})
+
+    def initial_adjustments(record, samples, covered=None):
+        """Same software conversion for individual and stitched direct negatives."""
+        adjust = Adjustments(**record['adjustments'])
+        base = negative.suggest_base(samples, covered) if adjust.invert else None
+        if base is not None:
+            adjust = adjust.model_copy(update={'film_base': base, 'negative_response': negative.SUGGESTED_RESPONSE})
+            record['negative_balance'] = {'version': negative.VERSION, 'method': 'brightest-0.5-percent',
+                                          'suggested_base': base, 'response': negative.SUGGESTED_RESPONSE}
+        positive = before_levels(samples, adjust)
+        adjust.auto_color = auto_color_for(positive, covered)
+        record['adjustments'] = adjust.model_dump()
 
     def finalize(session, event, index):
         """Moves one delivered TIFF into place, hashes it and writes its previews."""
@@ -344,9 +401,9 @@ def register(app, store, publish):
                   'cyberview': session['settings'],
                   'adjustments': Adjustments(monochrome=event.get('binary_recipe_requested',False), invert=bridge.image_kind == 'vendor-calibrated-transmission' and
                                              session.get('requested_settings', {}).get('film', 'negative') == 'negative').model_dump()}
-        # CyberView applies Auto Gamma to every scan; so does CyberScan X (toggle per frame).
+        # Compute automatic colour as a nondestructive viewing recipe.
         film_base_exposure(record, samples)
-        record['adjustments']['auto_color'] = autocolor.for_positive(before_levels(samples, Adjustments(**record['adjustments'])))
+        initial_adjustments(record, samples)
         if align_settings['auto'] and session.get('purpose', 'scan') == 'scan':
             align_record(record, samples, align_settings['bleed_mm'])
         atomic_write(store.path(base + '.json'), json.dumps(record, indent=1).encode())
@@ -356,7 +413,8 @@ def register(app, store, publish):
         """Finds the 35 mm frame and, when an exact crop fits, makes it the capture's crop."""
         result = frame_align.align_35mm(samples, record['dpi'], record.get('image_kind') == 'vendor-calibrated-transmission',
                                         bleed_mm, covered=covered)
-        record['alignment'] = {k: result[k] for k in ('confidence', 'exact', 'crop_mm', 'crop_px', 'skew_deg', 'bleed_mm')} | {
+        record['alignment'] = {k: result[k] for k in ('confidence', 'exact', 'crop_mm', 'crop_px', 'skew_deg', 'bleed_mm',
+                                                     'dimensions_exact', 'coverage_fraction', 'missing_pixels')} | {
             'edges_x': result['x'], 'note': result.get('note'), 'at': int(time.time() * 1000)}
         if result['exact']:
             record['adjustments'] = Adjustments(**(record['adjustments'] | {'crop': result['crop']})).model_dump()
@@ -397,7 +455,7 @@ def register(app, store, publish):
         incoming = store.path(f"cyberview/{session['id']}/incoming.tif")
         try:
             try:
-                await bridge.scan(incoming, session['count'], on_event)
+                await bridge.scan(incoming, session['count'], on_event, session.get('until_end', False))
             except ScannerError as exc:
                 # A stalled AFL is recovered once by restarting its USB device, if the
                 # reset task is installed; frames already saved are not scanned again.
@@ -410,7 +468,9 @@ def register(app, store, publish):
                 await update_session(state='starting', driver_status=None)
                 await bridge.scan(store.path(f"cyberview/{session['id']}/incoming-retry.tif"), remaining, on_event)
             state = 'cancelled' if bridge.cancel_requested else 'complete'
-            if state == 'complete' and index != session['count']:
+            if state == 'complete' and session.get('until_end') and index:
+                await update_session(count=index)   # "All frames" ends where the film does
+            elif state == 'complete' and index != session['count']:
                 raise ScannerError(f'The driver delivered {index} of {session["count"]} requested frames')
             await update_session(state=state, finished_at=int(time.time() * 1000))
         except ScannerError as exc:
@@ -476,6 +536,8 @@ def register(app, store, publish):
             raise HTTPException(409, 'A scan is already running')
         if not bridge.built():
             raise HTTPException(409, 'The CyberView bridge is not built; run services/cyberview_bridge/build.ps1')
+        if body.until_end:
+            body = body.model_copy(update={'count': bridge.max_count})
         if body.count > bridge.max_count:
             raise HTTPException(422, 'This backend supports only the current frame; native film transport is not validated')
         if not bridge.open and await asyncio.to_thread(cyberview.vendor_running):
@@ -491,7 +553,7 @@ def register(app, store, publish):
         session = {'id': uuid.uuid4().hex, 'state': 'starting', 'count': body.count, 'completed': 0,
                    'roll': body.roll.strip(), 'captures': [], 'started_at': int(time.time() * 1000),
                    'settings': bridge.acquisition_settings(), 'backend': bridge.kind, 'frame': 0, 'rows': 0, 'height': 0, 'error': None,
-                   'purpose': body.purpose, 'requested_settings': selected,
+                   'purpose': body.purpose, 'requested_settings': selected, 'until_end': body.until_end,
                    'driver_status': None, 'driver_dialog': None}
         runtime['session'] = store.save('cv_sessions', session)
         await publish({'type': 'cyberview_session', 'session': session})
@@ -527,12 +589,17 @@ def register(app, store, publish):
 
     @app.post('/api/cyberview/cancel')
     async def cancel():
-        if not bridge.busy:
+        active = bool(runtime['task'] and not runtime['task'].done())
+        stitched = active and runtime['session'].get('purpose') == 'stitched'
+        if not bridge.busy and not stitched:
             raise HTTPException(409, 'No scan is running')
-        if runtime['task'] and not runtime['task'].done():
-            await update_session(state='cancelling')
-        await bridge.cancel()
-        return runtime['session'] if runtime['task'] and not runtime['task'].done() else {'state':'cancelling','operation':'scanner_control'}
+        if active:
+            # A stitched session spans several bridge operations. Their own cancel
+            # flags reset at dispatch, so cancellation must also latch here.
+            await update_session(state='cancelling', cancel_requested=True)
+        if bridge.busy:
+            await bridge.cancel()
+        return runtime['session'] if active else {'state':'cancelling','operation':'scanner_control'}
 
     @app.post('/api/cyberview/film')
     async def film(body: FilmRequest):
@@ -589,7 +656,7 @@ def register(app, store, publish):
             if measured:
                 # CyberView's "auto exposure" on the PF1800 AFL: the measured film base
                 # becomes the per-channel exposure of the next scans (docs/auto-color-re.md).
-                exposure = [min(workspace.EXPOSURE_MAX, max(50, int(v))) for v in measured['rgb']]
+                exposure = workspace.clamp_exposure(measured['rgb'])
                 scan_options = ScanOptions(**(scan_options | {'exposure': exposure})).model_dump()
                 store.save('cv_preferences', {'id': 'workspace', 'settings': scan_options})
             return await asyncio.to_thread(status) | ({'film_base_exposure': measured['rgb']} if measured else {})
@@ -636,6 +703,8 @@ def register(app, store, publish):
         else:
             ok = bridge.can_nudge()
             reason = "CyberView's step moves need one supervised test before stitched scans are enabled."
+        if ok and not workspace.capabilities(bridge, scan_options)['actions']['scan']['available']:
+            ok, reason = False, workspace.capabilities(bridge, scan_options)['actions']['scan']['reason']
         return {'available': ok, 'reason': '' if ok else reason}
 
     @app.get('/api/cyberview/align')
@@ -687,7 +756,11 @@ def register(app, store, publish):
                        'captures': [], 'started_at': int(time.time() * 1000), 'settings': bridge.acquisition_settings(),
                        'backend': bridge.kind, 'frame': 0, 'rows': 0, 'height': 0, 'error': None, 'purpose': 'stitched',
                        'requested_settings': scan_options, 'driver_status': None, 'driver_dialog': None,
-                       'stitch': {'offset_mm': offset, 'bleed_mm': bleed}}
+                       'cancel_requested': False,
+                       'stitch': {'offset_mm': offset, 'bleed_mm': bleed, 'sources': [],
+                                  'position': {'net_completed_steps': 0, 'position_known': True,
+                                               'basis': 'acknowledged_relative_motor_steps', 'pending_move': None,
+                                               'returned_to_start': False}}}
             runtime['session'] = store.save('cv_sessions', session)
             await publish({'type': 'cyberview_session', 'session': session})
             runtime['task'] = asyncio.create_task(run_stitched(session, offset, bleed))
@@ -696,8 +769,42 @@ def register(app, store, publish):
     async def run_stitched(session, offset_mm, bleed_mm):
         folder = f"cyberview/{session['id']}"
         sources = []
+        position = session['stitch']['position']
+
+        class StitchCancelled(ScannerError):
+            pass
+
+        def check_cancel():
+            if session.get('cancel_requested'):
+                raise StitchCancelled('The stitched scan was cancelled')
+
+        def observe_bridge_cancel():
+            if bridge.cancel_requested:
+                session['cancel_requested'] = True
+            check_cancel()
+
+        def position_note():
+            steps = position['net_completed_steps']
+            if not position['position_known']:
+                return ('A film move did not finish normally, so its final position is uncertain. '
+                        f'Last completed moves total {steps:+d} steps from the start. '
+                        'No automatic return move was attempted; check the film before continuing.')
+            if steps:
+                direction = 'forward' if steps > 0 else 'back'
+                return (f'The completed moves leave a relative offset of {abs(steps)} steps {direction}. '
+                        'No automatic return move was attempted; check the film before continuing.')
+            return ('The completed film moves balance to zero steps. '
+                    'Physical return accuracy has not been remeasured.')
+
+        def save_motion():
+            # Synchronous persistence leaves no cancellation gap between recording
+            # an in-flight move and dispatch. Unknown means unacknowledged motion,
+            # not that the scanner provides absolute position feedback.
+            store.save('cv_sessions', session)
 
         async def relay(event):
+            if session.get('cancel_requested'):
+                return
             kind = event.get('event')
             if kind == 'enabled':
                 await update_session(state='warming')
@@ -713,22 +820,43 @@ def register(app, store, publish):
                 await relay_live(session, event, len(sources) + 1)
 
         async def take(label):
+            check_cancel()
             path = store.path(f'{folder}/source-{label}.tif')
             images = await bridge.scan(path, 1, relay)
-            if bridge.cancel_requested or not images:
-                raise ScannerError('The stitched scan was stopped')
-            sources.append({'label': label, 'path': f'{folder}/source-{label}.tif',
-                            'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'dpi': round(images[0]['dpi'])})
-            await update_session(completed=len(sources))
+            if images:
+                # A finished original remains recorded even if cancellation arrived
+                # immediately after the bridge completed it.
+                sources.append({'label': label, 'path': f'{folder}/source-{label}.tif',
+                                'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'dpi': round(images[0]['dpi'])})
+                session['stitch']['sources'] = list(sources)
+                await update_session(completed=len(sources))
+            observe_bridge_cancel()
+            if not images:
+                raise ScannerError('The scanner did not deliver the next stitched-scan source')
             return to_float(read_original(path))
 
         async def nudge(direction, steps):
+            check_cancel()
             await update_session(state='advancing', driver_status=f'Moving the film {direction} {steps} steps')
             remaining = steps
-            while remaining > 0:   # the module accepts at most 300 steps per call
-                chunk = min(remaining, 300)
+            while remaining > 0:
+                check_cancel()
+                # 20-step commands only: on 2026-10-31 a 20-step nudge moved about 1.25 mm every
+                # time, while 31-37 step commands moved about 3.8 mm (a coarser step mode).
+                chunk = min(remaining, NUDGE_CHUNK)
+                was_known = position['position_known']
+                position.update(position_known=False, returned_to_start=False,
+                                pending_move={'direction': direction, 'steps': chunk})
+                save_motion()
                 await bridge.control('nudge', value=f'{direction} {chunk}')
+                if bridge.cancel_requested:
+                    session['cancel_requested'] = True
+                    check_cancel()   # do not claim an interrupted move completed
+                position['net_completed_steps'] += chunk if direction == 'forward' else -chunk
+                position.update(position_known=was_known, pending_move=None)
+                save_motion()
                 remaining -= chunk
+                check_cancel()
 
         def measured_shift(reference, moved, dpi, guess_px):
             luma = frame_align.LUMA
@@ -741,36 +869,57 @@ def register(app, store, publish):
             dpi = sources[0]['dpi']
             # Probe: a small move whose real size, measured from the images, calibrates the rest.
             spm = align_settings.get('steps_per_mm')
-            probe = max(1, min(300, round(offset_mm * spm))) if spm else 20
+            # One 20-step chunk each way (about 1.25 mm): the size measured repeatably on this
+            # transport. Every position is then measured from the images, not from steps.
+            probe = NUDGE_CHUNK
             await nudge('back', probe)
             back = await take('back')
             dx_back, strength = await asyncio.to_thread(measured_shift, centre, back, dpi, 0)
+            check_cancel()
             moved_mm = abs(dx_back) / dpi * frame_align.MM_PER_INCH
             if moved_mm < .05 or strength < .05:
                 raise ScannerError('The film did not move measurably during the nudge; the stitched scan was stopped.')
-            spm = probe / moved_mm
-            align_settings['steps_per_mm'] = round(spm, 3)
-            store.save('cv_preferences', {'id': 'align', **align_settings})
-            forward_steps = round((moved_mm + offset_mm) * spm)
-            if forward_steps > 900:
-                raise ScannerError('The measured film movement is implausibly small; not moving further.')
+            measured_spm = probe / moved_mm
+            if 8 <= measured_spm <= 30:   # measured 15-17 steps per mm on this transport
+                spm = measured_spm
+                align_settings['steps_per_mm'] = round(spm, 3)
+                store.save('cv_preferences', {'id': 'align', **align_settings})
+            else:
+                spm = spm if spm and 8 <= spm <= 30 else 16.0
+            forward_steps = 2 * NUDGE_CHUNK   # back to the start, then the same distance beyond it
             await nudge('forward', forward_steps)
             fwd = await take('forward')
-            await nudge('back', max(1, round(offset_mm * spm)))   # leave the film where it started
+            # Reverse the actual acknowledged step total, avoiding an additional
+            # rounding discrepancy. This normal-success path does not establish
+            # a measured physical return, and is never run after a failed move.
+            remaining_steps = position['net_completed_steps']
+            if remaining_steps:
+                await nudge('back' if remaining_steps > 0 else 'forward', abs(remaining_steps))
+            check_cancel()
+            position['returned_to_start'] = position['position_known'] and position['net_completed_steps'] == 0
+            position['note'] = position_note()
             await update_session(state='saving', driver_status='Stitching and aligning')
 
             def build():
+                check_cancel()
                 scans = [back, centre, fwd]
                 # Expected positions only seed the search; stitch() measures the real ones.
-                forward_px = -np.sign(dx_back) * frame_align.mm_to_px(offset_mm, dpi)
+                # Where the forward scan really landed (the film can travel more or less than
+                # asked), measured over a wide window; it must lie on the other side of the back scan.
+                forward_px, _ = measured_shift(centre, fwd, dpi, -dx_back)
+                if np.sign(forward_px) == np.sign(dx_back):
+                    raise ScannerError('The film moved the wrong way for the forward scan; no stitched image was published.')
                 stitched = frame_align.stitch(scans, [dx_back, 0, forward_px], reference=1,
                                               search_px=frame_align.mm_to_px(1.5, dpi))
+                check_cancel()
+                if any(not np.isfinite(value) or value < .05 for value in stitched['match_strength']):
+                    raise ScannerError('The overlapping scans could not be matched reliably; no stitched image was published.')
                 image = stitched['image']
                 capture_id = uuid.uuid4().hex
                 base = f"{folder}/stitched-{capture_id[:8]}"
                 stream = BytesIO()
                 tifffile.imwrite(stream, (np.clip(image, 0, 1) * 65535 + .5).astype(np.uint16), photometric='rgb',
-                                 resolution=(dpi, dpi), resolutionunit='INCH', software='FRAME CyberScan X stitch')
+                                 resolution=(dpi, dpi), resolutionunit='INCH', software='FRAME stitch')
                 atomic_write(store.path(base + '.tif'), stream.getvalue())
                 cover = BytesIO(); Image.fromarray((stitched['covered'] * 255).astype(np.uint8)).save(cover, 'PNG')
                 atomic_write(store.path(base + '-coverage.png'), cover.getvalue())
@@ -789,19 +938,69 @@ def register(app, store, publish):
                                       'steps_per_mm': align_settings['steps_per_mm'],
                                       'note': 'Built from the three source scans kept next to it; those are the originals.'},
                           'requested_settings': session.get('requested_settings'), 'cyberview': session['settings'],
-                          'adjustments': Adjustments(invert=bridge.image_kind == 'vendor-calibrated-transmission').model_dump()}
+                          'adjustments': Adjustments(invert=bridge.image_kind == 'vendor-calibrated-transmission' and
+                                                     session.get('requested_settings', {}).get('film', 'negative') == 'negative').model_dump()}
+                initial_adjustments(record, image, stitched['covered'])
                 align_record(record, image, bleed_mm, stitched['covered'])
+                check_cancel()
                 atomic_write(store.path(base + '.json'), json.dumps(record, indent=1).encode())
-                return store.save('cv_captures', record)
+                return record
 
             record = await asyncio.to_thread(build)
+            check_cancel()
+            store.save('cv_captures', record)
             session['captures'].append(record['id'])
+            check_cancel()
             await publish({'type': 'cyberview_capture', 'capture': record})
+            check_cancel()
             await update_session(state='complete', finished_at=int(time.time() * 1000), alignment=record['alignment'])
+        except StitchCancelled as exc:
+            position['note'] = position_note()
+            await update_session(state='cancelled', error=f'{exc}. {position["note"]}',
+                                 driver_status=position['note'], finished_at=int(time.time() * 1000))
         except ScannerError as exc:
-            await update_session(state='error', error=str(exc), finished_at=int(time.time() * 1000))
+            position['note'] = position_note()
+            await update_session(state='cancelled' if session.get('cancel_requested') else 'error',
+                                 error=f'{exc}. {position["note"]}', driver_status=position['note'],
+                                 finished_at=int(time.time() * 1000))
+        except asyncio.CancelledError:
+            session['cancel_requested'] = True
+            position['note'] = position_note()
+            await update_session(state='cancelled', error='The stitched task stopped. ' + position['note'],
+                                 driver_status=position['note'], finished_at=int(time.time() * 1000))
+            raise
         except Exception as exc:  # recorded, never reported as success
-            await update_session(state='error', error=f'Unexpected failure: {exc}', finished_at=int(time.time() * 1000))
+            position['note'] = position_note()
+            await update_session(state='error', error=f'Unexpected failure: {exc}. {position["note"]}',
+                                 driver_status=position['note'], finished_at=int(time.time() * 1000))
+
+    @app.post('/api/cyberview/captures/{capture_id}/balance-negative')
+    async def balance_negative(capture_id: str):
+        """Suggest a conversion for a saved transmission; no acquisition or exposure change."""
+        record = capture(capture_id)
+        if record.get('image_kind') != 'vendor-calibrated-transmission' or (record.get('requested_settings') or {}).get('film', 'negative') != 'negative':
+            raise HTTPException(409, 'Balance negative needs an original negative transmission scan')
+        def calculate():
+            samples = to_float(read_original(store.path(record['original_path'])))
+            covered = coverage(record)
+            base = negative.suggest_base(samples, covered)
+            if base is None:
+                raise HTTPException(409, 'A film base could not be suggested from this scan; set the base manually')
+            adjust = Adjustments(**(record['adjustments'] | {'invert': True, 'film_base': base,
+                                  'negative_response': negative.SUGGESTED_RESPONSE, 'auto_color': None}))
+            profile = resolve_profile(adjust.film_profile)
+            positive = before_levels(samples, adjust, profile)
+            adjust.auto_color = None if profile and profile.get('kind') in ('reference-tone', 'vendor-negative') else auto_color_for(positive, covered)
+            return adjust, base
+        adjust, base = await asyncio.to_thread(calculate)
+        latest = capture(capture_id)
+        if latest['adjustments'] != record['adjustments']:
+            raise HTTPException(409, 'The edit changed while balancing; try Balance negative again')
+        record = latest
+        record['adjustments'] = adjust.model_dump()
+        record['negative_balance'] = {'version': negative.VERSION, 'method': 'brightest-0.5-percent',
+                                      'suggested_base': base, 'response': negative.SUGGESTED_RESPONSE}
+        return store.save('cv_captures', record)
 
     @app.post('/api/cyberview/captures/{capture_id}/auto-color')
     async def auto_color(capture_id: str, body: AutoColorRequest):
@@ -810,13 +1009,36 @@ def register(app, store, publish):
         adjust = Adjustments(**(record['adjustments'] | {'auto_color': None}))
         words = None
         if body.enabled:
-            samples = await asyncio.to_thread(lambda: before_levels(to_float(read_original(store.path(record['original_path']))),
-                                                                    adjust, resolve_profile(adjust.film_profile)))
-            words = autocolor.for_positive(samples)
+            def calculate():
+                samples = before_levels(to_float(read_original(store.path(record['original_path']))),
+                                        adjust, resolve_profile(adjust.film_profile))
+                return auto_color_for(samples, coverage(record))
+            words = await asyncio.to_thread(calculate)
             if words is None:
                 raise HTTPException(409, 'This frame has no near-neutral midtones, so automatic colour does not apply')
+        latest = capture(capture_id)
+        if latest['adjustments'] != record['adjustments']:
+            raise HTTPException(409, 'The edit changed while computing automatic colour; try again')
+        record = latest
         record['adjustments'] = adjust.model_copy(update={'auto_color': words}).model_dump()
         return store.save('cv_captures', record)
+
+    @app.get('/api/cyberview/captures/{capture_id}/sources/{number}/preview')
+    async def source_preview(capture_id: str, number: int):
+        """Preview of one of a stitched scan's three source scans (the originals it was built from)."""
+        record = capture(capture_id)
+        sources = (record.get('derived') or {}).get('sources') or []
+        if not 1 <= number <= len(sources):
+            raise HTTPException(404, 'This capture has no such source scan')
+        source = sources[number - 1]
+        cached = store.path(source['path'].rsplit('.', 1)[0] + '-preview.jpg')
+        if not cached.is_file():
+            original = store.path(source['path'])
+            if not original.resolve().is_relative_to(store.root):
+                raise HTTPException(404, 'Source scan not found')
+            data = await asyncio.to_thread(lambda: jpeg(to_float(read_original(original)), PREVIEW_EDGE))
+            atomic_write(cached, data)
+        return FileResponse(cached, media_type='image/jpeg')
 
     @app.post('/api/cyberview/captures/{capture_id}/auto-levels')
     async def auto_levels(capture_id: str):
@@ -835,8 +1057,12 @@ def register(app, store, publish):
             if body.adjustments.rotation % 90:
                 raise HTTPException(422, 'Rotation must be a multiple of 90 degrees')
             if body.adjustments.film_profile:
-                await asyncio.to_thread(resolve_profile,body.adjustments.film_profile)
-            record['adjustments'] = body.adjustments.model_dump() | {'rotation': body.adjustments.rotation % 360}
+                profile = await asyncio.to_thread(resolve_profile,body.adjustments.film_profile)
+                compatible_profile(record, body.adjustments, profile)
+            edits = body.adjustments.model_dump()
+            if 'negative_response' not in body.adjustments.model_fields_set:
+                edits['negative_response'] = record['adjustments'].get('negative_response', negative.LEGACY_RESPONSE)
+            record['adjustments'] = edits | {'rotation': body.adjustments.rotation % 360}
         if body.title is not None:
             record['title'] = body.title.strip() or record['title']
         if body.favorite is not None:
@@ -845,28 +1071,48 @@ def register(app, store, publish):
 
     @app.post('/api/cyberview/captures/{capture_id}/apply-to-roll')
     async def apply_to_roll(capture_id: str, body: RollAdjustments):
+        profile = None
         if body.adjustments.film_profile:
-            await asyncio.to_thread(resolve_profile,body.adjustments.film_profile)
+            profile = await asyncio.to_thread(resolve_profile,body.adjustments.film_profile)
         source_record=capture(capture_id)
         if body.adjustments.rotation%90:
             raise HTTPException(422,'Rotation must be a multiple of 90 degrees')
         edits=body.adjustments.model_dump(exclude={'rotation','mirror','crop'})
+        if 'negative_response' not in body.adjustments.model_fields_set:
+            edits.pop('negative_response', None)
         selected=[c for c in captures() if (c['roll']==source_record['roll'] if source_record['roll'] else c['session_id']==source_record['session_id'])]
         for record in selected:
+            compatible_profile(record, body.adjustments, profile)
             record['adjustments']=Adjustments(**(record['adjustments']|edits)).model_dump()
         store.save_many('cv_captures',selected)
         return {'captures':selected,'count':len(selected)}
 
     @app.get('/api/cyberview/captures/{capture_id}/profile-preview')
     async def profile_preview(capture_id: str, profile_id: str, invert: bool=False,
-                              base_r: float=1,base_g: float=1,base_b: float=1):
+                              base_r: float=1,base_g: float=1,base_b: float=1,negative_response: float=negative.LEGACY_RESPONSE):
         record=capture(capture_id)
-        try:adjust=Adjustments(film_profile=profile_id,invert=invert,film_base=[base_r,base_g,base_b])
+        try:adjust=Adjustments(film_profile=profile_id,invert=invert,film_base=[base_r,base_g,base_b],negative_response=negative_response)
         except ValueError as exc:raise HTTPException(422,'Invalid profile preview settings') from exc
+        profile = resolve_profile(profile_id)
+        compatible_profile(record, adjust, profile)
         def render():
-            values=before_levels(to_float(read_original(store.path(record['original_path']))),adjust,resolve_profile(profile_id))
+            values=before_levels(to_float(read_original(store.path(record['original_path']))),adjust,profile)
             return jpeg(values,PREVIEW_EDGE)
         return Response(await asyncio.to_thread(render),media_type='image/jpeg',headers={'Cache-Control':'private, no-store'})
+
+    @app.get('/api/cyberview/captures/{capture_id}/rendered/{kind}')
+    async def rendered_capture(capture_id: str, kind: str):
+        """Saved edit for Home/Rolls; editor source previews remain unmodified."""
+        if kind not in ('preview', 'thumb'):
+            raise HTTPException(404, 'Unknown rendered image size')
+        record = capture(capture_id)
+        recipe = json.dumps(record['adjustments'], sort_keys=True, separators=(',', ':'))
+        async with preview_lock:
+            await asyncio.to_thread(resolve_profile, record['adjustments'].get('film_profile'))
+            info = store.path(record['original_path']).stat()
+            data = await asyncio.to_thread(rendered_preview, record['original_path'], record['sha256'], recipe, kind,
+                                          (info.st_mtime_ns, info.st_size))
+        return Response(data, media_type='image/jpeg', headers={'Cache-Control': 'private, no-store'})
 
     @app.get('/api/cyberview/captures/{capture_id}/{kind}')
     async def capture_file(capture_id: str, kind: str):
@@ -893,14 +1139,18 @@ def register(app, store, publish):
 
         def render():
             adjust=Adjustments(**record['adjustments'])
-            samples = apply(to_float(read_original(original)), adjust,resolve_profile(adjust.film_profile))
+            profile = resolve_profile(adjust.film_profile)
+            samples = apply(to_float(read_original(original)), adjust, profile)
             if fmt == 'jpeg':
                 image = Image.fromarray((samples * 255 + .5).astype(np.uint8))
                 return pipeline.encode(image, 'JPEG')
             stream = BytesIO()
             tifffile.imwrite(stream, (samples * 65535 + .5).astype(np.uint16), photometric='rgb',
                              resolution=(record['dpi'], record['dpi']), resolutionunit='INCH',
-                             iccprofile=pipeline.SRGB, software='FRAME CyberScan X')
+                             iccprofile=pipeline.SRGB, software='FRAME',
+                             description=json.dumps({'engine': negative.VERSION, 'adjustments': adjust.model_dump(),
+                                                     'film_profile_engine': profile.get('engine') if profile else None,
+                                                     'original_sha256': record['sha256']}))
             return stream.getvalue()
 
         data = await asyncio.to_thread(render)

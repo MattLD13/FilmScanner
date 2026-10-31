@@ -1,5 +1,12 @@
 # CyberView's automatic colour (reverse engineering)
 
+**Later correction:** the actual engine table worker has now been identified as
+Lagrange (`0x10104360`), including an all-zero result on duplicate endpoint x
+values. Its caller state remains unresolved, so the production monotone adapter
+was not replaced. The AFL's missing model gamma and exact film-term stage are
+documented in [vendor-colour-pipeline.md](vendor-colour-pipeline.md). Earlier
+statements below about the engine builder being unread are historical.
+
 **Status 2026-10-31:** `iComputeAutoColor` is ported exactly to
 `services/imaging/autocolor.py` (68 of 68 test images identical to the DS, including the
 error path; `tests/imaging/test_autocolor.py`). Auto exposure on the PF1800 AFL is the

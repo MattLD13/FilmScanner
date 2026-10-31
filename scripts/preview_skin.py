@@ -1,4 +1,4 @@
-"""Serve the CyberScan skin as static files, without importing any FRAME service.
+"""Serve the FRAME scanner workspace as static files, without importing any FRAME service.
 
 The preview has no API routes, device libraries or scanner host. Connections made
 by the page are denied by CSP; local assets and user-selected blob images remain.
@@ -26,9 +26,9 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         # app that requests /api/state. No query can enable acquisition here.
         requested = urlsplit(self.path)
         query = parse_qs(requested.query)
-        if requested.path in ('/', '/index.html') and (query.get('workspace') != ['cyberscan'] or query.get('demo') != ['1']):
+        if requested.path in ('/', '/index.html') and (query.get('workspace') not in (['frame'], ['cyberscan']) or query.get('demo') != ['1']):
             self.send_response(302)
-            self.send_header('Location', '/?workspace=cyberscan&demo=1')
+            self.send_header('Location', '/?workspace=frame&demo=1')
             self.end_headers()
             return
         if self.path.split('?', 1)[0] in ('/api', '/media', '/sw.js') or self.path.startswith(('/api/', '/media/')):
@@ -45,7 +45,7 @@ def main():
         raise SystemExit('Build the client first with npm run build')
     handler = partial(PreviewHandler, directory=str(DIST))
     server = ThreadingHTTPServer(('127.0.0.1', args.port), handler)
-    print(f'CyberScan X UI preview: http://127.0.0.1:{args.port}/?workspace=cyberscan&demo=1', flush=True)
+    print(f'FRAME UI preview: http://127.0.0.1:{args.port}/?workspace=frame&demo=1', flush=True)
     print('Static files only. No scanner service, discovery, API or device access.', flush=True)
     try:
         server.serve_forever()

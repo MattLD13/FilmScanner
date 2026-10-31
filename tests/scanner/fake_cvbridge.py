@@ -172,6 +172,11 @@ def main():
             global position
             action = line.split()[1]
             emit(event='command', name=action)
+            frames = int(os.environ.get('FAKE_CVBRIDGE_FRAMES', '0'))
+            if action == 'next' and frames and position >= frames:   # end of the strip
+                emit(event='error', code='film', message='No further frame')
+                emit(event='ready')
+                continue
             position += {'next': 1, 'previous': -1}.get(action, 0)
             emit(event='command_done', name=action)
             emit(event='ready')

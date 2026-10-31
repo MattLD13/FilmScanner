@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 
 import numpy as np
+from services.imaging import reference_tone
 
 CLASSES = {'NEG': 'negative', 'REV': 'reversal', 'B': 'bw', 'B&&W': 'bw', 'B&W': 'bw'}
 MAX_FILE_BYTES = 512_000
@@ -76,7 +77,46 @@ def discover(env=os.environ) -> list[dict]:
 
 
 def summary(profile: dict) -> dict:
-    return {key: profile[key] for key in ('id', 'name', 'maker', 'film_class', 'rows', 'source_file', 'source_folder')}
+    result = {key: profile[key] for key in ('id', 'name', 'maker', 'film_class', 'rows', 'source_file', 'source_folder')}
+    if profile.get('kind') == 'reference-tone':
+        result.update(kind='reference-tone', input_response=profile['input_response'])
+    elif profile.get('kind') == 'vendor-negative':
+        result.update(kind='vendor-negative', name=profile['name'] + ' · AFL conversion')
+    return result
+
+
+def reference_profiles(store) -> list[dict]:
+    """List user-local reference profiles alongside installed vendor terms."""
+    profiles = []
+    for path in sorted(store.path('film_profiles').glob('*.json')):
+        try:
+            if not re.fullmatch(r'[0-9a-f]{16}', path.stem):
+                continue
+            profile = load(store, path.stem)
+            if profile.get('kind') in ('reference-tone', 'vendor-negative'):
+                profiles.append(profile)
+        except (OSError, KeyError, ValueError, TypeError):
+            continue
+    return profiles
+
+
+def validate_reference(profile: dict) -> None:
+    """Reject corrupt or changed reference caches before listing or rendering."""
+    try:
+        summary(profile)
+        table = np.asarray(profile['lut'], dtype=float)
+        matrix = np.asarray(profile['matrix'], dtype=float)
+        if (profile['film_class'] != 'negative' or profile['rows'] != 4096 or profile['scale'] != 4095 or
+                not np.isfinite(profile['input_response']) or not .1 <= profile['input_response'] <= 3 or
+                table.shape != (4096, 3) or not np.isfinite(table).all() or
+                np.any(table < 0) or np.any(table > 4095) or np.any(np.diff(table, axis=0) < 0) or
+                matrix.shape != (3, 4) or not np.isfinite(matrix).all()):
+            raise ValueError('Invalid reference profile values')
+        identity = reference_tone.identify(profile)
+        if profile['sha256'] != identity['sha256'] or profile['id'] != identity['id']:
+            raise ValueError('Reference profile checksum mismatch')
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError('Reference profile is invalid or its checksum changed') from exc
 
 
 def cache_path(store, profile_id: str) -> Path:
@@ -87,6 +127,11 @@ def cache_path(store, profile_id: str) -> Path:
 
 def remember(store, profile: dict) -> None:
     """Keep the parsed profile in the library so renders do not depend on the CyberView install."""
+    if profile.get('kind') == 'reference-tone':
+        validate_reference(profile)
+    elif profile.get('kind') == 'vendor-negative':
+        from services.imaging import vendor_negative
+        vendor_negative.validate(profile)
     path = cache_path(store, profile['id'])
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +144,19 @@ def load(store, profile_id: str) -> dict:
     path = cache_path(store, profile_id)
     if not path.exists():
         raise ValueError('Film profile is not in this library; choose it again from an installed CyberView')
-    return json.loads(path.read_text(encoding='utf-8'))
+    profile = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(profile, dict):
+        raise ValueError('Film profile cache must contain an object')
+    if profile.get('kind') == 'reference-tone':
+        validate_reference(profile)
+        if profile['id'] != profile_id:
+            raise ValueError('Reference profile identity does not match its cache path')
+    elif profile.get('kind') == 'vendor-negative':
+        from services.imaging import vendor_negative
+        vendor_negative.validate(profile)
+        if profile['id'] != profile_id:
+            raise ValueError('AFL profile identity does not match its cache path')
+    return profile
 
 
 def apply(values: np.ndarray, profile: dict) -> np.ndarray:

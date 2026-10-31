@@ -118,14 +118,14 @@ class NativeAflBridge(CyberViewBridge):
         fields=[o['dpi'],o['bits'],o['channel'],o['film'],*[o['crop'][k] for k in ('left','top','right','bottom')],*o['exposure']]
         return 'settings ' + ' '.join(str(v) for v in fields)
 
-    async def scan(self, out, count, on_event):
+    async def scan(self, out, count, on_event, until_end=False):
         if self.quarantined:
             raise ScannerError('The native driver is still handling a timed-out operation; wait for it to return before retrying')
         if count != 1 and not self.supports_next:
             raise ScannerError('Native acquisition currently supports only the current frame')
         # Base scan owns the operation lock and cancellation state. Its startup
         # hook configures this exact acquisition without changing user defaults.
-        result = await super().scan(out, count, on_event)
+        result = await super().scan(out, count, on_event, until_end)
         if result:
             self.frame_initialized = True
         return result
