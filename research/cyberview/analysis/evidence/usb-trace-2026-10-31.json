@@ -1,0 +1,1042 @@
+{
+ "source": "cvbridge scan --dpi 1800 --depth 16 --trace-usb, 2026-10-31, PF1800 AFL 2770:0119 fw 4; raw trace kept locally under data/traces (not committed)",
+ "result": "driver timeout at \"Preparing film scanner\" after 360 s; no image",
+ "hooked": [
+  {
+   "n": 0,
+   "call": "hooked",
+   "module": "fvc.dll",
+   "loaded": 1,
+   "slots": 6
+  }
+ ],
+ "totals": {
+  "open": 12,
+  "get_device_descriptor": 12,
+  "vendor_out": 85,
+  "write": 51421,
+  "select": 51243,
+  "read": 51238,
+  "close": 9,
+  "fifo_clean": 22,
+  "bulk_out_notice": 4,
+  "bulk_out": 3,
+  "bulk_in_request": 1
+ },
+ "first_ops": [
+  {
+   "n": 1,
+   "op": "open",
+   "name": "\\\\.\\USBSCAN0",
+   "ms": 2246.158
+  },
+  {
+   "n": 2,
+   "ok": true,
+   "op": "get_device_descriptor",
+   "data": "7027190100010000",
+   "ms": 2246.243
+  },
+  {
+   "n": 3,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2248.011
+  },
+  {
+   "n": 4,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2253.01
+  },
+  {
+   "n": 5,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "44",
+   "ms": 2256.012
+  },
+  {
+   "n": 6,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "45",
+   "ms": 2258.011
+  },
+  {
+   "n": 7,
+   "ok": true,
+   "op": "write",
+   "reg": 151,
+   "value": 0,
+   "name": "status page select",
+   "ms": 2319.01
+  },
+  {
+   "n": 8,
+   "ok": true,
+   "op": "select",
+   "reg": 139,
+   "name": "status (page in 0x97)",
+   "ms": 2322.01
+  },
+  {
+   "n": 9,
+   "ok": true,
+   "op": "read",
+   "reg": 139,
+   "value": 111,
+   "name": "status (page in 0x97)",
+   "ms": 2324.008
+  },
+  {
+   "n": 10,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2326.016
+  },
+  {
+   "n": 11,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2329.007
+  },
+  {
+   "n": 12,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "16",
+   "ms": 2331.01
+  },
+  {
+   "n": 13,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "17",
+   "ms": 2333.008
+  },
+  {
+   "n": 14,
+   "ok": true,
+   "op": "write",
+   "reg": 251,
+   "value": 242,
+   "name": "unknown",
+   "ms": 2334.007
+  },
+  {
+   "n": 15,
+   "op": "close",
+   "ms": 2334.041
+  },
+  {
+   "n": 16,
+   "op": "open",
+   "name": "\\\\.\\USBSCAN0",
+   "ms": 2334.145
+  },
+  {
+   "n": 17,
+   "ok": true,
+   "op": "get_device_descriptor",
+   "data": "7027190100017e00",
+   "ms": 2334.161
+  },
+  {
+   "n": 18,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2335.006
+  },
+  {
+   "n": 19,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2338.012
+  },
+  {
+   "n": 20,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "44",
+   "ms": 2339.009
+  },
+  {
+   "n": 21,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "45",
+   "ms": 2342.007
+  },
+  {
+   "n": 22,
+   "ok": true,
+   "op": "write",
+   "reg": 131,
+   "value": 0,
+   "name": "index for 0x85/0x87/0x8d",
+   "ms": 2344.008
+  },
+  {
+   "n": 23,
+   "ok": true,
+   "op": "write",
+   "reg": 163,
+   "value": 2,
+   "name": "GPIO a3",
+   "ms": 2345.006
+  },
+  {
+   "n": 24,
+   "ok": true,
+   "op": "write",
+   "reg": 164,
+   "value": 30,
+   "name": "GPIO a4",
+   "ms": 2347.009
+  },
+  {
+   "n": 25,
+   "ok": true,
+   "op": "write",
+   "reg": 161,
+   "value": 255,
+   "name": "GPIO a1",
+   "ms": 2350.011
+  },
+  {
+   "n": 26,
+   "ok": true,
+   "op": "write",
+   "reg": 162,
+   "value": 241,
+   "name": "GPIO a2",
+   "ms": 2351.008
+  },
+  {
+   "n": 27,
+   "ok": true,
+   "op": "write",
+   "reg": 151,
+   "value": 13,
+   "name": "status page select",
+   "ms": 2353.006
+  },
+  {
+   "n": 28,
+   "ok": true,
+   "op": "select",
+   "reg": 139,
+   "name": "status (page in 0x97)",
+   "ms": 2355.01
+  },
+  {
+   "n": 29,
+   "ok": true,
+   "op": "read",
+   "reg": 139,
+   "value": 170,
+   "name": "status (page in 0x97)",
+   "ms": 2358.02
+  },
+  {
+   "n": 30,
+   "ok": true,
+   "op": "write",
+   "reg": 151,
+   "value": 13,
+   "name": "status page select",
+   "ms": 2359.057
+  },
+  {
+   "n": 31,
+   "ok": true,
+   "op": "select",
+   "reg": 139,
+   "name": "status (page in 0x97)",
+   "ms": 2362.008
+  },
+  {
+   "n": 32,
+   "ok": true,
+   "op": "read",
+   "reg": 139,
+   "value": 170,
+   "name": "status (page in 0x97)",
+   "ms": 2364.008
+  },
+  {
+   "n": 33,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2366.017
+  },
+  {
+   "n": 34,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2369.009
+  },
+  {
+   "n": 35,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "16",
+   "ms": 2370.007
+  },
+  {
+   "n": 36,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "17",
+   "ms": 2371.007
+  },
+  {
+   "n": 37,
+   "ok": true,
+   "op": "write",
+   "reg": 139,
+   "value": 242,
+   "name": "status (page in 0x97)",
+   "ms": 2374.005
+  },
+  {
+   "n": 38,
+   "op": "close",
+   "ms": 2374.07
+  },
+  {
+   "n": 39,
+   "op": "open",
+   "name": "\\\\.\\USBSCAN0",
+   "ms": 2846.184
+  },
+  {
+   "n": 40,
+   "ok": true,
+   "op": "get_device_descriptor",
+   "data": "7027190100013777",
+   "ms": 2846.226
+  },
+  {
+   "n": 41,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2848.008
+  },
+  {
+   "n": 42,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2850.01
+  },
+  {
+   "n": 43,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "44",
+   "ms": 2852.996
+  },
+  {
+   "n": 44,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "45",
+   "ms": 2854.992
+  },
+  {
+   "n": 45,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2874.002
+  },
+  {
+   "n": 46,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2876.997
+  },
+  {
+   "n": 47,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "16",
+   "ms": 2879.994
+  },
+  {
+   "n": 48,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "17",
+   "ms": 2882.005
+  },
+  {
+   "n": 49,
+   "ok": true,
+   "op": "write",
+   "reg": 143,
+   "value": 26,
+   "name": "RAM data port",
+   "ms": 2884.995
+  },
+  {
+   "n": 50,
+   "op": "close",
+   "ms": 2885.037
+  },
+  {
+   "n": 51,
+   "op": "open",
+   "name": "\\\\.\\USBSCAN0",
+   "ms": 2886.307
+  },
+  {
+   "n": 52,
+   "ok": true,
+   "op": "get_device_descriptor",
+   "data": "7027190100017e00",
+   "ms": 2886.354
+  },
+  {
+   "n": 53,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2887.993
+  },
+  {
+   "n": 54,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2889.001
+  },
+  {
+   "n": 55,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "44",
+   "ms": 2890.997
+  },
+  {
+   "n": 56,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "45",
+   "ms": 2893.993
+  },
+  {
+   "n": 57,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2912.992
+  },
+  {
+   "n": 58,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2914.99
+  },
+  {
+   "n": 59,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "16",
+   "ms": 2917.989
+  },
+  {
+   "n": 60,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "17",
+   "ms": 2918.992
+  },
+  {
+   "n": 61,
+   "ok": true,
+   "op": "write",
+   "reg": 179,
+   "value": 26,
+   "name": "RAM end 0",
+   "ms": 2921.988
+  },
+  {
+   "n": 62,
+   "op": "close",
+   "ms": 2922.02
+  },
+  {
+   "n": 63,
+   "op": "open",
+   "name": "\\\\.\\USBSCAN0",
+   "ms": 2922.124
+  },
+  {
+   "n": 64,
+   "ok": true,
+   "op": "get_device_descriptor",
+   "data": "702719010001e0c9",
+   "ms": 2922.169
+  },
+  {
+   "n": 65,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2923.003
+  },
+  {
+   "n": 66,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2925.994
+  },
+  {
+   "n": 67,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "44",
+   "ms": 2926.988
+  },
+  {
+   "n": 68,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "45",
+   "ms": 2929.992
+  },
+  {
+   "n": 69,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 2950.0
+  },
+  {
+   "n": 70,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 2952.991
+  },
+  {
+   "n": 71,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "16",
+   "ms": 2954.988
+  },
+  {
+   "n": 72,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "17",
+   "ms": 2957.988
+  },
+  {
+   "n": 73,
+   "ok": true,
+   "op": "write",
+   "reg": 179,
+   "value": 26,
+   "name": "RAM end 0",
+   "ms": 2958.986
+  },
+  {
+   "n": 74,
+   "op": "close",
+   "ms": 2959.016
+  },
+  {
+   "n": 75,
+   "op": "open",
+   "name": "\\\\.\\USBSCAN0",
+   "ms": 3076.607
+  },
+  {
+   "n": 76,
+   "ok": true,
+   "op": "get_device_descriptor",
+   "data": "702719010001cccc",
+   "ms": 3076.647
+  },
+  {
+   "n": 77,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 3077.999
+  },
+  {
+   "n": 78,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 3079.997
+  },
+  {
+   "n": 79,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "44",
+   "ms": 3082.007
+  },
+  {
+   "n": 80,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "45",
+   "ms": 3084.994
+  },
+  {
+   "n": 81,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 3102.986
+  },
+  {
+   "n": 82,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 3105.988
+  },
+  {
+   "n": 83,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "16",
+   "ms": 3106.987
+  },
+  {
+   "n": 84,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "17",
+   "ms": 3107.989
+  },
+  {
+   "n": 85,
+   "ok": true,
+   "op": "write",
+   "reg": 87,
+   "value": 16,
+   "name": "unknown",
+   "ms": 3109.987
+  },
+  {
+   "n": 86,
+   "op": "close",
+   "ms": 3110.023
+  },
+  {
+   "n": 87,
+   "op": "open",
+   "name": "\\\\.\\USBSCAN0",
+   "ms": 3141.787
+  },
+  {
+   "n": 88,
+   "ok": true,
+   "op": "get_device_descriptor",
+   "data": "702719010001cccc",
+   "ms": 3141.828
+  },
+  {
+   "n": 89,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "64",
+   "ms": 3142.991
+  },
+  {
+   "n": 90,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "65",
+   "ms": 3144.99
+  },
+  {
+   "n": 91,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "44",
+   "ms": 3146.999
+  },
+  {
+   "n": 92,
+   "ok": true,
+   "op": "vendor_out",
+   "offset": 144,
+   "index": 0,
+   "data": "45",
+   "ms": 3149.993
+  },
+  {
+   "n": 93,
+   "ok": true,
+   "op": "write",
+   "reg": 151,
+   "value": 0,
+   "name": "status page select",
+   "ms": 3152.988
+  },
+  {
+   "n": 94,
+   "ok": true,
+   "op": "select",
+   "reg": 139,
+   "name": "status (page in 0x97)",
+   "ms": 3155.987
+  },
+  {
+   "n": 95,
+   "ok": true,
+   "op": "read",
+   "reg": 139,
+   "value": 111,
+   "name": "status (page in 0x97)",
+   "ms": 3157.998
+  },
+  {
+   "n": 96,
+   "ok": true,
+   "op": "write",
+   "reg": 151,
+   "value": 0,
+   "name": "status page select",
+   "ms": 3160.989
+  },
+  {
+   "n": 97,
+   "ok": true,
+   "op": "select",
+   "reg": 139,
+   "name": "status (page in 0x97)",
+   "ms": 3163.985
+  },
+  {
+   "n": 98,
+   "ok": true,
+   "op": "read",
+   "reg": 139,
+   "value": 111,
+   "name": "status (page in 0x97)",
+   "ms": 3165.998
+  },
+  {
+   "n": 99,
+   "ok": true,
+   "op": "write",
+   "reg": 144,
+   "value": 0,
+   "name": "auto-scan start",
+   "ms": 3168.984
+  },
+  {
+   "n": 100,
+   "ok": true,
+   "op": "write",
+   "reg": 128,
+   "value": 0,
+   "name": "motor/scan control",
+   "ms": 3170.988
+  },
+  {
+   "n": 101,
+   "ok": true,
+   "op": "write",
+   "reg": 132,
+   "value": 0,
+   "name": "motor steps lo",
+   "ms": 3174.015
+  },
+  {
+   "n": 102,
+   "ok": true,
+   "op": "write",
+   "reg": 190,
+   "value": 0,
+   "name": "auto-scan be",
+   "ms": 3174.984
+  },
+  {
+   "n": 103,
+   "ok": true,
+   "op": "write",
+   "reg": 192,
+   "value": 0,
+   "name": "motor acc/dec enable",
+   "ms": 3177.986
+  },
+  {
+   "n": 104,
+   "ok": true,
+   "op": "write",
+   "reg": 134,
+   "value": 0,
+   "name": "motor commit",
+   "ms": 3179.983
+  },
+  {
+   "n": 105,
+   "ok": true,
+   "op": "write",
+   "reg": 137,
+   "value": 0,
+   "name": "motor steps hi",
+   "ms": 3181.993
+  },
+  {
+   "n": 106,
+   "ok": true,
+   "op": "write",
+   "reg": 148,
+   "value": 0,
+   "name": "RAM select",
+   "ms": 3184.984
+  },
+  {
+   "n": 107,
+   "ok": true,
+   "op": "write",
+   "reg": 1,
+   "value": 2,
+   "name": "AFE setup 1",
+   "ms": 3187.003
+  },
+  {
+   "n": 108,
+   "ok": true,
+   "op": "fifo_clean",
+   "index": 33798,
+   "ms": 3189.991
+  },
+  {
+   "n": 109,
+   "ok": true,
+   "op": "fifo_clean",
+   "index": 1030,
+   "ms": 3191.988
+  },
+  {
+   "n": 110,
+   "ok": true,
+   "op": "write",
+   "reg": 206,
+   "value": 0,
+   "name": "driving capability ce",
+   "ms": 3194.041
+  },
+  {
+   "n": 111,
+   "ok": true,
+   "op": "write",
+   "reg": 207,
+   "value": 12,
+   "name": "driving capability / status page hi",
+   "ms": 3196.988
+  },
+  {
+   "n": 112,
+   "ok": true,
+   "op": "write",
+   "reg": 192,
+   "value": 0,
+   "name": "motor acc/dec enable",
+   "ms": 3197.995
+  },
+  {
+   "n": 113,
+   "ok": true,
+   "op": "write",
+   "reg": 128,
+   "value": 225,
+   "name": "motor/scan control",
+   "ms": 3200.985
+  },
+  {
+   "n": 114,
+   "ok": true,
+   "op": "write",
+   "reg": 132,
+   "value": 177,
+   "name": "motor steps lo",
+   "ms": 3202.986
+  },
+  {
+   "n": 115,
+   "ok": true,
+   "op": "write",
+   "reg": 200,
+   "value": 0,
+   "name": "acc/dec c8",
+   "ms": 3205.984
+  },
+  {
+   "n": 116,
+   "ok": true,
+   "op": "write",
+   "reg": 136,
+   "value": 220,
+   "name": "motor speed",
+   "ms": 3206.985
+  },
+  {
+   "n": 117,
+   "ok": true,
+   "op": "write",
+   "reg": 137,
+   "value": 200,
+   "name": "motor steps hi",
+   "ms": 3209.983
+  },
+  {
+   "n": 118,
+   "ok": true,
+   "op": "write",
+   "reg": 134,
+   "value": 0,
+   "name": "motor commit",
+   "ms": 3211.981
+  },
+  {
+   "n": 119,
+   "ok": true,
+   "op": "write",
+   "reg": 151,
+   "value": 0,
+   "name": "status page select",
+   "ms": 3213.993
+  }
+ ],
+ "stuck_wait": {
+  "routine": "SCAN08 0x1000c867 (called from 0x1000c7eb): if status bit 7 is clear, SafeInitialChip, DrivingCapabilitySetting, MotorMoveNormal(direction 0, speed 0xdc, 0xfa0 steps), then loop on GetStatus(0x80) until bit 7 is set; no timeout",
+  "motor_writes": "W c0=00, W 80=e1, W 84=b1, W c8=00, W 88=dc, W 89=c8, W 86=00 at 3.2 s",
+  "status_reads_page0": {
+   "0x69": 32,
+   "0x6b": 51103
+  },
+  "bit1_clear_until_ms": 3439.978,
+  "polls": 51135,
+  "interpretation": "bits 0-1 cleared while the motor ran (about 220 ms), bit 7 (sensor) never set; the loop only ended when the bridge cancelled at 360 s"
+ }
+}

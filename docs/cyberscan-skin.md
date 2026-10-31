@@ -1,14 +1,15 @@
 # CyberScan X
 
-CyberScan X is a modern front end for CyberView X. It runs in FRAME's Electron
-shell and scans with the PrimeFilm 1800 AFL through CyberView's own TWAIN driver,
-with CyberView's window hidden. The driver bridge, its evidence and its limits are
-in [cyberview-bridge.md](cyberview-bridge.md).
+CyberScan X runs in FRAME's Electron shell. It supports a direct AFL module
+backend for current-frame acquisition and the existing hidden CyberView TWAIN
+backend for batch/forward operation. See [native capture](native-scanner.md)
+and the [TWAIN bridge](cyberview-bridge.md) for evidence and limits.
 
 ## Run
 
 ```powershell
 npm run build:bridge   # once; x86 TWAIN bridge
+npm run build:native   # once; direct AFL module bridge
 npm run build          # web client
 npm run cyberscan      # Electron window, starts or attaches to the local service
 ```
@@ -47,6 +48,9 @@ That demo makes no network requests and cannot scan.
 - **Settings**: the CyberView settings that shape scans, scanner and bridge
   state, automatic recovery status, and Release scanner (closes the driver
   session so CyberView X itself can be opened).
+- **Native integration**: acknowledged, saved backend choice; passive installed
+  driver fingerprints and feature evidence. Native capture scans only the current
+  frame. Negative inversion and manual film-base references are nondestructive.
 
 ## Design
 

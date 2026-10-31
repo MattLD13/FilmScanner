@@ -98,6 +98,32 @@ The resulting design:
    then closes the driver properly. Before this fix an orphaned bridge kept the
    scanner.
 
+## USB watch: live preview and stuck detection (2026-10-31)
+
+`scan` and `serve` load the vendor `fvc.dll` first and patch its kernel32 imports
+(`services/native_bridge/usbtrace.h`); `services/cyberview_bridge/usbwatch.h` uses the
+callbacks. Nothing extra is sent to the scanner. `--no-usb-watch` turns it off and
+`--trace-usb PATH` also logs every call (see [scanner-protocol.md](scanner-protocol.md)).
+
+- **Live preview.** During the image pass the scanner streams one bulk read per line
+  (16-bit little-endian RGB). Lines are averaged 8 x 8 into 8-bit rows and printed as
+  `live_start` / `live` events by the main thread every 200 ms. Calibration and focus
+  passes (too narrow or under 96 lines) are not shown. The API relays them as
+  `cyberview_live_start` / `cyberview_live` and keeps the frame for
+  `GET /api/cyberview/live`; the viewer draws them stretched per channel and inverted
+  for negatives (`Film Type=0`). CyberView's TWAIN transfer, by contrast, arrives only
+  in the last seconds after CyberView has scanned the frame internally.
+- **Stuck detection.** SCAN08 waits for some sensors with no timeout. If the driver
+  only polls status for 30 s (500+ polls, no register write or bulk transfer), the
+  scan stops with `position_sensor`. The app asks for a power cycle and reseating the
+  film, and does not retry with a USB restart (that did not help on 2026-10-31). A
+  healthy traced scan never went more than 7.2 s without progress.
+
+Tests: `tests/scanner/test_usbwatch.py` (CPU-only harness, built with
+`build.ps1 -Tests`), `tests/api/test_cyberview.py` (live relay, sensor error), and
+`npm run test:live-preview` (browser, fake bridge, screenshot
+`docs/screenshots/cyberscan-live.png`).
+
 ## CyberView's settings file
 
 The driver rewrites the whole file when it closes, and it also rewrites it as

@@ -1,0 +1,1464 @@
+{
+  "evidence": "STATIC FILE BYTES ONLY; no DLL execution or physical I/O",
+  "tools": {
+    "pefile": "2024.8.26",
+    "capstone": "5.0.7"
+  },
+  "modules": [
+    {
+      "name": "SCAN08.dll",
+      "bytes": 118784,
+      "sha256": "da413438c0136338799cc7d49a14abae700e29feb7da1e993d4da1b8b5554b7f",
+      "machine": "0x14c",
+      "image_base": "0x10000000",
+      "versions": {
+        "Comments": "",
+        "CompanyName": "",
+        "FileDescription": "Scan08 DLL",
+        "FileVersion": "1, 0, 3, 6",
+        "InternalName": "Scan08",
+        "LegalCopyright": "Copyright (C) 2003",
+        "LegalTrademarks": "",
+        "OriginalFilename": "Scan08.DLL",
+        "PrivateBuild": "",
+        "ProductName": "Scan08 Dynamic Link Library",
+        "ProductVersion": "1, 0, 3, 6",
+        "SpecialBuild": ""
+      },
+      "exports": [
+        {
+          "name": "ScannerDeviceIO",
+          "va": "0x10015390",
+          "ordinal": 1
+        }
+      ],
+      "imports": [
+        "SQ_Scan.dll",
+        "MFC42.DLL",
+        "MSVCRT.dll",
+        "KERNEL32.dll",
+        "USER32.dll"
+      ]
+    },
+    {
+      "name": "CyberViewX.ds",
+      "bytes": 2916352,
+      "sha256": "bfe1bac8744320a41d23ee7b51b21b4e0e31004eea4a7a49a68b32b522fd28bb",
+      "machine": "0x14c",
+      "image_base": "0x10000000",
+      "versions": {
+        "CompanyName": "Manufacturer",
+        "FileDescription": "CyberViewX",
+        "FileVersion": "1, 4, 0, 0",
+        "InternalName": "CyberViewX",
+        "LegalCopyright": "Copyright c 2002",
+        "OriginalFilename": "CyberViewX.ds",
+        "ProductName": "CyberViewX",
+        "ProductVersion": "1, 4, 0, 0"
+      },
+      "exports": [
+        {
+          "name": "??0CIP_RawImg@@QAE@ABV0@@Z",
+          "va": "0x10027660",
+          "ordinal": 2
+        },
+        {
+          "name": "??0CIP_RawImg@@QAE@XZ",
+          "va": "0x10123bd0",
+          "ordinal": 3
+        },
+        {
+          "name": "??1CIP_RawImg@@UAE@XZ",
+          "va": "0x10123c30",
+          "ordinal": 4
+        },
+        {
+          "name": "??4CIP_RawImg@@QAEAAV0@ABV0@@Z",
+          "va": "0x10027760",
+          "ordinal": 5
+        },
+        {
+          "name": "??4tagK_IP_AUTOCOLOR_ADJUST@@QAEAAU0@ABU0@@Z",
+          "va": "0x10027910",
+          "ordinal": 6
+        },
+        {
+          "name": "??_7CIP_RawImg@@6B@",
+          "va": "0x101efea8",
+          "ordinal": 7
+        },
+        {
+          "name": "?bEmptyMemory@CIP_RawImg@@AAEHH@Z",
+          "va": "0x10124100",
+          "ordinal": 8
+        },
+        {
+          "name": "?iLoadBMPImg@CIP_RawImg@@QAEHV?$CStringT@DV?$StrTraitMFC@DV?$ChTraitsCRT@D@ATL@@@@@ATL@@@Z",
+          "va": "0x101250f0",
+          "ordinal": 9
+        },
+        {
+          "name": "?iLoadRAWImg@CIP_RawImg@@QAEHV?$CStringT@DV?$StrTraitMFC@DV?$ChTraitsCRT@D@ATL@@@@@ATL@@HHJJ@Z",
+          "va": "0x10123d70",
+          "ordinal": 10
+        },
+        {
+          "name": "?iMakeHistogram_Mean_Data@CIP_RawImg@@QAEHHHHPAM@Z",
+          "va": "0x101241e0",
+          "ordinal": 11
+        },
+        {
+          "name": "?iMakeHistogram_Mean_Data@CIP_RawImg@@QAEHUtagRECT@@HPAM@Z",
+          "va": "0x10124290",
+          "ordinal": 12
+        },
+        {
+          "name": "?iMakeHistogram_Mean_Data_RGB_Avg@CIP_RawImg@@QAEHHHHM@Z",
+          "va": "0x101249d0",
+          "ordinal": 13
+        },
+        {
+          "name": "?iMakeHistogram_Mean_Data_RGB_Avg@CIP_RawImg@@QAEHUtagRECT@@HM@Z",
+          "va": "0x10124a80",
+          "ordinal": 14
+        },
+        {
+          "name": "?iSetDefault_MakeHistogram_SkipHueValue@CIP_RawImg@@QAEHXZ",
+          "va": "0x10125470",
+          "ordinal": 15
+        },
+        {
+          "name": "?iSetRAWImgInfo@CIP_RawImg@@QAEHV?$CStringT@DV?$StrTraitMFC@DV?$ChTraitsCRT@D@ATL@@@@@ATL@@HHJJ@Z",
+          "va": "0x10123c60",
+          "ordinal": 16
+        },
+        {
+          "name": "?iSet_MakeHistogram_SkipHueValue@CIP_RawImg@@QAEHHH@Z",
+          "va": "0x101254b0",
+          "ordinal": 17
+        },
+        {
+          "name": "?iWriteRAWImg@CIP_RawImg@@QAEHV?$CStringT@DV?$StrTraitMFC@DV?$ChTraitsCRT@D@ATL@@@@@ATL@@@Z",
+          "va": "0x10123f90",
+          "ordinal": 18
+        },
+        {
+          "name": "DS_Entry",
+          "va": "0x10128a50",
+          "ordinal": 1
+        },
+        {
+          "name": "iComputeAutoColor",
+          "va": "0x10122ba0",
+          "ordinal": 19
+        }
+      ],
+      "imports": [
+        "imer.dll",
+        "mscms.dll",
+        "KERNEL32.dll",
+        "USER32.dll",
+        "GDI32.dll",
+        "comdlg32.dll",
+        "WINSPOOL.DRV",
+        "ADVAPI32.dll",
+        "SHELL32.dll",
+        "COMCTL32.dll",
+        "SHLWAPI.dll",
+        "oledlg.dll",
+        "ole32.dll",
+        "OLEAUT32.dll",
+        "DRAGPIE.dll"
+      ]
+    },
+    {
+      "name": "BeneScan.dll",
+      "bytes": 331776,
+      "sha256": "9c824bf80a34ab23faf16fee8af1ca0eb72255c704fcb6169f1ddb475dc09e77",
+      "machine": "0x14c",
+      "image_base": "0x10000000",
+      "versions": {
+        "Comments": "Disable Dynamic Alignment",
+        "FileDescription": "BeneScan DLL",
+        "FileVersion": "1, 5, 0, 0",
+        "InternalName": "BeneScan",
+        "LegalCopyright": "Copyright (C) 2002-2005",
+        "OriginalFilename": "BeneScan.DLL",
+        "ProductName": "BeneScan Dynamic Link Library",
+        "ProductVersion": "1, 5, 0, 0"
+      },
+      "exports": [
+        {
+          "name": "ScannerDeviceIO",
+          "va": "0x100118c0",
+          "ordinal": 1
+        }
+      ],
+      "imports": [
+        "KERNEL32.dll",
+        "USER32.dll",
+        "GDI32.dll",
+        "comdlg32.dll",
+        "WINSPOOL.DRV",
+        "ADVAPI32.dll",
+        "SHLWAPI.dll",
+        "OLEAUT32.dll"
+      ]
+    },
+    {
+      "name": "SysWOW64/SQ_Scan.dll",
+      "bytes": 106496,
+      "sha256": "55a865e7119608d0fbb9c0e7f8990acb061149e77cddb2c4a3df09cdda4f243f",
+      "machine": "0x14c",
+      "image_base": "0x10000000",
+      "versions": {
+        "Comments": "SQ Low Level Driver API",
+        "CompanyName": "SQ Tech",
+        "FileDescription": "SQ_Scan DLL",
+        "FileVersion": "1, 0, 0, 1",
+        "InternalName": "SQ_Scan",
+        "LegalCopyright": "Copyright (C) 2000 SQ Tech",
+        "LegalTrademarks": "",
+        "OriginalFilename": "SQ_Scan.DLL",
+        "PrivateBuild": "",
+        "ProductName": "SQ_Scan Dynamic Link Library",
+        "ProductVersion": "1, 0, 0, 1",
+        "SpecialBuild": ""
+      },
+      "exports": [
+        {
+          "name": "CloseScanner",
+          "va": "0x10001180",
+          "ordinal": 1
+        },
+        {
+          "name": "DrivingCapabilitySetting",
+          "va": "0x10002470",
+          "ordinal": 2
+        },
+        {
+          "name": "FastInitialAutoScan",
+          "va": "0x100027e0",
+          "ordinal": 3
+        },
+        {
+          "name": "GetAutoScanImage",
+          "va": "0x10002280",
+          "ordinal": 4
+        },
+        {
+          "name": "GetStatus",
+          "va": "0x10002310",
+          "ordinal": 5
+        },
+        {
+          "name": "MotorBackAccDec",
+          "va": "0x10001300",
+          "ordinal": 6
+        },
+        {
+          "name": "MotorBackNormal",
+          "va": "0x10001250",
+          "ordinal": 7
+        },
+        {
+          "name": "MotorMoveNormal",
+          "va": "0x100011b0",
+          "ordinal": 8
+        },
+        {
+          "name": "OpenScanner",
+          "va": "0x10001120",
+          "ordinal": 9
+        },
+        {
+          "name": "Quick1InitialAutoScan",
+          "va": "0x10002660",
+          "ordinal": 10
+        },
+        {
+          "name": "QuickInitialAutoScan",
+          "va": "0x100024d0",
+          "ordinal": 11
+        },
+        {
+          "name": "RamRWBulk",
+          "va": "0x100016c0",
+          "ordinal": 12
+        },
+        {
+          "name": "RamRWByte",
+          "va": "0x10001610",
+          "ordinal": 13
+        },
+        {
+          "name": "SafeInitialChip",
+          "va": "0x100022a0",
+          "ordinal": 14
+        },
+        {
+          "name": "SetADC",
+          "va": "0x10001aa0",
+          "ordinal": 15
+        },
+        {
+          "name": "SetAutoScan",
+          "va": "0x10002110",
+          "ordinal": 16
+        },
+        {
+          "name": "SetCCDPixelNumber",
+          "va": "0x100018f0",
+          "ordinal": 17
+        },
+        {
+          "name": "SetCCDTiming",
+          "va": "0x10001930",
+          "ordinal": 18
+        },
+        {
+          "name": "SetGPIO",
+          "va": "0x10001890",
+          "ordinal": 19
+        },
+        {
+          "name": "SetImageBufferRange",
+          "va": "0x10002060",
+          "ordinal": 20
+        },
+        {
+          "name": "SetLamp",
+          "va": "0x10001780",
+          "ordinal": 21
+        },
+        {
+          "name": "SetLineOffset",
+          "va": "0x10001b70",
+          "ordinal": 22
+        },
+        {
+          "name": "SetMotorAccDecFormula",
+          "va": "0x10001390",
+          "ordinal": 23
+        },
+        {
+          "name": "SetMotorType",
+          "va": "0x10001550",
+          "ordinal": 24
+        },
+        {
+          "name": "SetPowerSave",
+          "va": "0x10001850",
+          "ordinal": 25
+        },
+        {
+          "name": "SetScanAccDecFormula",
+          "va": "0x10001450",
+          "ordinal": 26
+        },
+        {
+          "name": "StopAutoScan",
+          "va": "0x100022a0",
+          "ordinal": 27
+        },
+        {
+          "name": "WriteTable",
+          "va": "0x10001c40",
+          "ordinal": 28
+        }
+      ],
+      "imports": [
+        "IO_PORT.dll",
+        "KERNEL32.dll",
+        "USER32.dll",
+        "GDI32.dll",
+        "WINSPOOL.DRV",
+        "ADVAPI32.dll",
+        "COMCTL32.dll"
+      ]
+    },
+    {
+      "name": "SysWOW64/IO_PORT.DLL",
+      "bytes": 106496,
+      "sha256": "768442427b7bbf28c7df8fd9d26b6ca5d6f6d76fa12922a6e7006a2bf2cf9e21",
+      "machine": "0x14c",
+      "image_base": "0x10000000",
+      "versions": {
+        "CompanyName": "",
+        "FileDescription": "USB_IO_PORT DLL",
+        "FileVersion": "1, 0, 0, 1",
+        "InternalName": "USB_IO_PORT",
+        "LegalCopyright": "Copyright (C) 1999",
+        "LegalTrademarks": "",
+        "OriginalFilename": "USB_IO_PORT.DLL",
+        "ProductName": "USB_IO_PORT Dynamic Link Library",
+        "ProductVersion": "1, 0, 0, 1"
+      },
+      "exports": [
+        {
+          "name": "CloseTransferPort",
+          "va": "0x10001310",
+          "ordinal": 1
+        },
+        {
+          "name": "GetIOPortVersion",
+          "va": "0x100020a0",
+          "ordinal": 2
+        },
+        {
+          "name": "IOPortGeneralPurposeFunction",
+          "va": "0x100025d0",
+          "ordinal": 3
+        },
+        {
+          "name": "OpenTransferPort",
+          "va": "0x10001170",
+          "ordinal": 4
+        },
+        {
+          "name": "USB_UsbCleanBuffer",
+          "va": "0x10001920",
+          "ordinal": 5
+        },
+        {
+          "name": "general_Decompress",
+          "va": "0x10002080",
+          "ordinal": 6
+        },
+        {
+          "name": "general_ReadLine",
+          "va": "0x10001dd0",
+          "ordinal": 7
+        },
+        {
+          "name": "general_ReadSPPStatusPort",
+          "va": "0x100014c0",
+          "ordinal": 8
+        },
+        {
+          "name": "general_ReceiveData",
+          "va": "0x10001910",
+          "ordinal": 9
+        },
+        {
+          "name": "general_SendData",
+          "va": "0x100017e0",
+          "ordinal": 10
+        },
+        {
+          "name": "general_SendMultiCommand",
+          "va": "0x10002020",
+          "ordinal": 11
+        },
+        {
+          "name": "general_SetupCompressParameter",
+          "va": "0x10002040",
+          "ordinal": 12
+        },
+        {
+          "name": "general_StopCompress",
+          "va": "0x10002060",
+          "ordinal": 13
+        },
+        {
+          "name": "general_WriteEPPAddressPort",
+          "va": "0x10001700",
+          "ordinal": 14
+        },
+        {
+          "name": "general_WriteLine",
+          "va": "0x10001fc0",
+          "ordinal": 15
+        },
+        {
+          "name": "general_WriteSPPControlPort",
+          "va": "0x10001650",
+          "ordinal": 16
+        },
+        {
+          "name": "general_WriteSPPDataPort",
+          "va": "0x10001590",
+          "ordinal": 17
+        }
+      ],
+      "imports": [
+        "fvc.dll",
+        "SQ1394.DLL",
+        "KERNEL32.dll",
+        "USER32.dll",
+        "GDI32.dll",
+        "WINSPOOL.DRV",
+        "ADVAPI32.dll",
+        "COMCTL32.dll"
+      ]
+    },
+    {
+      "name": "SysWOW64/FVC.DLL",
+      "bytes": 102400,
+      "sha256": "bbd02aed88e1a7555b88de51bddec2afba5c4aef5ff24e645a9bd3418413e622",
+      "machine": "0x14c",
+      "image_base": "0x10000000",
+      "versions": {},
+      "exports": [
+        {
+          "name": "FVCBypass",
+          "va": "0x10001ee0",
+          "ordinal": 1
+        },
+        {
+          "name": "FVCConfiguration",
+          "va": "0x10001f90",
+          "ordinal": 2
+        },
+        {
+          "name": "FVCDecompress",
+          "va": "0x100020e0",
+          "ordinal": 3
+        },
+        {
+          "name": "FVCReset",
+          "va": "0x10001e20",
+          "ordinal": 4
+        },
+        {
+          "name": "FVCStopCompress",
+          "va": "0x10001f50",
+          "ordinal": 5
+        },
+        {
+          "name": "ReadRegData",
+          "va": "0x10001a10",
+          "ordinal": 6
+        },
+        {
+          "name": "SystemRequest",
+          "va": "0x10001bc0",
+          "ordinal": 7
+        },
+        {
+          "name": "WriteRegData",
+          "va": "0x100019d0",
+          "ordinal": 8
+        },
+        {
+          "name": "closeusb",
+          "va": "0x10001ba0",
+          "ordinal": 9
+        },
+        {
+          "name": "openusb",
+          "va": "0x10001af0",
+          "ordinal": 10
+        },
+        {
+          "name": "usbinp",
+          "va": "0x10001de0",
+          "ordinal": 11
+        },
+        {
+          "name": "usboutp",
+          "va": "0x10001db0",
+          "ordinal": 12
+        }
+      ],
+      "imports": [
+        "KERNEL32.dll",
+        "USER32.dll",
+        "ADVAPI32.dll"
+      ]
+    }
+  ],
+  "verification": {
+    "hash_gate": "passed",
+    "wrapper_calls_checked": 33
+  },
+  "calling_convention": {
+    "export": "ScannerDeviceIO",
+    "va": "0x10015390",
+    "prototype": "int __cdecl ScannerDeviceIO(int selector, void *parameter)",
+    "evidence": "stack arguments [EBP+8], [EBP+C], plain RET at 0x10015614",
+    "entry_instructions": [
+      "10015390 push ebp",
+      "10015391 mov ebp, esp",
+      "10015393 push ecx",
+      "10015394 cmp dword ptr [0x10018b98], 0",
+      "1001539b je 0x100153a7",
+      "1001539d push 0xa",
+      "1001539f call dword ptr [0x10017014]",
+      "100153a5 jmp 0x10015394",
+      "100153a7 mov eax, dword ptr [ebp + 8]",
+      "100153aa mov dword ptr [ebp - 4], eax"
+    ],
+    "return_instructions": [
+      "1001560f xor eax, eax",
+      "10015611 mov esp, ebp",
+      "10015613 pop ebp",
+      "10015614 ret "
+    ]
+  },
+  "notification_callbacks": {
+    "selector": 20,
+    "dispatcher_va": "0x100116dd",
+    "pointers_va": [
+      "0x10018d58",
+      "0x10018d5c",
+      "0x10018d60"
+    ],
+    "phase_flags_va": [
+      "0x10018d64",
+      "0x10018d66",
+      "0x10018d68"
+    ],
+    "initial_pointer_values": [
+      0,
+      0,
+      0
+    ],
+    "initial_phase_flags": [
+      0,
+      0,
+      0
+    ],
+    "semantics": "Optional begin/end/progress callbacks. Fresh module with all-null pointers leaves all phase flags zero, so callbacks may be omitted.",
+    "caution": "Final phase cleanup has no null guard on end pointer; never register begin without a valid matching end callback."
+  },
+  "required_film_state_initialization": {
+    "selector": 21,
+    "parameter": "uint32[2] = {0x1f, 0}",
+    "status_reader_va": "0x100135f5",
+    "film_type_global_va": "0x10018b82",
+    "initial_film_type": 0,
+    "require_loaded_strip_mask": "0x04",
+    "observed_loaded_status": "0x0e",
+    "observed_empty_status": "0x08",
+    "rationale": "Selectors3/5 do not populate film type. Scan core uses this global to choose strip/mount calibration and transport; query before scanning.",
+    "warning": "Do not use old simulator bit0 interpretation for this genuine build"
+  },
+  "unset_negative_media_color_failure": {
+    "classification": "STATIC causal explanation; corrected physical acquisition not yet verified",
+    "exposure_routine_va": "0x10010ee9",
+    "film_type_guard_va": "0x1001100a",
+    "negative_guard_va": "0x1001100f",
+    "green_integer_divisions_va": [
+      "0x10011048",
+      "0x10011050"
+    ],
+    "blue_integer_divisions_va": [
+      "0x1001106c",
+      "0x10011074"
+    ],
+    "condition": "film type !=5 and negative flag !=0",
+    "red_formula": "(red_balance //100) *0.65",
+    "green_formula": "(green_balance //100) //3",
+    "blue_formula": "(blue_balance //100) //3",
+    "default_balance100_result": [
+      0.65,
+      0,
+      0
+    ],
+    "normal_strip_branch": "float RGB balance/100 times per-channel coefficients; avoids integer-zero branch",
+    "red_coefficient_from_pe": 0.65,
+    "branch_instructions": [
+      "10011002 xor ecx, ecx",
+      "10011004 mov cl, byte ptr [0x10018b82]",
+      "1001100a cmp ecx, 5",
+      "1001100d je 0x10011084",
+      "1001100f cmp dword ptr [0x10018b90], 0",
+      "10011016 je 0x10011084",
+      "10011018 xor eax, eax",
+      "1001101a mov ax, word ptr [0x1001821a]",
+      "10011020 cdq ",
+      "10011021 mov ecx, 0x64",
+      "10011026 idiv ecx",
+      "10011028 mov dword ptr [ebp - 0xc], eax",
+      "1001102b fild dword ptr [ebp - 0xc]",
+      "1001102e fmul qword ptr [0x100173a8]",
+      "10011034 fstp dword ptr [0x10018900]",
+      "1001103a xor eax, eax",
+      "1001103c mov ax, word ptr [0x1001821c]",
+      "10011042 cdq ",
+      "10011043 mov ecx, 0x64",
+      "10011048 idiv ecx",
+      "1001104a cdq ",
+      "1001104b mov ecx, 3",
+      "10011050 idiv ecx",
+      "10011052 mov dword ptr [ebp - 0x10], eax",
+      "10011055 fild dword ptr [ebp - 0x10]",
+      "10011058 fstp dword ptr [0x100188fc]",
+      "1001105e xor eax, eax",
+      "10011060 mov ax, word ptr [0x1001821e]",
+      "10011066 cdq ",
+      "10011067 mov ecx, 0x64",
+      "1001106c idiv ecx",
+      "1001106e cdq ",
+      "1001106f mov ecx, 3",
+      "10011074 idiv ecx",
+      "10011076 mov dword ptr [ebp - 0x14], eax",
+      "10011079 fild dword ptr [ebp - 0x14]",
+      "1001107c fstp dword ptr [0x100188f8]",
+      "10011082 jmp 0x100110ab",
+      "10011084 xor edx, edx",
+      "10011086 mov dx, word ptr [0x1001821e]",
+      "1001108d mov dword ptr [ebp - 0x18], edx",
+      "10011090 fild dword ptr [ebp - 0x18]",
+      "10011093 fdiv dword ptr [0x10017338]",
+      "10011099 fst dword ptr [0x100188f8]",
+      "1001109f fmul dword ptr [0x100173a4]",
+      "100110a5 fstp dword ptr [0x100188f8]"
+    ]
+  },
+  "selectors": [
+    {
+      "selector": 1,
+      "wrapper_va": "0x100156b9",
+      "implementation_va": "0x1000561b",
+      "meaning": "allocate CPU buffers",
+      "risk": "CPU only",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 2,
+      "wrapper_va": "0x100156c8",
+      "implementation_va": "0x10005625",
+      "meaning": "free CPU buffers",
+      "risk": "CPU only; not device disconnect",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 3,
+      "wrapper_va": "0x100156d7",
+      "implementation_va": "0x1000562f",
+      "meaning": "detect and initialize registers",
+      "risk": "device writes",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 4,
+      "wrapper_va": "0x100156e8",
+      "implementation_va": "0x1000572c",
+      "meaning": "unsupported/sets error 0x20881",
+      "risk": "no demonstrated use",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 5,
+      "wrapper_va": "0x100156f9",
+      "implementation_va": "0x1000573d",
+      "meaning": "open, firmware query, homing and lamp",
+      "risk": "may move motor",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 6,
+      "wrapper_va": "0x10015800",
+      "implementation_va": "0x100064ea",
+      "meaning": "firmware/SDK string",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 7,
+      "wrapper_va": null,
+      "implementation_va": null,
+      "meaning": "returns success without action",
+      "risk": "no-op",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 8,
+      "wrapper_va": "0x10015720",
+      "implementation_va": "0x10005957",
+      "meaning": "load/eject positioning path",
+      "risk": "motor",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 9,
+      "wrapper_va": "0x1001573b",
+      "implementation_va": "0x10005aab",
+      "meaning": "frame advance/reverse",
+      "risk": "motor; forward observed separately",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 10,
+      "wrapper_va": "0x1001574c",
+      "implementation_va": "0x10005cfb",
+      "meaning": "bounded incremental positioning",
+      "risk": "motor",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 11,
+      "wrapper_va": "0x1001577a",
+      "implementation_va": "0x10005e11",
+      "meaning": "long travel/eject via count 99",
+      "risk": "motor",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 12,
+      "wrapper_va": "0x1001578b",
+      "implementation_va": "0x10005ea6",
+      "meaning": "current frame state",
+      "risk": "device status",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 13,
+      "wrapper_va": "0x1001579c",
+      "implementation_va": "0x10005f06",
+      "meaning": "frame capacity/status; strip returns 40",
+      "risk": "device status",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 14,
+      "wrapper_va": "0x100157d9",
+      "implementation_va": "0x10005f91",
+      "meaning": "autofocus measurement",
+      "risk": "scan and focus",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 15,
+      "wrapper_va": "0x100157ad",
+      "implementation_va": "0x10005f70",
+      "meaning": "get saved focus step",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 16,
+      "wrapper_va": "0x100157c3",
+      "implementation_va": "0x10005f82",
+      "meaning": "set saved focus step",
+      "risk": "CPU state; next scan applies motor focus",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 17,
+      "wrapper_va": "0x10015827",
+      "implementation_va": "0x100066a3",
+      "meaning": "film base/minimum-density measurement",
+      "risk": "scan and positioning",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 18,
+      "wrapper_va": "0x100157ea",
+      "implementation_va": "0x100064da",
+      "meaning": "get last error",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 19,
+      "wrapper_va": "0x10015838",
+      "implementation_va": "0x10006ea9",
+      "meaning": "scan core with 0x48-byte block",
+      "risk": "scan and calibration",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 20,
+      "wrapper_va": "0x10015849",
+      "implementation_va": "0x10006e82",
+      "meaning": "store three notification fields",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 21,
+      "wrapper_va": "0x10015816",
+      "implementation_va": "0x1000655d",
+      "meaning": "masked status flags",
+      "risk": "device status",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 22,
+      "wrapper_va": "0x1001570a",
+      "implementation_va": "0x100057c0",
+      "meaning": "length-prefixed capabilities, maximum 0x85",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 23,
+      "wrapper_va": "0x1001585f",
+      "implementation_va": "0x1000687d",
+      "meaning": "automatic frame border alignment",
+      "risk": "scan and motor",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 24,
+      "wrapper_va": "0x10015869",
+      "implementation_va": "0x10006dec",
+      "meaning": "model code 0x25",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 25,
+      "wrapper_va": null,
+      "implementation_va": null,
+      "meaning": "returns success without action",
+      "risk": "no-op",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 26,
+      "wrapper_va": "0x100158b7",
+      "implementation_va": null,
+      "meaning": "returns success without action",
+      "risk": "no-op",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 27,
+      "wrapper_va": "0x1001587f",
+      "implementation_va": "0x10006e64",
+      "meaning": "minimum density then border alignment",
+      "risk": "scan and motor",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 32,
+      "wrapper_va": "0x10015890",
+      "implementation_va": "0x10007383",
+      "meaning": "flags plus 0x48-byte scan request",
+      "risk": "scan and calibration",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 33,
+      "wrapper_va": "0x100158a1",
+      "implementation_va": "0x100076e8",
+      "meaning": "read saved RGB balance",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 35,
+      "wrapper_va": "0x100158c1",
+      "implementation_va": null,
+      "meaning": "extended capability block",
+      "risk": "CPU state",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 1001,
+      "wrapper_va": "0x10015986",
+      "implementation_va": "0x10007b74",
+      "meaning": "low-level motor command",
+      "risk": "motor; disabled",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 1002,
+      "wrapper_va": "0x1001599c",
+      "implementation_va": "0x10007b85",
+      "meaning": "start diagnostic line scan",
+      "risk": "scan; disabled",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 1003,
+      "wrapper_va": "0x100159ca",
+      "implementation_va": "0x10007b9a",
+      "meaning": "low-level control sequence",
+      "risk": "device writes; disabled",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 1004,
+      "wrapper_va": "0x100159d9",
+      "implementation_va": "0x10007ba4",
+      "meaning": "apply saved focus",
+      "risk": "motor; disabled",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 1005,
+      "wrapper_va": "0x100159b2",
+      "implementation_va": "0x10007b85",
+      "meaning": "read diagnostic line",
+      "risk": "acquisition; disabled",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 1006,
+      "wrapper_va": "0x100159e8",
+      "implementation_va": "0x10007b85",
+      "meaning": "stop diagnostic line scan",
+      "risk": "device writes; disabled",
+      "confidence": "STATIC; no new hardware verification"
+    },
+    {
+      "selector": 1007,
+      "wrapper_va": "0x100159fe",
+      "implementation_va": "0x10007bb8",
+      "meaning": "read SQ status register 3",
+      "risk": "device query; disabled",
+      "confidence": "STATIC; no new hardware verification"
+    }
+  ],
+  "scan_contract": {
+    "selector": 32,
+    "size": 76,
+    "flags_offset": 0,
+    "block_offset": 4,
+    "fields_relative_to_block": {
+      "dpi_u16": 0,
+      "left_top_right_bottom_float32": 4,
+      "mode_u32": 20,
+      "exposure_rgb_u16": 24,
+      "highlight_rgb_u16": 30,
+      "lut_rgb_pointers32": 36,
+      "shadow_rgb_u8": 48,
+      "scan_options_u8": 51,
+      "film_media_option_u8": 53,
+      "callback32": 64,
+      "max_strip_lines_u32": 68
+    },
+    "lut": "Three 4096-entry uint16 tables; modes5/7 expand each value <<4 to16 consecutive slots",
+    "geometry": "Absolute right/bottom edges in inches, clamped to2586x1708 at1800 dpi; X mirrored internally",
+    "callback_fields": {
+      "dpi_u32": 0,
+      "mode_u32": 4,
+      "width_u32": 8,
+      "height_u32": 12,
+      "reserved_u32": 16,
+      "lines_u32": 20,
+      "abort_u32": 24,
+      "last_u32": 28,
+      "data_pointer32": 32,
+      "transfer_result_u32": 36,
+      "remaining_lines_u32": 40
+    },
+    "callback_warning": "+0x28 is remaining lines, not bytes per line; stride derives from mode and width",
+    "addresses": {
+      "core": "0x10006ea9",
+      "geometry": "0x100110af",
+      "lut": "0x10011909"
+    }
+  },
+  "usb_identity": {
+    "probe_va": "0x1000831a",
+    "descriptor_ioctl": "0x80002018",
+    "accepted_pairs": [
+      "2770:0119",
+      "1606:F000",
+      "05DA:00CD",
+      "2770:011A",
+      "2770:011B"
+    ],
+    "warning": "Only2770:0119 matches existing physical project evidence; alternatives are static acceptance tests only"
+  },
+  "settings": [
+    {
+      "key": "Save Raw When Scan",
+      "instances": [
+        {
+          "string_va": "0x101eae24",
+          "immediate_reference_va": [
+            "0x10022c7a"
+          ]
+        },
+        {
+          "string_va": "0x101ecec4",
+          "immediate_reference_va": [
+            "0x10027224"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Width of Raw",
+      "instances": [
+        {
+          "string_va": "0x101eae48",
+          "immediate_reference_va": [
+            "0x10022c9a"
+          ]
+        },
+        {
+          "string_va": "0x101ecee8",
+          "immediate_reference_va": [
+            "0x10027294"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Height of Raw",
+      "instances": [
+        {
+          "string_va": "0x101eae68",
+          "immediate_reference_va": [
+            "0x10022cba"
+          ]
+        },
+        {
+          "string_va": "0x101ecf08",
+          "immediate_reference_va": [
+            "0x100272bc"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Write Log",
+      "instances": [
+        {
+          "string_va": "0x101eae88",
+          "immediate_reference_va": [
+            "0x10022ce2"
+          ]
+        },
+        {
+          "string_va": "0x101ec2f8",
+          "immediate_reference_va": [
+            "0x100246d4"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "MultiSample Pass",
+      "instances": [
+        {
+          "string_va": "0x101ea0b4",
+          "immediate_reference_va": [
+            "0x10021e02"
+          ]
+        },
+        {
+          "string_va": "0x101eb560",
+          "immediate_reference_va": [
+            "0x1002370e"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Multi Scan",
+      "instances": [
+        {
+          "string_va": "0x101eae08",
+          "immediate_reference_va": [
+            "0x10022c5a"
+          ]
+        },
+        {
+          "string_va": "0x101ec2dc",
+          "immediate_reference_va": [
+            "0x100246ab"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Manual Set Focus",
+      "instances": [
+        {
+          "string_va": "0x101eabdc",
+          "immediate_reference_va": [
+            "0x10022a02"
+          ]
+        },
+        {
+          "string_va": "0x101ec0b0",
+          "immediate_reference_va": [
+            "0x10024444"
+          ]
+        },
+        {
+          "string_va": "0x101eca24",
+          "immediate_reference_va": [
+            "0x10026c54"
+          ]
+        },
+        {
+          "string_va": "0x101eca4c",
+          "immediate_reference_va": [
+            "0x10026cb2"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Enable DMin",
+      "instances": [
+        {
+          "string_va": "0x101eac04",
+          "immediate_reference_va": [
+            "0x10022a2a"
+          ]
+        },
+        {
+          "string_va": "0x101ec0d8",
+          "immediate_reference_va": [
+            "0x1002446d"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Manual Set Scan Area",
+      "instances": [
+        {
+          "string_va": "0x101eab00",
+          "immediate_reference_va": [
+            "0x10022912"
+          ]
+        },
+        {
+          "string_va": "0x101ebfd4",
+          "immediate_reference_va": [
+            "0x10024328"
+          ]
+        },
+        {
+          "string_va": "0x101ec8b4",
+          "immediate_reference_va": [
+            "0x10026934"
+          ]
+        },
+        {
+          "string_va": "0x101ec8e0",
+          "immediate_reference_va": [
+            "0x10026992"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Is SmartTest",
+      "instances": [
+        {
+          "string_va": "0x101eabb8",
+          "immediate_reference_va": [
+            "0x100229da"
+          ]
+        },
+        {
+          "string_va": "0x101ec08c",
+          "immediate_reference_va": [
+            "0x100243f5"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "For QA Use",
+      "instances": [
+        {
+          "string_va": "0x101eaea4",
+          "immediate_reference_va": [
+            "0x10022d0a"
+          ]
+        },
+        {
+          "string_va": "0x101ec314",
+          "immediate_reference_va": [
+            "0x100246fd"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Enable ICE",
+      "instances": [
+        {
+          "string_va": "0x101eac24",
+          "immediate_reference_va": [
+            "0x10022a52"
+          ]
+        },
+        {
+          "string_va": "0x101ec0f8",
+          "immediate_reference_va": [
+            "0x10024496"
+          ]
+        },
+        {
+          "string_va": "0x101ee4e8",
+          "immediate_reference_va": [
+            "0x100482cd"
+          ]
+        },
+        {
+          "string_va": "0x101fcefc",
+          "immediate_reference_va": [
+            "0x1016840c"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Auto Exposure",
+      "instances": [
+        {
+          "string_va": "0x101ea178",
+          "immediate_reference_va": [
+            "0x10021ed6"
+          ]
+        },
+        {
+          "string_va": "0x101eb904",
+          "immediate_reference_va": [
+            "0x10023a6b"
+          ]
+        },
+        {
+          "string_va": "0x101fa76c",
+          "immediate_reference_va": [
+            "0x10140fca"
+          ]
+        },
+        {
+          "string_va": "0x101fa990",
+          "immediate_reference_va": [
+            "0x10142571"
+          ]
+        },
+        {
+          "string_va": "0x101fb1f0",
+          "immediate_reference_va": [
+            "0x10144dea"
+          ]
+        },
+        {
+          "string_va": "0x101fb4e4",
+          "immediate_reference_va": [
+            "0x10146c7a"
+          ]
+        },
+        {
+          "string_va": "0x101fc194",
+          "immediate_reference_va": [
+            "0x10150a3a"
+          ]
+        },
+        {
+          "string_va": "0x101fce04",
+          "immediate_reference_va": [
+            "0x101682b0"
+          ]
+        },
+        {
+          "string_va": "0x101fd228",
+          "immediate_reference_va": [
+            "0x1016a4ea"
+          ]
+        },
+        {
+          "string_va": "0x101fd6a4",
+          "immediate_reference_va": [
+            "0x1016e95a"
+          ]
+        },
+        {
+          "string_va": "0x101fe2ac",
+          "immediate_reference_va": [
+            "0x1017804a"
+          ]
+        },
+        {
+          "string_va": "0x101fe6e4",
+          "immediate_reference_va": [
+            "0x1017b03a"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Film Term Name",
+      "instances": [
+        {
+          "string_va": "0x101e9c58",
+          "immediate_reference_va": [
+            "0x10021908"
+          ]
+        },
+        {
+          "string_va": "0x101eb0bc",
+          "immediate_reference_va": [
+            "0x10023065"
+          ]
+        },
+        {
+          "string_va": "0x101ecabc",
+          "immediate_reference_va": [
+            "0x10026dc9"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    },
+    {
+      "key": "Scan Depth",
+      "instances": [
+        {
+          "string_va": "0x101ea7b4",
+          "immediate_reference_va": [
+            "0x1002249e"
+          ]
+        },
+        {
+          "string_va": "0x101ebc90",
+          "immediate_reference_va": [
+            "0x10023df1"
+          ]
+        }
+      ],
+      "classification": "STATIC setting name/reference; effect not verified"
+    }
+  ],
+  "diagnostic_raw_pipeline": {
+    "classification": "STATIC reachable code, never enabled or physically tested in this pass",
+    "getter_va": "0x10027210",
+    "open_files_va": "0x1001fc90",
+    "write_stage_va": "0x10020320",
+    "close_preserve_delete_va": "0x1001ff60",
+    "files": [
+      {
+        "name": "1_Raw.raw",
+        "string_va": "0x101e9a98"
+      },
+      {
+        "name": "2_AfterFT.raw",
+        "string_va": "0x101e9aa4"
+      },
+      {
+        "name": "3_AfterAG.raw",
+        "string_va": "0x101e9ab4"
+      },
+      {
+        "name": "4_AfterUC.raw",
+        "string_va": "0x101e9ac4"
+      },
+      {
+        "name": "5_raw.log",
+        "string_va": "0x101e9af0"
+      }
+    ],
+    "warning": "Image processing stage dumps; filenames do not establish untouched sensor data"
+  }
+}

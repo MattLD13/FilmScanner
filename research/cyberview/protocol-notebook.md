@@ -14,6 +14,11 @@ been acquired. All shipped communication logs are labeled with their true source
 | USB wire | None from vendor software/hardware | Descriptors, actual initialization, status or frame payloads |
 | Laboratory transport | Real loopback USB/IP management traffic; QEMU infrastructure smoke | Windows USB enumeration or CyberView detection |
 
+2026-10-30 addendum: the USB wire format and the SQ_Scan register map are now
+reconstructed statically in [docs/scanner-protocol.md](../../docs/scanner-protocol.md),
+and both bridges can record a passive trace of FVC.dll's usbscan calls
+(`--trace-usb`). No trace of the physical scanner has been captured yet.
+
 ## Identification
 
 `INF_*/PF1800U.INF` and PF1800U.dll `0x10001cb0` agree on `05e3:0120`. The

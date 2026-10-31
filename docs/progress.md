@@ -1,6 +1,111 @@
 # FRAME implementation progress
 
-Updated 2026-10-27. FRAME_SPEC.md remains authoritative.
+Updated 2026-10-30. FRAME_SPEC.md remains authoritative.
+
+## 35 mm auto-align and the DLL chain, October 30, 2026 (night)
+
+- `services/imaging/frame_align.py`: phase-correlation stitching of nudged scans with
+  exposure matching and feathered blending; gap-based frame detection (bare base,
+  uniform down the frame) in either polarity; exact 36 × 24 mm crop with ±2 mm bleed
+  and skew. API: `GET/PUT /api/cyberview/align`, `POST .../captures/{id}/auto-align`,
+  `POST /api/cyberview/stitched-scan` (self-calibrating 3-scan capture). UI: Auto align
+  35 mm, bleed, align new scans automatically, Stitched scan (only when enabled).
+- Native bridge: `film nudge back|forward N` (selector 10, 1–300 steps, frame must not
+  change), allow-listed only. Not in `native_validation.json`, so stitched scans are off.
+- Real library scans: gap found on 3 of 8 (1.2–1.45 mm); an early single-edge version
+  locked onto the previous frame's sliver on 2 of them, fixed and kept as a regression test.
+- [scan08-feature-catalog.md](scan08-feature-catalog.md) now lists every DLL CyberView X
+  uses to reach the scanner; only SCAN08 (detection) and FVC (all traffic) touch it.
+- Validation: `python -m pytest -q` → 169 passed, 2 known-bug expected failures;
+  lint, build, test:skin, test:native-ui, test:e2e and test:desktop (7) passed. No scanner use.
+  Details: [auto-align.md](auto-align.md).
+
+## SCAN08.dll feature catalogue and native setup review, October 30, 2026 (night)
+
+Static analysis only; no vendor code was run and the scanner was not used.
+
+- `research/cyberview/analysis/scan08_catalog.py` reads ScannerDeviceIO's two jump
+  tables and follows every command's call graph. Result: 37 implemented selectors,
+  5 reserved, SQ_Scan 28 exports (21 used; `SafeInitialChip` is the same function
+  as `StopAutoScan`), IO_PORT 17, FVC 12. Evidence:
+  `research/cyberview/analysis/evidence/scan08-catalog-2026-10-30.json`.
+- New findings: a 10 ms busy-wait on every call while scanning threads run;
+  selector 32 flag bit 0 is vendor auto exposure (bits 1–6 rejected); a RAM
+  self-test with a modal "RAM Test ERROR!" box on every scanning path; the
+  always-on `%TEMP%\PF1800AFL.log`; the `AFLScanner.CFG` calibration cache;
+  meanings of selectors 4, 6, 12, 13, 18, 33 and 35; dormant `c:\bartinfo` factory
+  output; unused FireWire, parallel-port and registry-writing compression paths.
+- [scan08-feature-catalog.md](scan08-feature-catalog.md) records every feature, its
+  scanner effect, evidence and recommended use, with a roadmap.
+- Native setup fixes: the missing evidence record
+  [cyberview-parity.md](cyberview-parity.md) (restates `native_validation.json`; those
+  runs were ChatGPT's and have no raw trace in the repository); native docs, the
+  helper README and `aflbridge --describe` now match the enabled controls; the
+  Settings feature list is derived from the validation file; Settings shows passive
+  scanner diagnostics from the vendor log (model 37, CCD 533, firmware 4, lamp 65);
+  the scanner-controls panel shows only working controls.
+- Validation: `python -m pytest -q` → 156 passed, 2 known-bug expected failures
+  (3 new vendor-log tests). `npm run lint`, `npm run build`, `npm run test:skin`,
+  `npm run test:native-ui`, `npm run test:e2e`, `npm run test:desktop` (7) passed;
+  `build.ps1 -Fixtures` rebuilt the native helper.
+
+## Native AFL integration, October 30, 2026
+
+**Result: real direct-module current-frame RGB capture works. Complete independent
+USB reverse engineering and native roll transport are not complete.**
+
+- Inspected the existing CyberScan X implementation and genuine installed MF
+  build. Recovered 37 model selectors, 33 wrapper calls, actual request/strip
+  layouts, firmware/CCD/log paths and hidden processing-stage dumps. Reproducible
+  static evidence is in `research/cyberview/installed-native-investigation.md`.
+- Built a hash-pinned x86 direct `SCAN08.dll` host, bypassing TWAIN and CyberView's
+  window while retaining vendor calibration and USB libraries. Unknown commands,
+  native transport and other unverified controls remain disabled.
+- The user approved native initialization and a current-frame experiment with
+  expendable film. First prototype delivered a full red-only frame. Static
+  analysis found the omitted film-status latch and the exact green/blue integer
+  division failure. Corrected preflight requires a loaded strip before scanning.
+- The corrected actual-device capture delivered 49 genuine strips, 2479×1703 RGB,
+  16-bit containers, maxima R/G/B 50160/36800/23792. The helper exited normally.
+  Low four bits were zero; effective precision and color accuracy remain unknown.
+  Original bytes and full traces are preserved locally, not tracked in Git. A
+  hash-verified copy is in the local library as **Native integration test**.
+- CyberScan X settings now provide a saved, acknowledged interface choice,
+  passive binary fingerprints and feature evidence. Native supports one current
+  frame. Negative inversion and explicit RGB film-base references are separate
+  from immutable originals. TWAIN forward/batch capture remains available.
+- Independent review found and verified fixes for cancellation before dispatch,
+  EOF/full queues, simultaneous starts, reset ownership and nonresponsive native
+  calls. Stuck native sessions request cancellation and remain reserved rather
+  than being force-killed or automatically reset.
+
+Executed validation:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File services/native_bridge/build.ps1 -Fixtures` passed; synthetic native suite **18 passed**.
+- `npm run build:bridge` passed; `npm run lint` and `npm run build` passed.
+- `python -m pytest -q` → **144 passed, 2 expected failures in 32.73 seconds**.
+  The two pre-existing expected failures concern sparse frame imports and
+  simulator prescan ownership; they remain separate backlog issues.
+- `npm run test:e2e` passed the 36-frame workflow and 16-bit export inspection.
+- `npm run test:native-ui` passed the actual browser workflow against a synthetic
+  pipe helper: native choice, current-frame-only controls, capture provenance,
+  inversion, film base, immutable original, 16-bit export and return to TWAIN.
+- `npm run test:skin` passed desktop/390px offline-demo checks; `npm run test:desktop` passed 7 tests.
+- Initial concurrent fixture runs failed on a shared mutex/executable lock;
+  per-fixture ownership and coordinated rebuilds fixed them. The first native UI
+  test passed functional checks but failed temporary-directory cleanup because an
+  unused default app held SQLite; closing that fixture connection fixed cleanup.
+  The observed TWAIN startup trace attempt timed out without an image and is not
+  counted as a successful capture.
+
+The user stopped Computer Use with physical Escape after the idle old app window
+was closed. No subsequent app input was issued; reopen CyberScan X to load the
+updated frontend. Native helper device tests and synthetic browser tests are
+distinct from a completed real desktop inspection.
+
+See `docs/native-scanner.md` for use, physical results and remaining boundaries.
+No firmware was flashed, new kernel driver installed, original overwritten or
+unverified reverse/eject/focus/diagnostic operation issued.
 
 ## M0
 
@@ -186,6 +291,49 @@ TWAIN/USB backends are unchanged.
   `npm run test:desktop` (7) passed. `npm run smoke:desktop` and the same smoke
   run with `--cyberscan` passed.
 
+## Scanner protocol reconstruction (October 30 2026, night)
+
+- Static reconstruction of the full path CyberView → SCAN08 → SQ_Scan → IO_PORT →
+  FVC → usbscan.sys, down to USB control SETUP packets and bulk reads:
+  [scanner-protocol.md](scanner-protocol.md). Every SQ_Scan export is mapped to its
+  register writes. Register meanings are inferred from function names; values are
+  computed at run time and are not yet observed.
+- Reason recorded for keeping selectors 1002–1006 (diagnostic line reader) unexposed:
+  unbounded motor and lamp run with no film check, and its stop frees buffers the
+  normal scan code shares.
+- Passive USB tracer `services/native_bridge/usbtrace.h`, available as `--trace-usb`
+  in both bridges and through `FRAME_USB_TRACE_DIR`; decoder
+  `research/cyberview/analysis/usb_trace.py`. Verified without hardware against a
+  stand-in FVC on the NUL device, and on this PC with `cvbridge sources`
+  (6 import slots hooked, no device calls while listing sources).
+- 2026-10-31: first physical trace, one hidden 1800 dpi scan with approval. The driver
+  hung at "Preparing film scanner" (360 s timeout, no image). The trace shows why:
+  SCAN08 `0x1000c867` starts a homing move and waits for status bit 7 with no
+  timeout; the motor stopped after about 220 ms and bit 7 never set. Decoded
+  evidence: `research/cyberview/analysis/evidence/usb-trace-2026-10-31.json`. The USB
+  device was restarted afterwards and the CyberView settings were restored.
+- 2026-10-31: after a power cycle and reseating the film, the traced scan succeeded
+  (2479 × 1703 16-bit RGB, 180 s). The wire shows 16-bit lines from the scanner, a
+  per-channel offset calibration, a shared gain of 2, and no per-channel analog
+  exposure. Evidence: `research/cyberview/analysis/evidence/usb-trace-2026-10-31-scan.json`.
+
+Validation: `python -m pytest -q` → 172 passed, 2 xfailed. `npm run lint`, `build`,
+`test:skin`, `test:native-ui`, `test:e2e`, `test:desktop` all passed.
+`services/native_bridge/build.ps1 -Fixtures` and `services/cyberview_bridge/build.ps1` built
+without warnings.
+
+## Live preview, stuck detection, stitched scans via CyberView (October 31 2026)
+
+- Live scan preview from the USB stream (`usbwatch.h`, `live_start`/`live` events,
+  `GET /api/cyberview/live`, viewer canvas). Stuck detection (`position_sensor`) after
+  30 s of status-only polling. See [cyberview-bridge.md](cyberview-bridge.md).
+- CyberView's Forward/Backward One Step commands drive selector 10; bridge command
+  `film step forward|back N`; stitched scans run through the CyberView path once
+  `cyberview_validation.json` lists both steps. See [auto-align.md](auto-align.md).
+- Tracer logs bulk OUT tables in full; decoder `--tables` and `--phases`.
+- **Not hardware-tested:** live preview orientation/colour, the stuck detector on a real
+  stall, step commands, stitched scans. Handoff: [handoff.md](handoff.md).
+
 ## M2: Image processing and archival reliability
 
 **Status: IN PROGRESS, independently of M1.5.**
@@ -225,6 +373,6 @@ The first remote checkpoint's CI failed because the client had not yet been comm
 
 The initial M0/M1 pass used no reverse-engineering or dedicated image subagent. M1.5 later activated the reverse/research assignments recorded above; root handled the independent M2 precision work. Configured roles are templates, not claims of execution. The root session's model was not retroactively changed. No per-agent token-cost telemetry was exposed; no cost total is invented.
 
-## Remaining boundaries
+## Earlier milestone boundaries (historical)
 
 No physical scanner/driver/USB verification; no public service or LAN companion access. UI phone viewport testing is distinct from physical iPhone testing. PWA background alarms cannot be guaranteed. Simulator fixtures remain 8-bit synthetic charts. The independent M2 engine now preserves supported 16-bit TIFF input and renders 16-bit processed TIFF; this never upgrades a claim about acquired precision. Full color calibration, custom chemistry/batches, portable restore, full offline developing synchronization and Windows packaging remain backlog work. M1.5 guest/vendor detection remains incomplete until genuinely executed and documented.

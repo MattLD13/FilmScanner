@@ -1,0 +1,193 @@
+{
+ "source": "cvbridge scan --dpi 1800 --depth 16 --trace-usb, 2026-10-31 after a power cycle and reseating the film; PF1800 AFL 2770:0119 fw 4. Raw trace and image kept locally under data/traces (not committed).",
+ "result": "one 2479 x 1703 16-bit RGB image; session 180 s; 0 failed calls",
+ "totals": {
+  "operations": {
+   "open": 302,
+   "get_device_descriptor": 302,
+   "vendor_out": 749,
+   "write": 11218,
+   "select": 3499,
+   "read": 2968,
+   "close": 9,
+   "fifo_clean": 2221,
+   "bulk_out_notice": 531,
+   "bulk_out": 325,
+   "bulk_in_request": 254,
+   "bulk_in": 3623
+  },
+  "bulk_in_bytes": 29466301,
+  "bulk_out_bytes": 1843456
+ },
+ "auto_scan_passes": [
+  {
+   "start_s": 67.6,
+   "reads": "62 x 16512 bytes",
+   "reading": "2752 px x RGB x 16-bit, full CCD width: calibration lines"
+  },
+  {
+   "start_s": 73.6,
+   "reads": "256 x 1344 bytes",
+   "reading": "narrow strip (224 px x RGB x 16-bit)"
+  },
+  {
+   "start_s": 75.7,
+   "reads": "384 x 1344 bytes",
+   "reading": "narrow strip"
+  },
+  {
+   "start_s": 79.3,
+   "reads": "384 x 1344 bytes",
+   "reading": "narrow strip"
+  },
+  {
+   "start_s": 82.4,
+   "reads": "20 x 8448 bytes",
+   "reading": "short pass, AFE offsets 00"
+  },
+  {
+   "start_s": 90.6,
+   "reads": "22 x 7680 + 4 x 8064 bytes",
+   "reading": "short pass with final offsets"
+  },
+  {
+   "start_s": 105.0,
+   "reads": "1712 x 14874 bytes",
+   "reading": "the image: 2479 px x RGB x 16-bit per line, 1703 lines + 9 for line offsets"
+  }
+ ],
+ "final_analog_settings": {
+  "afe_gain_rgb": [
+   "0x02",
+   "0x02",
+   "0x02"
+  ],
+  "afe_offset_rgb": [
+   "0xfc",
+   "0xf8",
+   "0xe2"
+  ],
+  "ccd_timing_9c_9f_a0": [
+   "0xc0",
+   "0x40",
+   "0x00",
+   "0x30",
+   "0x03"
+  ],
+  "ccd_timing_a5_a7": [
+   "0x00",
+   "0x00",
+   "0x02"
+  ],
+  "lamp_8d_index20": "0x46",
+  "lamp_8d_index00": "0xaa",
+  "lamp_mode_93": "0x06",
+  "motor_speed_88": "0xcb"
+ },
+ "calibration": "AFE offsets searched per channel (0xc8, 0x00, 0x80, ... converging to fc/f8/e2) with bulk reads between steps; gain stepped 4 -> 2 and then fixed.",
+ "exposure_finding": "No analog register differs per channel apart from the offsets: gain is 2 on all three channels and CCD timing is shared. Per-channel exposure is therefore applied in the shading/gamma tables written to scanner RAM (282 x 4096 + 42 x 16384 bytes bulk OUT) or in host software, not by integration time.",
+ "status_values_8b": {
+  "0x29": 2347,
+  "0xa9": 235,
+  "0xb9": 179,
+  "0x28": 58,
+  "0x69": 54,
+  "0x39": 41,
+  "0x79": 18,
+  "0x68": 8,
+  "0x2b": 7,
+  "0x3e": 3,
+  "0x38": 3,
+  "0xaa": 3
+ },
+ "final_registers": {
+  "0x00 AFE reg 0": "0x00",
+  "0x01 AFE setup 1": "0x02",
+  "0x02 AFE setup 2": "0x04",
+  "0x03 AFE setup 3": "0x12",
+  "0x04 AFE reset": "0x00",
+  "0x05 AFE setup 4": "0x00",
+  "0x09 unknown": "0x90",
+  "0x1d unknown": "0x9b",
+  "0x20 AFE offset R": "0xfc",
+  "0x21 AFE offset G": "0xf8",
+  "0x22 AFE offset B": "0xe2",
+  "0x24 AFE offset 24": "0x00",
+  "0x25 AFE offset 25": "0x00",
+  "0x26 AFE offset 26": "0x00",
+  "0x28 AFE gain R": "0x02",
+  "0x29 AFE gain G": "0x02",
+  "0x2a AFE gain B": "0x02",
+  "0x6d unknown": "0x82",
+  "0x80 motor/scan control": "0xc1",
+  "0x81 unknown": "0x9c",
+  "0x83 index for 0x85/0x87/0x8d": "0x00",
+  "0x84 motor steps lo": "0xb1",
+  "0x85 scan acc/dec data (indexed)": "0x03",
+  "0x86 motor commit": "0x00",
+  "0x87 CCD pixel number (indexed)": "0x0b",
+  "0x88 motor speed": "0xdc",
+  "0x89 motor steps hi": "0x82",
+  "0x8b status (page in 0x97)": "0x00",
+  "0x8d lamp data (indexed)": "0xaa",
+  "0x8e auto-scan option": "0x00",
+  "0x90 auto-scan start": "0x00",
+  "0x91 auto-scan 0x91": "0x00",
+  "0x93 lamp mode": "0x06",
+  "0x94 RAM select": "0x00",
+  "0x95 unknown": "0x53",
+  "0x97 status page select": "0x00",
+  "0x98 line offset R": "0x00",
+  "0x99 line offset G": "0x00",
+  "0x9a line offset B": "0x00",
+  "0x9b line offset index": "0x14",
+  "0x9c CCD timing 9c": "0xc0",
+  "0x9d CCD timing 9d": "0x40",
+  "0x9e CCD timing 9e": "0x00",
+  "0x9f CCD timing 9f": "0x30",
+  "0xa0 CCD timing a0": "0x03",
+  "0xa1 GPIO a1": "0xff",
+  "0xa2 GPIO a2": "0xf1",
+  "0xa3 GPIO a3": "0x02",
+  "0xa4 GPIO a4": "0x1e",
+  "0xa5 CCD timing a5": "0x00",
+  "0xa6 CCD timing a6": "0x00",
+  "0xa7 CCD timing a7": "0x02",
+  "0xa8 power save": "0x80",
+  "0xa9 unknown": "0x53",
+  "0xb0 RAM address 0": "0x00",
+  "0xb1 RAM address 1": "0x82",
+  "0xb2 RAM address 2": "0x00",
+  "0xb3 RAM end 0": "0xff",
+  "0xb4 RAM end 1": "0x0f",
+  "0xb5 RAM end 2": "0x07",
+  "0xb6 buffer range b6": "0x01",
+  "0xb7 buffer range b7": "0x00",
+  "0xb8 buffer range b8": "0xaf",
+  "0xb9 buffer range b9": "0x36",
+  "0xbb auto-scan bb": "0x02",
+  "0xbc scan acc bc": "0x00",
+  "0xbd scan acc bd": "0x00",
+  "0xbe auto-scan be": "0x00",
+  "0xbf auto-scan bf": "0x00",
+  "0xc0 motor acc/dec enable": "0x00",
+  "0xc1 acc/dec c1": "0x00",
+  "0xc2 acc/dec c2": "0x00",
+  "0xc3 acc/dec c3": "0x01",
+  "0xc5 acc/dec c5": "0x50",
+  "0xc6 acc/dec c6": "0xcb",
+  "0xc7 acc/dec c7": "0x00",
+  "0xc8 acc/dec c8": "0x00",
+  "0xc9 unknown": "0x9b",
+  "0xce driving capability ce": "0x00",
+  "0xcf driving capability / status page hi": "0x0c",
+  "0xd1 unknown": "0x9a",
+  "0xd5 unknown": "0x50",
+  "0xe1 unknown": "0x9b",
+  "0xe5 unknown": "0x9b",
+  "0xe9 unknown": "0x93",
+  "0xed unknown": "0x9b",
+  "0xf1 unknown": "0x53",
+  "0xf5 unknown": "0x9a"
+ }
+}
