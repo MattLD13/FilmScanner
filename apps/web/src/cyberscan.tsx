@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CyberScanDiagnostics, ScannerEvidence, CyberScanOptions, CyberScanWorkspace, FilmProfile } from '../../../packages/contracts/schema';
 import './cyberscan.css';
 
-// CyberScan X: a modern front end for CyberView X. Live mode talks to the local FRAME
-// service, which drives CyberView's own TWAIN driver with its window hidden. Demo mode
+// CyberScan X: standalone film scanning for the PrimeFilm 1800 AFL. Live mode talks to the
+// local FRAME service, which drives the scanner's own driver (SCAN08) directly; CyberView X
+// is not used. (A hidden-CyberView path remains for tests and research only.) Demo mode
 // (?demo=1, used by the static preview) makes no network requests at all.
 
-type Adjust = { exposure: number; contrast: number; saturation: number; temperature: number; rotation: number; mirror: boolean; invert?: boolean; film_base?: number[]; black_point?: number; white_point?: number; gamma?: number; rgb_balance?: number[]; curve?: number[]; crop?: { left: number; top: number; right: number; bottom: number }; monochrome?: boolean; film_profile?: string | null };
+type Adjust = { exposure: number; contrast: number; saturation: number; temperature: number; rotation: number; mirror: boolean; invert?: boolean; film_base?: number[]; black_point?: number; white_point?: number; gamma?: number; rgb_balance?: number[]; curve?: number[]; crop?: { left: number; top: number; right: number; bottom: number }; monochrome?: boolean; film_profile?: string | null; auto_color?: number[] | null };
 type Alignment = { confidence: 'frame_found' | 'one_edge' | 'centered'; exact: boolean; crop_mm: number[]; skew_deg: number | null; bleed_mm: number; note?: string | null };
 type AlignInfo = { settings: { auto: boolean; bleed_mm: number; offset_mm: number; steps_per_mm: number | null }; stitched_scan: { available: boolean; reason: string }; max_window_mm: number[] };
 const ALIGN_LABEL: Record<Alignment['confidence'], string> = { frame_found: 'Both frame edges found', one_edge: 'One frame edge found', centered: 'No edge visible · centred' };
@@ -81,6 +82,34 @@ function colorMatrix(a: Adjust) {
 
 // A sampled display LUT applies the same levels, gamma and piecewise-linear
 // curve as the full-precision export. The original itself is untouched.
+/** CyberView's Auto Gamma curves from its 18 words; mirrors services/imaging/autocolor.py tables(). */
+function monotone(points: [number, number][]) {
+  const map = new Map<number, number>([[0, 0], [255, 255]]);
+  for (const [x, y] of points) map.set(x, y);
+  const xs = [...map.keys()].sort((a, b) => a - b), ys = xs.map((x) => map.get(x)!);
+  const h = xs.slice(1).map((x, i) => x - xs[i]), d = h.map((step, i) => (ys[i + 1] - ys[i]) / step);
+  const m = ys.map(() => 0); m[0] = d[0]; m[m.length - 1] = d[d.length - 1];
+  for (let i = 1; i < xs.length - 1; i++) if (d[i - 1] * d[i] > 0) {
+    const w1 = 2 * h[i] + h[i - 1], w2 = h[i] + 2 * h[i - 1];
+    m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+  }
+  return Array.from({ length: 256 }, (_, x) => {
+    let i = 0; while (i < xs.length - 2 && x >= xs[i + 1]) i++;
+    const t = (x - xs[i]) / h[i];
+    const y = (2 * t ** 3 - 3 * t ** 2 + 1) * ys[i] + (t ** 3 - 2 * t ** 2 + t) * h[i] * m[i] + (-2 * t ** 3 + 3 * t ** 2) * ys[i + 1] + (t ** 3 - t ** 2) * h[i] * m[i + 1];
+    return Math.min(255, Math.max(0, y));
+  });
+}
+function autoColorTables(words: number[]) {
+  const w = (row: number, c: number) => words[row * 3 + c];
+  const master = monotone([[155, 130]]);
+  const sample = (v: number) => { const i = Math.min(254, Math.floor(v)); return master[i] + (master[i + 1] - master[i]) * (v - i); };
+  return [0, 1, 2].map((c) => {
+    const channel = monotone([[w(0, c), w(1, c)], [w(2, c), w(3, c)], [c === 1 ? 0 : w(4, c), w(5, c)]]);  // CyberView ignores green's black point
+    return Array.from({ length: 33 }, (_, k) => (sample(channel[Math.min(255, k * 8)]) / 255).toFixed(4)).join(' ');
+  });
+}
+
 function toneTable(a: Adjust) {
   const black = a.black_point ?? 0, white = a.white_point ?? 1, gamma = a.gamma ?? 1;
   const points = a.curve || [0, .25, .5, .75, 1];
@@ -305,6 +334,7 @@ export function CyberScanSkin() {
   const controlsBusy = scanning || !!status?.busy || savingOptions || switchingBackend;
   const matrix = useMemo(() => colorMatrix(adjust), [adjust]);
   const tone = useMemo(() => toneTable(adjust), [adjust]);
+  const autoTables = useMemo(() => adjust.auto_color && !showOriginal ? autoColorTables(adjust.auto_color) : null, [adjust, showOriginal]);
   const rollCaptures = useMemo(() => {
     if (!current) return captures;
     return captures.filter((c) => c.roll === current.roll);
@@ -411,6 +441,16 @@ export function CyberScanSkin() {
     const favorite = !current.favorite;
     setCaptures((list) => list.map((c) => c.id === current.id ? { ...c, favorite } : c));
     if (mode === 'live' && !current.demo) api(`/api/cyberview/captures/${current.id}`, { method: 'PATCH', body: JSON.stringify({ favorite }) }).catch(() => undefined);
+  };
+  const toggleAutoColor = async (enabled: boolean) => {
+    if (!current || current.demo || mode !== 'live') return;
+    setAutoLevelBusy(true);
+    try {
+      await flushSave(current.id);
+      const updated = await api<Capture>(`/api/cyberview/captures/${current.id}/auto-color`, { method: 'POST', body: JSON.stringify({ enabled }) });
+      setCaptures((list) => list.map((item) => item.id === updated.id ? updated : item));
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+    finally { setAutoLevelBusy(false); }
   };
   const autoLevels = async () => {
     if (!current || current.demo || mode !== 'live') return;
@@ -578,6 +618,11 @@ export function CyberScanSkin() {
           <feFuncG type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[1] ?? 1, 1.6) : 1} exponent={adjust.invert && !profilePreview ? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
           <feFuncB type="gamma" amplitude={adjust.invert && !profilePreview ? -1 / Math.pow(adjust.film_base?.[2] ?? 1, 1.6) : 1} exponent={adjust.invert && !profilePreview ? 1.6 : 1} offset={adjust.invert && !profilePreview ? 1 : 0} />
         </feComponentTransfer>
+        {autoTables && <feComponentTransfer>
+          <feFuncR type="table" tableValues={autoTables[0]} />
+          <feFuncG type="table" tableValues={autoTables[1]} />
+          <feFuncB type="table" tableValues={autoTables[2]} />
+        </feComponentTransfer>}
         <feComponentTransfer>
           <feFuncR type="table" tableValues={tone} />
           <feFuncG type="table" tableValues={tone} />
@@ -597,9 +642,9 @@ export function CyberScanSkin() {
       </nav>
       <div className="cx-device" aria-label="Scanner status">
         <span className={'cx-dot ' + (scanning || moving ? 'busy' : ready.ok ? 'ok' : 'off')} />
-        <div><strong>{scanning ? 'Scanning' : ready.title}</strong><span>{scanning ? (nativeMode ? 'Direct scanner interface' : 'Through CyberView X') : ready.detail}</span></div>
+        <div><strong>{scanning ? 'Scanning' : ready.title}</strong><span>{scanning ? (nativeMode ? 'Direct capture' : 'Through CyberView X') : ready.detail}</span></div>
       </div>
-      <p className="cx-sidebar-note">{mode === 'demo' ? 'Sample photos, not scans' : nativeMode ? 'Direct AFL interface · experimental · transmission image' : 'Scans run through CyberView X with its window hidden'}</p>
+      <p className="cx-sidebar-note">{mode === 'demo' ? 'Sample photos, not scans' : nativeMode ? 'Direct capture · transmission image' : 'Scans run through CyberView X with its window hidden'}</p>
     </aside>
 
     <main className="cx-main">
@@ -670,7 +715,7 @@ export function CyberScanSkin() {
             {/* Only working controls are shown. Everything else stays hidden until it has been
                 tested on the scanner (services/scanner_host/native_validation.json). */}
             <details className="cx-scanner-panel" open={nativeMode}>
-              <summary><span>Scanner controls</span><span className="cx-meta">{nativeMode ? 'Native capture' : mode === 'demo' ? 'Sample mode' : 'CyberView capture'}</span></summary>
+              <summary><span>Scanner controls</span><span className="cx-meta">{nativeMode ? 'Direct capture' : mode === 'demo' ? 'Sample mode' : 'CyberView capture'}</span></summary>
               {mode === 'demo' && <p className="cx-help">Sample photos are shown here. Scanner controls are disabled.</p>}
               {workspaceError && <p className="cx-help" role="status">Scanner settings unavailable: {workspaceError}</p>}
               {!nativeMode && mode !== 'demo' && <p className="cx-help">CyberView capture scans the current frame or the next several, and moves to the next frame from the toolbar. Native capture in Settings adds prescan, focus and film-base controls.</p>}
@@ -721,6 +766,7 @@ export function CyberScanSkin() {
               <Slider label="Saturation" value={adjust.saturation} min={-100} max={100} step={1} onChange={(v) => updateAdjust({ saturation: v })} />
               <Slider label="Temperature" value={adjust.temperature} min={-100} max={100} step={1} onChange={(v) => updateAdjust({ temperature: v })} />
               <label className="cx-native-check"><input type="checkbox" checked={!!adjust.invert} onChange={(e) => updateAdjust({ invert: e.target.checked })} />Invert negative</label>
+              <label className="cx-native-check" title="CyberView's automatic colour (Auto Gamma), computed from this frame"><input type="checkbox" checked={!!adjust.auto_color} disabled={!current || !!current.demo || mode !== 'live'} onChange={(e) => toggleAutoColor(e.target.checked)} />Auto colour</label>
               <label className="cx-native-check"><input type="checkbox" checked={!!adjust.monochrome} onChange={(e) => updateAdjust({ monochrome: e.target.checked })} />Threshold black and white</label>
               <details className="cx-subpanel cx-image-controls"><summary>Variations</summary>
                 <p className="cx-help">Make a small change to the current edit.</p>
@@ -839,7 +885,7 @@ export function CyberScanSkin() {
         <header className="cx-page-head"><h1>Settings</h1></header>
         <div className="cx-settings">
           <section>
-            <h2>{nativeMode ? 'Native acquisition' : 'CyberView X'}</h2>
+            <h2>{nativeMode ? 'Acquisition' : 'CyberView X (test path)'}</h2>
             <p className="cx-help">{nativeMode ? 'Current-frame transmission capture with an identity table. Vendor calibration remains active. Color conversion and additional controls are still under test.' : 'Scans use the settings saved in CyberView. To change them, open CyberView X, adjust, scan once and close it.'}</p>
             <dl className="cx-facts">
               <dt>Film term</dt><dd>{status?.settings.film_term || '—'}</dd>
@@ -853,7 +899,7 @@ export function CyberScanSkin() {
             <dl className="cx-facts">
               <dt>Status</dt><dd>{ready.title}</dd>
               <dt>Output</dt><dd>{nativeMode && workspace ? `${workspace.settings.dpi} dpi, ${workspace.settings.bits}-bit ${workspace.settings.channel.toUpperCase()} TIFF` : '1800 dpi, 16-bit RGB TIFF'}</dd>
-              <dt>Driver</dt><dd>{nativeMode ? 'Direct AFL module · experimental' : 'CyberView X - MF (TWAIN)'}</dd>
+              <dt>Driver</dt><dd>{nativeMode ? 'SCAN08 · direct capture' : 'CyberView X - MF (TWAIN, test path)'}</dd>
               <dt>Bridge</dt><dd>{status ? (status.bridge_built ? 'Built' : 'Not built') : '—'}</dd>
               <dt>Automatic recovery</dt><dd>{status ? (status.auto_reset ? 'On' : 'Off') : '—'}</dd>
             </dl>
@@ -880,21 +926,16 @@ export function CyberScanSkin() {
             </dl> : <p className="cx-help">No driver log yet. It appears after the first scan.</p>}
           </section>}
           <section>
-            <h2>Native scanner integration</h2>
-            <p className="cx-help">Native capture drives the scanner's own module without CyberView. This page reads installed files and the driver's log; it never starts or moves the scanner.</p>
+            <h2>Scanner driver</h2>
+            <p className="cx-help">CyberScan X drives the scanner's own driver directly; CyberView X is not used. This page reads installed files and the driver's log; it never starts or moves the scanner.</p>
             {diagnosticError && <p className="cx-help" role="alert">{diagnosticError}</p>}
             {diagnostics && <>
               <dl className="cx-facts">
                 <dt>AFL module</dt><dd>{diagnostics.native_module_recognized ? 'Recognized · 1.0.3.6' : 'Unrecognized or missing'}</dd>
                 <dt>Native bridge</dt><dd>{diagnostics.native_bridge_built ? (diagnostics.native_device_validation === 'current_frame_verified' ? 'Built · current frame tested' : 'Built · device testing pending') : 'Not built'}</dd>
-                <dt>Device access</dt><dd>{nativeMode ? 'Direct AFL module · experimental' : 'Existing CyberView bridge'}</dd>
+                <dt>Device access</dt><dd>{nativeMode ? 'Direct capture' : 'Hidden CyberView (test path)'}</dd>
               </dl>
               <p className="cx-help">{diagnostics.native_note}</p>
-              {!nativeMode && <label className="cx-native-check"><input type="checkbox" checked={nativeAcknowledged} onChange={(e) => setNativeAcknowledged(e.target.checked)} />I understand native startup may move film. Available transport and scan controls depend on device verification; originals are saved as transmission data.</label>}
-              <button className="cx-button cx-release" disabled={mode !== 'live' || scanning || !!moving || switchingBackend || (!nativeMode && (!nativeAcknowledged || !diagnostics.native_bridge_built || !diagnostics.native_module_recognized))}
-                onClick={() => selectBackend(nativeMode ? 'cyberview-twain' : 'afl-native-experimental')}>
-                {switchingBackend ? 'Changing interface…' : nativeMode ? 'Use CyberView capture' : 'Use native capture'}
-              </button>
               <details className="cx-discoveries"><summary>Scanner features and findings</summary>
                 {diagnostics.features.map((feature) => <div key={feature.id} className="cx-discovery">
                   <strong>{feature.name}</strong>
@@ -913,7 +954,7 @@ export function CyberScanSkin() {
           </section>
           <section>
             <h2>Driver session</h2>
-            <p className="cx-help">CyberScan X keeps the scanner driver open between captures. Release it before opening CyberView X or changing scanner software.</p>
+            <p className="cx-help">CyberScan X keeps the scanner driver open between captures. Release it before using other scanner software, such as CyberView X or VueScan.</p>
             <dl className="cx-facts"><dt>Session</dt><dd>{status?.session_open ? 'Open' : 'Closed'}</dd></dl>
             <button className="cx-button cx-release" disabled={mode !== 'live' || !status?.session_open || scanning}
               onClick={() => api<Status>('/api/cyberview/release', { method: 'POST' }).then(() => refresh()).then(() => setMessage({ text: 'Scanner released. CyberView X can be opened now.', tone: 'info' })).catch((e: Error) => setMessage({ text: e.message, tone: 'error' }))}>

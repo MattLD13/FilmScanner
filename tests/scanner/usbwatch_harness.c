@@ -1,4 +1,4 @@
-/* CPU-only driver for services/cyberview_bridge/usbwatch.h: feeds synthetic scan
+/* CPU-only driver for services/native_bridge/usbwatch.h: feeds synthetic scan
  * passes and status polls through the watch callbacks and prints what it emits. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -6,7 +6,7 @@
 #include <string.h>
 static DWORD fake_now;
 #define WATCH_NOW() fake_now
-#include "../../services/cyberview_bridge/usbwatch.h"
+#include "../../services/native_bridge/usbwatch.h"
 
 static BYTE line[2752 * 6];
 /* High byte of each sample: constant inside every 8 x 8 block, so averages are exact. */

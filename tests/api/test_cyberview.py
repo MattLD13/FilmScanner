@@ -30,6 +30,7 @@ def bridge(tmp_path, monkeypatch):
                    'Default Crop Area Left=0.03\nDefault Crop Area Top=0.003\nDefault Crop Area Right=1.407\n'
                    'Default Crop Area Bottom=0.95\n', encoding='latin-1')
     monkeypatch.setenv('FRAME_CVBRIDGE', str(FAKE))
+    monkeypatch.setenv('FRAME_SCANNER_BACKEND', 'cyberview-twain')  # the legacy path these tests cover
     monkeypatch.setenv('FRAME_CYBERVIEW_INI', str(ini))
     monkeypatch.setenv('FAKE_CVBRIDGE_LOG', str(log))
     monkeypatch.setattr(cyberview, 'vendor_running', lambda: False)

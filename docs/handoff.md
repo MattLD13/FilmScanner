@@ -117,6 +117,11 @@ traces and the image are in `data/traces/` on this PC (ignored by git).
    scanner DLLs.** Ordered plan in [standalone-plan.md](standalone-plan.md). Done so far:
    exact Python port of CyberView's auto colour (`services/imaging/autocolor.py`).
 
+9. **Standalone done in software (2026-10-31 evening).** Direct capture is the default,
+   CyberView is gone from the UI, auto colour is applied to new scans, film-base exposure
+   and the driver copy are in place. What still needs the scanner is listed at the top of
+   [standalone-plan.md](standalone-plan.md) under "Needs one supervised session".
+
 ## Where to look first
 
 - `docs/scanner-protocol.md`: how every layer talks to the scanner, both traces.

@@ -26,7 +26,7 @@ def main():
         ini = Path(temporary) / 'CyberViewX.ini'
         ini.write_text('[TOOLBAR FILMTERM]\nFilm Type=0\nFilm Term Name=Kodak 200\n[SETUPDLG DEFAULT PAGE]\nAuto Exposure=1\n',
                        encoding='latin-1')
-        env = {'FRAME_DATA_DIR': temporary, 'FRAME_CVBRIDGE': str(fake), 'FRAME_CYBERVIEW_INI': str(ini),
+        env = {'FRAME_DATA_DIR': temporary, 'FRAME_NATIVE_BRIDGE': str(fake), 'FRAME_CYBERVIEW_INI': str(ini),
                'FAKE_CVBRIDGE_LIVE_DELAY': '0.12'}
         with patch.dict(os.environ, env):
             from services.api import main as api_main
@@ -67,7 +67,7 @@ def main():
                         expect(page.get_by_role('button', name='Frame 1,', exact=False)).to_be_visible()
                         assert not errors, errors
                         browser.close()
-                    print(json.dumps({'result': 'passed', 'mode': 'fake CyberView bridge; no device access',
+                    print(json.dumps({'result': 'passed', 'mode': 'fake direct-capture bridge; no device access',
                                       'verified': ['live preview appears while the frame is read',
                                                    'negative preview inverted', 'saved frame replaces the preview'],
                                       'screenshot': 'docs/screenshots/cyberscan-live.png',

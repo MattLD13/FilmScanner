@@ -47,29 +47,38 @@ static void watch_register(BYTE reg, BYTE value) {
     if (reg == 0x90 && value) live_new_pass(); /* auto-scan start */
     LeaveCriticalSection(&watch_lock);
 }
+/* Called once, on the polling thread, when the driver is judged stuck (optional). */
+static void (*watch_on_stuck)(void);
+/* cvbridge previews the raw USB lines; aflbridge previews SCAN08's own strips instead. */
+static int live_from_usb = 1;
 static void watch_status(BYTE value) {
+    int fired = 0;
     (void)value;
     EnterCriticalSection(&watch_lock);
-    if (++watch_polls > STUCK_POLLS && WATCH_NOW() - watch_progress_at > STUCK_MS) InterlockedExchange(&watch_stuck, 1);
+    if (++watch_polls > STUCK_POLLS && WATCH_NOW() - watch_progress_at > STUCK_MS && !watch_stuck) {
+        InterlockedExchange(&watch_stuck, 1); fired = 1;
+    }
     LeaveCriticalSection(&watch_lock);
+    if (fired && watch_on_stuck) watch_on_stuck();
+}
+/* One RGB line, 1 or 2 bytes per sample (16-bit little-endian: the high byte is used).
+ * The caller holds watch_lock. */
+static void live_add_line(const BYTE *data, int width, int sample_bytes) {
+    if (live.src_width && live.src_width != width) live_new_pass();
+    if (!live.src_width) { live.src_width = width; live.width = min(width / LIVE_SCALE, LIVE_MAX_W); }
+    if (live.rows >= LIVE_MAX_H) return;
+    for (int x = 0; x < live.width * LIVE_SCALE; x++)
+        for (int c = 0; c < 3; c++) live.sums[(x / LIVE_SCALE) * 3 + c] += data[(x * 3 + c) * sample_bytes + sample_bytes - 1];
+    if (++live.lines % LIVE_SCALE == 0) {
+        for (int i = 0; i < live.width * 3; i++) live.data[live.rows][i] = (BYTE)(live.sums[i] / (LIVE_SCALE * LIVE_SCALE));
+        memset(live.sums, 0, sizeof live.sums);
+        live.rows++;
+    }
 }
 static void watch_bulk_in(const BYTE *data, DWORD size) {
     EnterCriticalSection(&watch_lock);
     watch_progress();
-    int width = (int)(size / 6);
-    if (size % 6 == 0 && width >= LIVE_MIN_WIDTH) {
-        if (live.src_width && live.src_width != width) live_new_pass();
-        if (!live.src_width) { live.src_width = width; live.width = min(width / LIVE_SCALE, LIVE_MAX_W); }
-        if (live.rows < LIVE_MAX_H) {
-            for (int x = 0; x < live.width * LIVE_SCALE; x++)
-                for (int c = 0; c < 3; c++) live.sums[(x / LIVE_SCALE) * 3 + c] += data[(x * 3 + c) * 2 + 1]; /* high byte */
-            if (++live.lines % LIVE_SCALE == 0) {
-                for (int i = 0; i < live.width * 3; i++) live.data[live.rows][i] = (BYTE)(live.sums[i] / (LIVE_SCALE * LIVE_SCALE));
-                memset(live.sums, 0, sizeof live.sums);
-                live.rows++;
-            }
-        }
-    }
+    if (live_from_usb && size % 6 == 0 && (int)(size / 6) >= LIVE_MIN_WIDTH) live_add_line(data, (int)(size / 6), 2);
     LeaveCriticalSection(&watch_lock);
 }
 static void base64(const BYTE *in, int n, char *out) {

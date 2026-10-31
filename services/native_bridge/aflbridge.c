@@ -16,6 +16,13 @@
 #include <math.h>
 #include "afl_contract.h"
 #include "usbtrace.h"
+#include "usbwatch.h"
+/* SCAN08 is polling a sensor that never sets (usbwatch.h). Its loop has no timeout and
+ * holds this thread, so report it now; the service ends this process. */
+static void native_stuck(void) {
+    printf("{\"event\":\"error\",\"code\":\"position_sensor\",\"message\":\"The scanner could not find its film position.\"}\n");
+    fflush(stdout);
+}
 
 #define MAX_COMMAND 4096
 #define QUEUE_SIZE 4
@@ -180,6 +187,13 @@ static int __cdecl receive_strip(void *parameter) {
      * Thresholding belongs to the editable recipe, never this original. */
     if (!write_bytes(acquisition.file,s->data,count)) return fail_strip(s,"Could not save native image strip");
     acquisition.rows += s->lines; acquisition.last = !!s->last;
+    if (watch_on && acquisition.channels == 3 && s->width >= LIVE_MIN_WIDTH) {   /* live preview from the strip itself */
+        DWORD line_bytes = s->width*3*(acquisition.bits/8);
+        EnterCriticalSection(&watch_lock);
+        for (DWORD y = 0; y < s->lines; y++) live_add_line(s->data + y*line_bytes, (int)s->width, (int)(acquisition.bits/8));
+        LeaveCriticalSection(&watch_lock);
+        live_flush();
+    }
     printf("{\"event\":\"progress\",\"rows\":%lu,\"height\":%lu}\n",acquisition.rows,acquisition.height); fflush(stdout);
     return 1;
 }
@@ -210,6 +224,11 @@ static int scan_current(const char *path, LONG generation) {
         output_discard(); printf("{\"event\":\"cancelled\"}\n"); fflush(stdout); return -1;
     }
     printf("{\"event\":\"enabled\",\"show_ui\":false,\"synthetic\":%s}\n",synthetic?"true":"false"); fflush(stdout);
+    if (watch_on) {
+        EnterCriticalSection(&watch_lock);
+        live_new_pass(); watch_progress(); InterlockedExchange(&watch_stuck, 0);
+        LeaveCriticalSection(&watch_lock);
+    }
     int result = device_io(0x20,&request);
     if (acquisition.timed_out) { output_discard(); error("timeout","The native acquisition exceeded its callback time limit"); return 0; }
     if (acquisition.cancelled || InterlockedCompareExchange(&input_closed,0,0) ||
@@ -233,7 +252,7 @@ static void configure(const char *line) {
     if (!(next.dpi==300||next.dpi==360||next.dpi==450||next.dpi==600||next.dpi==900||next.dpi==1800)||
         !(next.bits==8||next.bits==16)||!isfinite(next.left)||!isfinite(next.top)||!isfinite(next.right)||!isfinite(next.bottom)||
         next.left<0||next.top<0||next.right<=next.left||next.bottom<=next.top||next.right>2586.f/1800.f||next.bottom>.95f||
-        r<50||r>200||g<50||g>200||b<50||b>200||
+        r<50||r>400||g<50||g>400||b<50||b>400||
         (strcmp(channel,"rgb")&&strcmp(channel,"gray")&&strcmp(channel,"bw"))||
         (strcmp(film,"negative")&&strcmp(film,"positive"))||(!strcmp(channel,"bw")&&next.bits!=8)) {
         error("settings","Acquisition settings are outside reviewed bounds"); return;
@@ -456,7 +475,23 @@ int main(int argc, char **argv) {
     } else
 #endif
     {
-        if (!GetWindowsDirectoryW(path,4096) || wcscat_s(path,4096,L"\\twain_32\\CyberViewX_MF\\SCAN08.dll")) { CloseHandle(mutex); return 1; }
+        /* CyberScan's own verified copy first (services/native_bridge/driver_manifest.json,
+         * copied by driver.py), so CyberView X need not stay installed; then the CyberView
+         * install. Windows searches a DLL's own folder only for its direct imports, so the
+         * chain is loaded bottom-up from that folder and SCAN08's imports are then resolved
+         * by the already-loaded copies (checked 2026-10-31). */
+        WCHAR folder[4096], part[4096];
+        static const WCHAR *chain[] = {L"SQ1394.DLL", L"fvc.dll", L"IO_PORT.dll", L"SQ_Scan.dll"};
+        DWORD n = GetEnvironmentVariableW(L"FRAME_DRIVER_DIR",folder,4096);
+        if (!n || n >= 4096) n = GetEnvironmentVariableW(L"LOCALAPPDATA",folder,4096) ? (wcscat_s(folder,4096,L"\\CyberScanX\\driver"), 1) : 0;
+        if (n && !wcscpy_s(path,4096,folder) && !wcscat_s(path,4096,L"\\SCAN08.dll") && GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) {
+            for (int i = 0; i < 4; i++) {
+                if (swprintf_s(part,4096,L"%ls\\%ls",folder,chain[i]) < 0 ||
+                    !LoadLibraryExW(part,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+                    CloseHandle(mutex); error("module_load","CyberScan's copy of the scanner driver is incomplete"); return 1;
+                }
+            }
+        } else if (!GetWindowsDirectoryW(path,4096) || wcscat_s(path,4096,L"\\twain_32\\CyberViewX_MF\\SCAN08.dll")) { CloseHandle(mutex); return 1; }
         pinned = CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
         if (pinned == INVALID_HANDLE_VALUE || !pinned_file(pinned)) {
             if (pinned != INVALID_HANDLE_VALUE) CloseHandle(pinned);
@@ -466,17 +501,22 @@ int main(int argc, char **argv) {
     module = LoadLibraryExW(path,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (pinned != INVALID_HANDLE_VALUE) CloseHandle(pinned);
     if (!module) { CloseHandle(mutex); error("module_load","The pinned model module or a system dependency could not load"); return 1; }
-    if (trace) {
+    {
         /* SCAN08 imports SQ_Scan -> IO_PORT -> fvc statically, so all are loaded now,
-         * before ScannerDeviceIO(1) sends the first byte. */
+         * before ScannerDeviceIO(1) sends the first byte. The watch (stuck detection)
+         * always runs; --trace-usb also logs every call. */
 #ifdef FRAME_NATIVE_TEST
         const char *traced[] = {"fvc.dll","IO_PORT.dll","SQ_Scan.dll","SCAN08.dll","fake-model.dll","fake-fvc.dll",NULL};
 #else
         const char *traced[] = {"fvc.dll","IO_PORT.dll","SQ_Scan.dll","SCAN08.dll",NULL};
 #endif
+        InitializeCriticalSection(&watch_lock);
+        live_from_usb = 0; watch_on_stuck = native_stuck;
+        trace_on_register = watch_register; trace_on_status = watch_status; trace_on_bulk_in = watch_bulk_in;
         int slots = usbtrace_install(trace,traced);
         if (slots < 0) { FreeLibrary(module); CloseHandle(mutex); error("trace","Could not open the USB trace file"); return 1; }
-        printf("{\"event\":\"trace\",\"slots\":%d}\n",slots); fflush(stdout);
+        watch_on = 1;
+        printf("{\"event\":\"%s\",\"slots\":%d}\n",trace?"trace":"watch",slots); fflush(stdout);
     }
     result = serve(module);
     FreeLibrary(module); CloseHandle(mutex);

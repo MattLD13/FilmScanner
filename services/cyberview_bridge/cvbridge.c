@@ -689,7 +689,7 @@ static void pump(DWORD ms) {
 }
 
 /* One acquisition: enable hidden, transfer every pending image, disable. 1 ok, 0 failed, -1 cancelled. */
-#include "usbwatch.h"
+#include "../native_bridge/usbwatch.h"
 
 static int one_scan(const char *out, int count, int show_ui, int timeout_s) {
     report_set("autofeed", set_one(CAP_AUTOFEED, TWTY_BOOL, count > 1));

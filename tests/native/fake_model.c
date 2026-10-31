@@ -63,6 +63,20 @@ __declspec(dllexport) int __cdecl ScannerDeviceIO(int selector, void *parameter)
         if (!opened || !status_seen || !request || !validate(request)) return 0;
         status_seen = 0; /* Every acquisition needs a fresh status query. */
         if (!strcmp(mode(),"no-image")) return 1;
+        if (!strcmp(mode(),"wide")) { /* full-width strips, enough lines for the live preview */
+            static WORD wide[1200*16*3]; AflStrip w; DWORD done = 0;
+            memset(&w,0,sizeof w); w.dpi = request->scan.dpi; w.mode = request->scan.mode; w.width = 1200; w.height = 128; w.reserved24 = 1;
+            if (w.mode != 7) return 0;
+            while (done < w.height) {
+                w.lines = 16;
+                for (DWORD y = 0; y < 16; y++) for (DWORD x = 0; x < 1200; x++) for (DWORD c = 0; c < 3; c++)
+                    wide[(y*1200+x)*3+c] = (WORD)((((done+y)/8 + x/8 + c*50) & 0xff) << 8);
+                done += 16; w.remaining_lines = w.height-done; w.last = done == w.height; w.data = (BYTE *)wide;
+                request->scan.callback(&w);
+                if (w.abort_requested) return 0;
+            }
+            return 1;
+        }
         memset(&strip,0,sizeof strip);
         strip.dpi = request->scan.dpi; strip.mode = request->scan.mode; strip.width = 7; strip.height = 8; strip.data = (BYTE *)pixels; strip.reserved24 = 1;
         while (rows < strip.height) {

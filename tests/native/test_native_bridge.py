@@ -362,3 +362,20 @@ def test_usb_trace_logs_vendor_kernel_calls_without_changing_them(tmp_path, fixt
     assert read_regs['ioctl'] == 0x8000200C and read_regs['block']['offset'] == 7
     assert write['data'] == '8d41' and write['done'] == 2 and write['ok'] == 1
     assert all(r['n'] > 0 for r in calls) and [r['n'] for r in calls] == sorted(r['n'] for r in calls)
+
+
+def test_direct_scans_stream_a_live_preview_from_the_strips(tmp_path, fixture):
+    import base64
+    native = fixture(mode='wide')
+    native.until('ready')
+    native.send(f'scan 1 {tmp_path / "wide.tif"}')
+    events = native.until('scan_done')
+    assert events[-1]['result'] == 1, events
+    start = next(e for e in events if e['event'] == 'live_start')
+    assert start['width'] == 150 and start['source_width'] == 1200 and start['scale'] == 8
+    rows = [e for e in events if e['event'] == 'live']
+    assert [r['y'] for r in rows] == list(range(16))          # 128 lines / 8
+    pixels = base64.b64decode(rows[5]['data'])
+    assert list(pixels[30 * 3:30 * 3 + 3]) == [(5 + 30 + c * 50) & 0xff for c in range(3)]
+    # The preview rows arrive between strips, before the image is finished.
+    assert events.index(rows[0]) < next(i for i, e in enumerate(events) if e['event'] == 'image')

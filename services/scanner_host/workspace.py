@@ -8,6 +8,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+EXPOSURE_MAX = 400
+
+
 class ScanCrop(BaseModel):
     model_config = ConfigDict(extra='forbid')
     left: float = Field(default=.03, ge=0, lt=1.436667, allow_inf_nan=False)
@@ -35,8 +38,9 @@ class ScanOptions(BaseModel):
     @field_validator('exposure')
     @classmethod
     def exposure_bounds(cls, values):
-        if any(v < 50 or v > 200 for v in values):
-            raise ValueError('Exposure must be between 50 and 200 percent')
+        # CyberView sends the measured film base as exposure; blue reached 323 on 2026-10-30.
+        if any(v < 50 or v > EXPOSURE_MAX for v in values):
+            raise ValueError(f'Exposure must be between 50 and {EXPOSURE_MAX} percent')
         return values
 
     @model_validator(mode='after')
@@ -62,10 +66,19 @@ def validation() -> dict:
 
 
 def validated_options(options: dict) -> bool:
+    """A configuration is proven, or a proven one with a film-base exposure inside the
+    validated ``exposure_range`` (recorded only after a supervised scan)."""
     normalized = ScanOptions(**options).model_dump()
     if normalized == DEFAULT_OPTIONS:
         return True
-    return normalized in validation().get('configurations', [])
+    proven = validation().get('configurations', [])
+    if normalized in proven:
+        return True
+    low, high = validation().get('exposure_range', [100, 100])
+    if all(low <= v <= high for v in normalized['exposure']):
+        neutral = dict(normalized, exposure=[100, 100, 100])
+        return neutral == DEFAULT_OPTIONS or neutral in proven
+    return False
 
 
 def capabilities(bridge, options: dict) -> dict:

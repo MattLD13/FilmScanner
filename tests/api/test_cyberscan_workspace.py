@@ -78,3 +78,35 @@ def test_crop_levels_histogram_and_exports_preserve_original(tmp_path,bridge):
         assert hashlib.sha256(original).hexdigest()==item['sha256']
         assert client.patch(url,json={'adjustments':{'black_point':.8,'white_point':.4}}).status_code==422
         assert client.patch(url,json={'adjustments':{'curve':[0,.5,.2,.8,1]}}).status_code==422
+
+
+def test_film_base_measurement_becomes_exposure_but_scans_wait_for_validation(tmp_path,bridge,monkeypatch):
+    monkeypatch.setenv('FRAME_SCANNER_BACKEND','afl-native-experimental')
+    monkeypatch.setenv('FRAME_ALLOW_EXPERIMENTAL_SCANNER','1')
+    monkeypatch.setenv('FRAME_NATIVE_BRIDGE',__import__('os').environ['FRAME_CVBRIDGE'])
+    proven={'actions':['calibrate'],'configurations':[workspace.ScanOptions().model_dump()]}
+    monkeypatch.setattr(workspace,'validation',lambda:proven)
+    with TestClient(create_app(tmp_path/'library')) as client:
+        login(client)
+        result=client.post('/api/cyberview/control',json={'action':'calibrate','acknowledged':True})
+        assert result.status_code==200,result.text
+        assert result.json()['film_base_exposure']==[151,201,318]
+        view=client.get('/api/cyberview/workspace').json()
+        assert view['settings']['exposure']==[151,201,318]
+        # Blue above 200 has not been scanned under supervision yet.
+        assert view['capabilities']['actions']['scan']['available'] is False
+        monkeypatch.setattr(workspace,'validation',lambda:proven|{'exposure_range':[50,400]})
+        assert client.get('/api/cyberview/workspace').json()['capabilities']['actions']['scan']['available'] is True
+
+
+def test_direct_capture_stops_and_ends_a_driver_stuck_on_a_sensor(tmp_path,bridge,monkeypatch):
+    monkeypatch.setenv('FRAME_SCANNER_BACKEND','afl-native-experimental')
+    monkeypatch.setenv('FRAME_ALLOW_EXPERIMENTAL_SCANNER','1')
+    monkeypatch.setenv('FRAME_NATIVE_BRIDGE',__import__('os').environ['FRAME_CVBRIDGE'])
+    monkeypatch.setenv('FAKE_CVBRIDGE_MODE','sensor')
+    with TestClient(create_app(tmp_path/'library')) as client:
+        login(client)
+        assert client.post('/api/cyberview/scan',json={'count':1}).status_code==200
+        session=wait_session(client)
+        assert session['state']=='error' and 'take the film out' in session['error']
+        assert client.get('/api/cyberview/status').json()['session_open'] is False

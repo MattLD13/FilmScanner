@@ -322,6 +322,16 @@ Validation: `python -m pytest -q` → 172 passed, 2 xfailed. `npm run lint`, `bu
 `services/native_bridge/build.ps1 -Fixtures` and `services/cyberview_bridge/build.ps1` built
 without warnings.
 
+## Standalone CyberScan X in software (October 31 2026, evening)
+
+Direct capture by default, no CyberView option in the UI, CyberView's auto colour applied
+to new scans (exact port, monotone curves), film-base exposure from selector 17 (gated
+until a supervised scan), live preview and stuck detection on the direct path, and a
+verified local copy of the five driver files loaded bottom-up by aflbridge. Validation:
+`python -m pytest -q` → 192 passed, 2 xfailed; `npm run lint`, `build`, `test:skin`,
+`test:native-ui`, `test:live-preview`, `test:e2e`, `test:desktop` passed. Not yet run on
+the scanner. Details: [standalone-plan.md](standalone-plan.md).
+
 ## Live preview, stuck detection, stitched scans via CyberView (October 31 2026)
 
 - Live scan preview from the USB stream (`usbwatch.h`, `live_start`/`live` events,

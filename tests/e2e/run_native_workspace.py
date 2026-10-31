@@ -62,17 +62,24 @@ def main():
                         page.on('pageerror', lambda error: errors.append(str(error)))
                         page.goto(origin + '/?workspace=cyberscan')
                         expect(page.get_by_label('Scanner status')).to_contain_text('PrimeFilm')
+                        # Direct capture is the default; CyberView capture is no longer offered.
                         page.get_by_role('button', name='Settings', exact=True).click()
-                        native = page.get_by_role('button', name='Use native capture', exact=True)
-                        expect(native).to_be_disabled()
-                        page.get_by_label('I understand native startup may move film.', exact=False).check()
-                        native.click()
-                        expect(page.get_by_role('button', name='Use CyberView capture', exact=True)).to_be_visible()
+                        expect(page.get_by_text('CyberView X is not used', exact=False)).to_be_visible()
+                        assert page.get_by_role('button', name='Use CyberView capture').count() == 0
                         page.get_by_role('button', name='Scan', exact=True).click()
                         expect(page.get_by_role('button', name='Next frame', exact=True)).to_be_disabled()
                         assert page.get_by_label('Frames to scan').locator('option').count() == 1
                         page.get_by_role('button', name='Scan frame', exact=True).click()
                         expect(page.get_by_label('Invert negative', exact=True)).to_be_checked(timeout=15000)
+                        auto = page.get_by_label('Auto colour', exact=True)
+                        expect(auto).to_be_visible()
+                        before = auto.is_checked()
+                        auto.click()   # the box follows the server's answer, not the click
+                        page.wait_for_timeout(1500)
+                        error = page.get_by_role('alert').filter(has_text='near-neutral')
+                        assert auto.is_checked() != before or error.count(), 'auto colour did not toggle or explain why'
+                        toggled = page.request.get(origin + '/api/cyberview/captures').json()['captures'][0]['adjustments']['auto_color']
+                        assert (toggled is not None) == auto.is_checked(), toggled
                         response = page.request.get(origin + '/api/cyberview/captures').json()
                         capture = response['captures'][0]
                         assert capture['backend'] == 'afl-native-experimental'
@@ -87,15 +94,12 @@ def main():
                         saved = page.request.get(origin + '/api/cyberview/captures').json()['captures'][0]
                         assert saved['adjustments']['film_base'] == [.6, 1, 1]
                         assert page.request.get(origin + f'/api/cyberview/captures/{capture["id"]}/export/original').body() == original
-                        page.get_by_role('button', name='Settings', exact=True).click()
-                        page.get_by_role('button', name='Use CyberView capture', exact=True).click()
-                        expect(page.get_by_role('button', name='Use native capture', exact=True)).to_be_visible()
                         assert not errors, errors
                         browser.close()
                     print(json.dumps({'result': 'passed', 'mode': 'synthetic pipe helper; no device access',
-                                      'verified': ['native selection acknowledgement', 'current-frame-only controls',
+                                      'verified': ['direct capture by default', 'auto colour toggle', 'current-frame-only controls',
                                                    'native capture provenance', 'negative inversion', 'manual film base',
-                                                   '16-bit export', 'immutable original', 'switch back to CyberView'],
+                                                   '16-bit export', 'immutable original'],
                                       'javascript_exceptions': errors}))
                 finally:
                     server.should_exit = True

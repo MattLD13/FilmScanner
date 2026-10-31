@@ -144,3 +144,52 @@ def curves(words: list[int]) -> dict[str, list[tuple[int, int]]]:
         black_in = 0 if c == 1 else int(w[4, c])  # DS bug: green's black input is overwritten
         points[name] = [(int(w[0, c]), int(w[1, c])), (int(w[2, c]), int(w[3, c])), (black_in, int(w[5, c]))]
     return points
+
+
+def _monotone(xs: np.ndarray, ys: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Fritsch-Carlson monotone cubic through (xs, ys); xs strictly increasing."""
+    h = np.diff(xs); delta = np.diff(ys) / h
+    slopes = np.zeros_like(ys)
+    slopes[0], slopes[-1] = delta[0], delta[-1]
+    for i in range(1, len(xs) - 1):
+        if delta[i - 1] * delta[i] > 0:
+            w1, w2 = 2 * h[i] + h[i - 1], h[i] + 2 * h[i - 1]
+            slopes[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i])
+    i = np.clip(np.searchsorted(xs, x, side='right') - 1, 0, len(xs) - 2)
+    t = (x - xs[i]) / h[i]
+    h00, h10, h01, h11 = 2*t**3 - 3*t**2 + 1, t**3 - 2*t**2 + t, -2*t**3 + 3*t**2, t**3 - t**2
+    return h00 * ys[i] + h10 * h[i] * slopes[i] + h01 * ys[i + 1] + h11 * h[i] * slopes[i + 1]
+
+
+def _table(points: list[tuple[int, int]]) -> np.ndarray:
+    chosen = {0: 0, 255: 255}
+    for x, y in points:                      # control points win over the fixed ends
+        chosen[int(x)] = int(y)
+    xs = np.array(sorted(chosen), float); ys = np.array([chosen[x] for x in sorted(chosen)], float)
+    return np.clip(_monotone(xs, ys, np.arange(256, dtype=float)), 0, 255) / 255
+
+
+def tables(words: list[int]) -> np.ndarray:
+    """(3, 256) lookup tables in 0..1: each channel's curve, then the master curve.
+
+    CyberView's points are exact; the curve through them is a monotone cubic because
+    the DS engine's own table builder (points copied to +0x670) is not read yet.
+    """
+    points = curves(words)
+    master = _table(points['master'])
+    return np.stack([np.interp(_table(points[name]) * 255, np.arange(256), master) for name in 'rgb'])
+
+
+def apply(samples: np.ndarray, words: list[int]) -> np.ndarray:
+    """Applies the auto colour curves to float RGB samples in 0..1."""
+    luts = tables(words); grid = np.linspace(0, 1, 256)
+    return np.stack([np.interp(samples[..., c], grid, luts[c]) for c in range(3)], axis=-1).astype(samples.dtype)
+
+
+def for_positive(samples: np.ndarray, width: int = 900) -> list[int] | None:
+    """CyberView runs auto colour on its prescan; this uses a reduced 8-bit copy of the
+    positive (about 600 dpi from an 1800 dpi frame). None when the DS would fail."""
+    step = max(1, int(np.ceil(samples.shape[1] / width)))
+    small = samples[::step, ::step, :3]
+    code, words = compute(np.clip(np.round(small * 255), 0, 255).astype(np.uint8))
+    return words if code == 0 else None

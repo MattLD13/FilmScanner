@@ -61,3 +61,30 @@ def test_matches_cyberview_live_on_random_images(tmp_path):
         image.tofile(raw)
         ref = json.loads(subprocess.run([str(EXE), str(raw), str(w), str(h)], capture_output=True, text=True, timeout=60).stdout)
         assert autocolor.compute(image) == (ref['result'], ref['words']), k
+
+
+GARDEN = [255, 255, 255, 255, 255, 255, 113, 158, 156, 128, 128, 128, 12, 42, 75, 0, 0, 0]
+
+
+def test_tables_pass_through_cyberviews_points_and_stay_monotone():
+    luts = autocolor.tables(GARDEN)
+    master = autocolor._table([(155, 130)])
+    assert master[155] * 255 == pytest.approx(130, abs=.01)
+    for c, (black, mid) in enumerate([(12, 113), (0, 158), (75, 156)]):   # green's black is the DS quirk
+        assert np.all(np.diff(luts[c]) >= 0)
+        assert luts[c][black] * 255 == pytest.approx(master[0] * 255, abs=.5)
+        assert luts[c][mid] * 255 == pytest.approx(master[128] * 255, abs=1)
+
+
+def test_apply_lifts_a_teal_cast_toward_neutral():
+    rng = np.random.default_rng(1)
+    grey = rng.uniform(.2, .8, (60, 80, 1))
+    # Lifted, unequal blacks like a hidden CyberView scan; strong enough to see, mild
+    # enough that midtones still count as near neutral (saturation below 0.35).
+    teal = np.clip(np.concatenate([grey * .9, grey * .95 + .04, grey + .08], axis=2), 0, 1)
+    words = autocolor.for_positive(teal)
+    assert words is not None
+    out = autocolor.apply(teal, words)
+    before = np.abs(teal.mean((0, 1)) - teal.mean()).max()
+    after = np.abs(out.mean((0, 1)) - out.mean()).max()
+    assert after < before / 2

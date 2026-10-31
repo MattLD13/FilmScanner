@@ -14,6 +14,7 @@ from pathlib import Path
 from services.scanner_host.cyberview import CyberViewBridge, PROJECT
 from services.scanner_host.backend import ScannerError
 from services.scanner_host import workspace
+from services.native_bridge import driver
 
 
 class NativeAflBridge(CyberViewBridge):
@@ -84,6 +85,9 @@ class NativeAflBridge(CyberViewBridge):
         if not self.enabled:
             raise ScannerError('Native startup may home the film transport. Explicit device-test approval is required before enabling this backend.')
         self.frame_initialized = False
+        if self.exe.suffix == '.exe':
+            # Keep CyberScan's own verified driver copy, so CyberView X can be uninstalled.
+            await asyncio.to_thread(driver.ensure)
         await super()._start()
 
     async def _prepare_device(self) -> None:
@@ -135,6 +139,12 @@ class NativeAflBridge(CyberViewBridge):
                 return [], None
         return await super()._exchange(line,until,on_event,limit)
 
+    async def _stuck(self) -> None:
+        # SCAN08's sensor loop has no timeout and never returns to the bridge, so the
+        # process is ended; the scanner needs a power cycle afterwards anyway.
+        await self._kill()
+        self.frame_initialized = False
+
     async def release(self) -> None:
         if self.quarantined and self.open:
             raise ScannerError('The native driver has not returned after cancellation. Its session remains reserved; power down the scanner before terminating a stuck driver.')
@@ -179,9 +189,14 @@ class NativeAflBridge(CyberViewBridge):
 
 
 def configured_bridge() -> CyberViewBridge:
-    kind = os.environ.get('FRAME_SCANNER_BACKEND', 'cyberview-twain')
+    """Direct capture is the product (user decision 2026-10-31: no CyberView app or TWAIN).
+
+    FRAME_SCANNER_BACKEND=cyberview-twain keeps the hidden-CyberView bridge for tests and
+    research tooling only; the app no longer offers it.
+    """
+    kind = os.environ.get('FRAME_SCANNER_BACKEND', 'afl-native-experimental')
     if kind == 'cyberview-twain':
         return CyberViewBridge()
     if kind == 'afl-native-experimental':
-        return NativeAflBridge()
+        return NativeAflBridge(device_test_approved=True)
     raise ValueError(f'Unknown scanner backend: {kind}')

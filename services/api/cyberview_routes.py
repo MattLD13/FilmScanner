@@ -24,9 +24,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 import tifffile
 
 from services.api.store import atomic_write
-from services.imaging import frame_align, pipeline, filmterms
+from services.imaging import autocolor, frame_align, pipeline, filmterms
 from services.scanner_host import cyberview
 from services.scanner_host import vendor_evidence
+from services.native_bridge import driver
 from services.scanner_host.native import configured_bridge, NativeAflBridge
 from services.scanner_host.backend import ScannerError
 from services.scanner_host import workspace
@@ -35,6 +36,7 @@ from services.scanner_host.workspace import ScanOptions
 SOURCE = 'CyberView X - MF (TWAIN, hidden) on PrimeFilm PF1800 AFL'
 PREVIEW_EDGE = 1800
 THUMB_EDGE = 360
+NATIVE_SOURCE = 'PF1800 AFL direct capture (SCAN08 driver, vendor-calibrated transmission)'
 LIVE_MAX_ROWS = 300  # 1708 lines / 8, with room to spare
 
 
@@ -92,6 +94,15 @@ class Adjustments(BaseModel):
     crop: EditCrop = Field(default_factory=EditCrop)
     monochrome: bool = False
     film_profile: str | None = Field(default=None, pattern='^[0-9a-f]{16}$')
+    # CyberView's Auto Gamma, as its 18 words (services/imaging/autocolor.py); None = off.
+    auto_color: list[int] | None = Field(default=None, min_length=18, max_length=18)
+
+    @field_validator('auto_color')
+    @classmethod
+    def auto_color_words(cls, values):
+        if values is not None and any(not 0 <= v <= 0xFFFF for v in values):
+            raise ValueError('Auto colour words must be 16-bit values')
+        return values
 
     @field_validator('rgb_balance')
     @classmethod
@@ -138,6 +149,10 @@ class AlignSettings(BaseModel):
     steps_per_mm: float | None = Field(default=None, gt=0)  # learned from stitched scans
 
 
+class AutoColorRequest(BaseModel):
+    enabled: bool = True
+
+
 class AlignRequest(BaseModel):
     bleed_mm: float = Field(default=0, ge=-2, le=2)
     apply: bool = True
@@ -171,6 +186,8 @@ def before_levels(samples: np.ndarray, adjust: Adjustments, profile=None) -> np.
         if not profile or profile['id']!=adjust.film_profile:
             raise ValueError('The chosen film rendering profile is unavailable')
         samples=filmterms.apply(samples,profile)
+    if adjust.auto_color:
+        samples = autocolor.apply(samples, adjust.auto_color)
     return samples
 
 
@@ -212,11 +229,9 @@ def jpeg(samples: np.ndarray, edge: int) -> bytes:
 
 def register(app, store, publish):
     bridge = configured_bridge()
-    preferences = next((p for p in store.all('cv_preferences') if p['id'] == 'scanner'), {})
-    if 'FRAME_SCANNER_BACKEND' not in os.environ and preferences.get('backend') == 'afl-native-experimental' and preferences.get('acknowledged'):
-        bridge = NativeAflBridge(device_test_approved=True)
+    # The saved preference only mattered while CyberView capture was offered.
     operation_lock = asyncio.Lock()
-    source = SOURCE if bridge.kind == 'cyberview-twain' else 'PF1800 AFL native model module (experimental, vendor-calibrated transmission)'
+    source = SOURCE if bridge.kind == 'cyberview-twain' else NATIVE_SOURCE
     runtime = {'session': None, 'task': None, 'present': (0.0, None), 'live': None}
     saved_workspace = next((p for p in store.all('cv_preferences') if p['id'] == 'workspace'), {})
     scan_options = ScanOptions(**saved_workspace.get('settings', {})).model_dump()
@@ -310,6 +325,8 @@ def register(app, store, publish):
                   'cyberview': session['settings'],
                   'adjustments': Adjustments(monochrome=event.get('binary_recipe_requested',False), invert=bridge.image_kind == 'vendor-calibrated-transmission' and
                                              session.get('requested_settings', {}).get('film', 'negative') == 'negative').model_dump()}
+        # CyberView applies Auto Gamma to every scan; so does CyberScan X (toggle per frame).
+        record['adjustments']['auto_color'] = autocolor.for_positive(before_levels(samples, Adjustments(**record['adjustments'])))
         if align_settings['auto'] and session.get('purpose', 'scan') == 'scan':
             align_record(record, samples, align_settings['bleed_mm'])
         atomic_write(store.path(base + '.json'), json.dumps(record, indent=1).encode())
@@ -426,6 +443,7 @@ def register(app, store, publish):
         """Inspect installed files and research evidence without initializing hardware."""
         result = await asyncio.to_thread(vendor_evidence.inspect_installation)
         result['active_backend'] = bridge.kind
+        result['driver'] = await asyncio.to_thread(driver.status)
         return result
 
     @app.post('/api/cyberview/scan')
@@ -483,7 +501,7 @@ def register(app, store, publish):
                 raise HTTPException(409, str(exc))
             bridge = candidate
             integration['bridge'] = bridge
-            source = SOURCE if bridge.kind == 'cyberview-twain' else 'PF1800 AFL native model module (experimental, vendor-calibrated transmission)'
+            source = SOURCE if bridge.kind == 'cyberview-twain' else NATIVE_SOURCE
             store.save('cv_preferences', {'id': 'scanner', 'backend': body.backend, 'acknowledged': body.acknowledged})
             return await asyncio.to_thread(status)
 
@@ -528,6 +546,7 @@ def register(app, store, publish):
 
     @app.post('/api/cyberview/control')
     async def scanner_control(body: ControlRequest):
+        nonlocal scan_options
         async with operation_lock:
             if bridge.busy or (runtime['task'] and not runtime['task'].done()):
                 raise HTTPException(409, 'Finish the current scanner operation first')
@@ -538,11 +557,22 @@ def register(app, store, publish):
                 raise HTTPException(422, 'Confirm this scanner operation')
             if body.action == 'focus' and body.value is None:
                 raise HTTPException(422, 'Choose a focus value')
+            measured = {}
+
+            def on_event(event):
+                if event.get('event') == 'calibration':
+                    measured['rgb'] = event['rgb']
             try:
-                await bridge.control(body.action, value=body.value)
+                await bridge.control(body.action, on_event, value=body.value)
             except ScannerError as exc:
                 raise HTTPException(409, str(exc))
-            return await asyncio.to_thread(status)
+            if measured:
+                # CyberView's "auto exposure" on the PF1800 AFL: the measured film base
+                # becomes the per-channel exposure of the next scans (docs/auto-color-re.md).
+                exposure = [min(workspace.EXPOSURE_MAX, max(50, int(v))) for v in measured['rgb']]
+                scan_options = ScanOptions(**(scan_options | {'exposure': exposure})).model_dump()
+                store.save('cv_preferences', {'id': 'workspace', 'settings': scan_options})
+            return await asyncio.to_thread(status) | ({'film_base_exposure': measured['rgb']} if measured else {})
 
     @app.post('/api/cyberview/release')
     async def release():
@@ -752,6 +782,21 @@ def register(app, store, publish):
             await update_session(state='error', error=str(exc), finished_at=int(time.time() * 1000))
         except Exception as exc:  # recorded, never reported as success
             await update_session(state='error', error=f'Unexpected failure: {exc}', finished_at=int(time.time() * 1000))
+
+    @app.post('/api/cyberview/captures/{capture_id}/auto-color')
+    async def auto_color(capture_id: str, body: AutoColorRequest):
+        """Turns CyberView's automatic colour on (computed from this frame) or off."""
+        record = capture(capture_id)
+        adjust = Adjustments(**(record['adjustments'] | {'auto_color': None}))
+        words = None
+        if body.enabled:
+            samples = await asyncio.to_thread(lambda: before_levels(to_float(read_original(store.path(record['original_path']))),
+                                                                    adjust, resolve_profile(adjust.film_profile)))
+            words = autocolor.for_positive(samples)
+            if words is None:
+                raise HTTPException(409, 'This frame has no near-neutral midtones, so automatic colour does not apply')
+        record['adjustments'] = adjust.model_copy(update={'auto_color': words}).model_dump()
+        return store.save('cv_captures', record)
 
     @app.post('/api/cyberview/captures/{capture_id}/auto-levels')
     async def auto_levels(capture_id: str):

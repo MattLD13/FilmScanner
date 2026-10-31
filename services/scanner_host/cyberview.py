@@ -304,6 +304,10 @@ class CyberViewBridge:
             if code != 0:
                 await self.restore_settings()
 
+    async def _stuck(self) -> None:
+        """The driver is looping on a sensor; cvbridge leaves the scan by itself."""
+        await self.release()
+
     async def _kill(self) -> None:
         """Last resort for a driver that stopped responding; the AFL then needs a reset."""
         if self.process and self.process.returncode is None:
@@ -341,6 +345,8 @@ class CyberViewBridge:
                     await result
             if kind == until or (until in ('command_done', 'configured') and kind == 'error'):
                 break
+            if kind == 'error' and event.get('code') == 'position_sensor':
+                return images, event  # the driver will not finish this command; see _stuck
         if await self._next(30) is None:  # the bridge's "ready" after every command
             await self._ended()
         return images, error
@@ -384,7 +390,7 @@ class CyberViewBridge:
         if error and not images:
             if error.get('code') == 'position_sensor':
                 # Seen 2026-10-31: a USB restart did not clear it; a power cycle and reseating the film did.
-                await self.release()
+                await self._stuck()
                 raise ScannerError(SENSOR)
             if error.get('code') == 'timeout':
                 # A stuck driver session is not worth keeping; the next scan starts a fresh one.

@@ -16,6 +16,7 @@ def strip_bridge(tmp_path, monkeypatch):
     ini = tmp_path / 'CyberViewX.ini'
     ini.write_text('[TOOLBAR FILMTERM]\nFilm Term Name=Kodak 200\n', encoding='latin-1')
     monkeypatch.setenv('FRAME_CVBRIDGE', str(FAKE))
+    monkeypatch.setenv('FRAME_SCANNER_BACKEND', 'cyberview-twain')  # the legacy path these tests cover
     monkeypatch.setenv('FRAME_NATIVE_BRIDGE', str(FAKE))
     monkeypatch.setenv('FRAME_CYBERVIEW_INI', str(ini))
     monkeypatch.setenv('FAKE_CVBRIDGE_MODE', 'strip')
@@ -112,3 +113,18 @@ def test_stitched_scan_through_cyberview_step_commands(tmp_path, strip_bridge, m
         assert capture['alignment']['exact'] and capture['alignment']['crop_mm'] == pytest.approx([36, 24], abs=.05)
     sent = log.read_text()
     assert 'film step back' in sent and 'film step forward' in sent and 'film nudge' not in sent
+
+
+def test_new_scans_get_cyberviews_auto_colour_and_it_can_be_toggled(tmp_path, strip_bridge):
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        assert client.post('/api/cyberview/scan', json={'count': 1}).status_code == 200
+        assert wait_session(client)['state'] == 'complete'
+        capture = client.get('/api/cyberview/captures').json()['captures'][0]
+        words = capture['adjustments']['auto_color']
+        assert words and len(words) == 18 and words[9:12] == [128, 128, 128]
+        off = client.post(f"/api/cyberview/captures/{capture['id']}/auto-color", json={'enabled': False}).json()
+        assert off['adjustments']['auto_color'] is None
+        on = client.post(f"/api/cyberview/captures/{capture['id']}/auto-color", json={'enabled': True}).json()
+        assert on['adjustments']['auto_color'] == words
+        assert client.get(f"/api/cyberview/captures/{capture['id']}/export/tiff").status_code == 200

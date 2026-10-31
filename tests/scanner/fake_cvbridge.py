@@ -162,6 +162,12 @@ def main():
             emit(event='command_done', name='nudge')
             emit(event='ready')
             continue
+        if line == 'calibrate':  # native selector 17: film-base measurement (CyberView used 151/201/318 here)
+            emit(event='command', name='calibrate')
+            emit(event='calibration', rgb=[151, 201, 318])
+            emit(event='command_done', name='calibrate')
+            emit(event='ready')
+            continue
         if line.startswith('film '):
             global position
             action = line.split()[1]
