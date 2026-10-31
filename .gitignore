@@ -17,3 +17,4 @@ research/**/*.vdi
 research/**/*.vmdk
 research/**/*.qcow2
 research/**/*.ghidra/
+services/cyberview_bridge/bin/

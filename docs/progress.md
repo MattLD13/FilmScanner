@@ -155,6 +155,37 @@ and fixed missing accessible names on the adjustment sliders. Evidence and scope
 [phone screenshot](screenshots/cyberscan-phone.png). Scanner integration and the
 native desktop entry for this skin remain future work, subject to authorization.
 
+## CyberScan X scans through CyberView X (October 30 2026, evening)
+
+The user authorized operating the real scanner, with film loaded, to finish the skin
+as a working Electron front end for CyberView X. CyberScan X now scans with the
+**real PF1800 AFL**. It drives CyberView's own TWAIN driver through a new x86 bridge
+(`services/cyberview_bridge/cvbridge.c`) with the driver's window hidden. FRAME still
+sends no USB command of its own. The simulator and the disabled production
+TWAIN/USB backends are unchanged.
+
+- Hardware evidence: native 1800 dpi, 16-bit RGB frames, already inverted with
+  CyberView's film term. A two-frame scan from the UI advanced the film with
+  CyberView's "Forward One Frame". Originals were exported byte-identical against
+  their SHA-256. A relaunched service recovered the scanner by USB restart and
+  scanned without anyone touching it. A killed service no longer leaves the driver
+  open.
+- Failures found and handled: repeated driver sessions stall the AFL. "Backward
+  One Frame" hung the driver, so it is not offered. Hidden sessions save default
+  film-base calibration, which made colour unusable, so calibration is always
+  restored. TWAIN resolution and depth negotiation are ignored. Details are in
+  [cyberview-bridge.md](cyberview-bridge.md).
+- UI rebuilt to the unslop rules: live and demo modes, scan progress from the
+  driver's own status, next frame, adjustments, exports, library, settings and
+  release scanner. See [cyberscan-skin.md](cyberscan-skin.md).
+- Optional `scripts/install-scanner-reset.ps1` (run once as administrator by the
+  user, 2026-10-30) lets the service restart only USB device 2770:0119.
+- Validation: `python -m pytest -q` gave 115 passed and 2 known-bug expected
+  failures (9 new CyberScan API tests against a fake bridge). `npm run lint`,
+  `npm run build`, `npm run test:skin`, `npm run test:e2e` and
+  `npm run test:desktop` (7) passed. `npm run smoke:desktop` and the same smoke
+  run with `--cyberscan` passed.
+
 ## M2: Image processing and archival reliability
 
 **Status: IN PROGRESS, independently of M1.5.**

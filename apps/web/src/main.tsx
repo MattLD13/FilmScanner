@@ -47,14 +47,14 @@ function App(){
  <footer><span>FRAME <span className="orange">●</span> YOUR FILM, CONSIDERED.</span><span>MADE FOR THE LONG WAY AROUND.</span></footer></main><div className="mobile-nav">{nav.map((n,i)=><button key={n} className={page===n?'active':''} onClick={()=>setPage(n)}><span>{['◒','◉','◷','▦','✳'][i]}</span>{n}</button>)}</div></div>;
 }
 const root = createRoot(document.getElementById('root')!);
-const skinPreview = new URLSearchParams(location.search).get('workspace') === 'cyberscan';
-if (skinPreview) {
- document.title = 'CyberScan X — UI preview | FRAME';
+const cyberscan = new URLSearchParams(location.search).get('workspace') === 'cyberscan';
+if (cyberscan) {
+ document.title = 'CyberScan X';
  document.documentElement.style.colorScheme = 'dark';
  document.body.style.margin = '0';
- document.body.style.backgroundColor = '#201c1a';
- // Mount the local-only renderer instead of App: no authentication, API, event
- // socket, service-worker registration or scanner connection runs in this mode.
+ document.body.style.backgroundColor = '#161513';
+ // CyberScan X replaces App. With &demo=1 it makes no requests at all; otherwise it
+ // authenticates with the local service and scans through CyberView X. No service worker.
  import('./cyberscan').then(({ CyberScanSkin }) => root.render(<CyberScanSkin/>));
 } else {
  import('./style.css');

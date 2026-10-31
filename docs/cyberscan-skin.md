@@ -1,73 +1,67 @@
-# CyberScan X interface preview
+# CyberScan X
 
-This is the first modern scanner-workspace skin for FRAME. The user authorized
-interface work on October 30, 2026 while explicitly keeping the software away from
-the connected scanner. This preview follows that restriction.
+CyberScan X is a modern front end for CyberView X. It runs in FRAME's Electron
+shell and scans with the PrimeFilm 1800 AFL through CyberView's own TWAIN driver,
+with CyberView's window hidden. The driver bridge, its evidence and its limits are
+in [cyberview-bridge.md](cyberview-bridge.md).
 
-## Run the preview
+## Run
 
 ```powershell
-npm run build
-npm run preview:skin
+npm run build:bridge   # once; x86 TWAIN bridge
+npm run build          # web client
+npm run cyberscan      # Electron window, starts or attaches to the local service
 ```
 
-Open [the local preview](http://127.0.0.1:8770/?workspace=cyberscan).
-It is a static server bound to this computer only. It imports no FRAME API,
-scanner host, USB/TWAIN backend or vendor software. It does not authenticate with
-the service, discover devices, connect an event socket or register a service
-worker. Its browser Content Security Policy blocks all connection requests.
+In a browser, use `http://127.0.0.1:8765/?workspace=cyberscan` while `npm start`
+runs. `npm run preview:skin` serves an offline demo (`&demo=1`) with sample photos.
+That demo makes no network requests and cannot scan.
 
-The original app remains available through its normal startup path; its existing
-implementation was not replaced. The static preview server redirects its root
-entry to the CyberScan renderer and provides no API. The separate preview was
-used for testing so the user's VueScan session and scanner were not touched.
+## What it does
 
-## Working controls
+- **Scan**: scans the current frame, or the next 2–36 frames. The film is
+  advanced with CyberView's "Forward One Frame" between scans. Progress shows
+  the driver's own status ("Preparing film scanner", "Scanning frame 002"), the
+  lines received, elapsed time and frames saved. A scan can be stopped.
+- **Next frame**: moves the film one frame without scanning.
+- **Viewer and filmstrip**: the selected scan, zoom, rotate, mirror, favourite,
+  and edge-print frame numbers (01A, 02A…) for every frame on the roll.
+- **Adjust**: exposure, contrast, saturation and temperature. They are saved per
+  scan as a recipe. Previews and exports use the same colour matrix.
+- **Export**: the original TIFF (byte-identical, checked against its SHA-256),
+  a 16-bit adjusted TIFF, or an 8-bit JPEG.
+- **Library**: all scans, grouped by roll.
+- **Settings**: the CyberView settings that shape scans, scanner and bridge
+  state, automatic recovery status, and Release scanner (closes the driver
+  session so CyberView X itself can be opened).
 
-- Three local demonstration photographs with clear demo labels. The displayed
-  Gold 200 roll label is demonstration metadata, not a claim about the sample
-  photographs' film stock or the user's scans.
-- Filmstrip image selection and a session library.
-- Import one or several local images into browser memory, without uploading them.
-- Zoom/fit, rotation, mirroring and rule-of-thirds framing guides.
-- Exposure, contrast and saturation display adjustments, reset and creative
-  Neutral/Warm/Mono looks. They are not calibrated film-stock responses.
-- Export a separate 8-bit JPEG preview with the image transforms and adjustments,
-  or download its JSON preview recipe. Original imported files are not changed.
-- Local preferences/information view and a layout suitable for desktop and 390px
-  phone-size review.
+## Design
 
-Connect, Prescan and Scan remain visibly disabled. There is no simulated progress,
-physical alignment control, automatic film motion, calibration or acquisition in
-this mode. Framing guides are visual overlays; they do not move film or crop an
-archival acquisition. No USB service/driver, Windows appearance setting or VueScan
-setting is changed. The dark theme is confined to the preview page.
+Built to the [unslop](https://github.com/heydamir/unslop) rules (CC BY 4.0, Damir
+Sokolovsky):
+
+- **Product**: a modern front end that scans 35 mm frames from the PF1800 AFL
+  through CyberView's own driver and keeps the 16-bit originals.
+- **Character**: calm, exact, darkroom.
+- **World**: the warm neutral dark ramp. The FRAME orange is the only accent,
+  used for the primary action, the selected frame and scan progress.
+- **Moments**: the large scan in the viewer, and scan progress that fills a
+  frame outline as real lines arrive.
+- **Signature**: film edge-print frame numbers in mono (`01A`).
+- Type is Segoe UI Variable with Cascadia Mono, the Windows system fonts. The
+  Electron shell blocks network requests, so no web fonts are used.
+- 4 px spacing grid. Three text roles. Hairline borders at 8% and 14%. One
+  1.5 px icon set. Sentence case throughout. Neutral sliders. One easing curve,
+  with 120–220 ms transitions.
 
 ## Validation
 
 ```powershell
-npm run lint
-npm run build
-npm run test:skin
+npm run lint; npm run build
+python -m pytest -q tests/api/test_cyberview.py   # API against a fake bridge
+npm run test:skin                                  # offline demo in Chromium, desktop and 390 px
 ```
 
-The browser test starts only a temporary static server on 127.0.0.1:8771. It tests
-frame selection, keyboard-accessible adjustments, creative look/reset, transforms,
-guides, local import, session clearing on reload, JPEG/JSON downloads and a 390px
-layout. It asserts that scanner actions are disabled and records **zero API
-requests, zero WebSocket connections and zero external requests**.
-
-Results: [cyberscan-validation.json](cyberscan-validation.json).
-Screenshots: [desktop](screenshots/cyberscan-desktop.png) and
-[phone](screenshots/cyberscan-phone.png). These are UI photographs/fixtures, not
-hardware test evidence. Sources/licenses are in
-[the demo asset record](../apps/web/public/demo/README.md).
-
-## Scope still open
-
-This is a renderer preview, not the finished hardware integration or archive
-editor. Scanner access must remain disabled until the user authorizes that work.
-Later work can connect the approved workspace to verified operations, migrate
-the remaining FRAME screens, integrate the native desktop entry and add actual
-histograms, crop/export recipes, keyboard shortcuts and per-frame edit history.
-Imported preview images and adjustments currently last only for the page session.
+Hardware results from 2026-10-30 are listed in
+[cyberview-bridge.md](cyberview-bridge.md). Screenshots: [desktop demo](screenshots/cyberscan-desktop.png),
+[phone demo](screenshots/cyberscan-phone.png).

@@ -11,6 +11,8 @@
     "lint": "npm --prefix apps/web run lint",
     "setup": "python -m pip install -r requirements.txt && npm --prefix apps/web install && npm --prefix apps/desktop-shell install",
     "desktop": "npm --prefix apps/desktop-shell start",
+    "cyberscan": "npm --prefix apps/desktop-shell start -- --cyberscan",
+    "build:bridge": "powershell -NoProfile -ExecutionPolicy Bypass -File services/cyberview_bridge/build.ps1",
     "test:desktop": "npm --prefix apps/desktop-shell test",
     "smoke:desktop": "npm --prefix apps/desktop-shell run smoke"
   }

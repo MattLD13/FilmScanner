@@ -12,6 +12,8 @@ const {
 } = require('./service');
 
 const smoke = process.argv.includes('--smoke');
+// --cyberscan opens the CyberScan X front end for CyberView X instead of the FRAME library.
+const cyberscan = process.argv.includes('--cyberscan');
 const screenshotArg = process.argv.find((arg) => arg.startsWith('--screenshot='));
 const root = workspaceRoot();
 let child = null;
@@ -87,8 +89,8 @@ function harden(allowedOrigin) {
 
 function createWindow() {
   window = new BrowserWindow({
-    width: 1320, height: 880, minWidth: 380, minHeight: 600, show: false, title: 'FRAME',
-    backgroundColor: '#111418', autoHideMenuBar: true,
+    width: cyberscan ? 1440 : 1320, height: cyberscan ? 900 : 880, minWidth: 380, minHeight: 600, show: false,
+    title: cyberscan ? 'CyberScan X' : 'FRAME', backgroundColor: cyberscan ? '#161513' : '#111418', autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, spellcheck: false },
   });
   window.once('ready-to-show', () => { if (!smoke) window.show(); });
@@ -140,7 +142,7 @@ if (!app.requestSingleInstanceLock()) {
       origin = service.origin;
       harden(origin);
       const win = createWindow();
-      await win.loadURL(`${origin}/`);
+      await win.loadURL(cyberscan ? `${origin}/?workspace=cyberscan` : `${origin}/`);
       if (smoke) {
         const result = await runSmoke(win);
         process.stdout.write(`${JSON.stringify({ ...result, owned: service.owned })}\n`);

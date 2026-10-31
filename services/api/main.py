@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
 
-from services.api import developing
+from services.api import cyberview_routes, developing
 from services.api.store import Store, atomic_write
 from services.imaging import filmterms, pipeline
 
@@ -128,7 +128,13 @@ def create_app(data_dir=None):
 
     @asynccontextmanager
     async def lifespan(app):
+        await cyberscan['recover']()
         yield
+        bridge = cyberscan['bridge']
+        if bridge.busy:
+            await bridge.cancel()
+            await cyberscan['idle']()
+        await bridge.release()
         task = runtime['task']
         if task and not task.done():
             task.cancel()
@@ -189,6 +195,8 @@ def create_app(data_dir=None):
             if queue.full():
                 queue.get_nowait()
             queue.put_nowait(event)
+
+    cyberscan = cyberview_routes.register(app, store, publish)
 
     @app.middleware('http')
     async def access(request: Request, call_next):
