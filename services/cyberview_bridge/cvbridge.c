@@ -690,6 +690,7 @@ static void pump(DWORD ms) {
 
 /* One acquisition: enable hidden, transfer every pending image, disable. 1 ok, 0 failed, -1 cancelled. */
 #include "../native_bridge/usbwatch.h"
+#include "../native_bridge/vendorfix.h"
 
 static int one_scan(const char *out, int count, int show_ui, int timeout_s) {
     report_set("autofeed", set_one(CAP_AUTOFEED, TWTY_BOOL, count > 1));
@@ -874,12 +875,20 @@ static int parse_area(const char *s, double *a) {
  * (live preview, stuck detection) is optional: without a trace file a failure to
  * hook is reported and scanning goes on unwatched. */
 static int start_watch(const char *trace_path) {
-    char fvc[MAX_PATH];
+    char fvc[MAX_PATH], ioport[MAX_PATH];
     const char *traced[] = {"fvc.dll", NULL};
     UINT n = GetSystemDirectoryA(fvc, MAX_PATH);
-    if (!n || n > MAX_PATH - 10 || !LoadLibraryA(strcat(fvc, "\fvc.dll"))) {
+    if (!n || n > MAX_PATH - 14) { emit_error("watch", "The system folder could not be found", -1); return !trace_path; }
+    strcpy_s(ioport, sizeof ioport, fvc);
+    strcat_s(fvc, sizeof fvc, "\\fvc.dll");
+    strcat_s(ioport, sizeof ioport, "\\IO_PORT.dll");
+    if (!LoadLibraryA(fvc)) {
         emit_error(trace_path ? "trace" : "watch", "The vendor FVC.dll could not be loaded for the USB watch", -1);
         return !trace_path;
+    }
+    /* IO_PORT too, so its uninitialised close write can be fixed before CyberView loads it. */
+    if (LoadLibraryA(ioport)) {
+        printf("{\"event\":\"vendorfix\",\"close_write_zeroed\":%s}\n", vendorfix_install() ? "true" : "false"); fflush(stdout);
     }
     InitializeCriticalSection(&watch_lock);
     trace_on_register = watch_register; trace_on_status = watch_status; trace_on_bulk_in = watch_bulk_in;

@@ -122,6 +122,12 @@ traces and the image are in `data/traces/` on this PC (ignored by git).
    and the driver copy are in place. What still needs the scanner is listed at the top of
    [standalone-plan.md](standalone-plan.md) under "Needs one supervised session".
 
+10. **Supervised session done (2026-10-31 afternoon).** Direct capture works from
+    CyberScan's own driver copy; a vendor bug (random register write on every close) was
+    found and fixed; film-base exposure, live preview, fine film moves and a stitched scan
+    work on the real scanner. Results table in [standalone-plan.md](standalone-plan.md).
+    Open: tune the negative-conversion tone against CyberView's output; selector 17.
+
 ## Where to look first
 
 - `docs/scanner-protocol.md`: how every layer talks to the scanner, both traces.

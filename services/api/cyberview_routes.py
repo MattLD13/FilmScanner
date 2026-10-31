@@ -302,6 +302,25 @@ def register(app, store, publish):
                 await publish({'type': 'cyberview_live', 'session_id': session['id'], 'pass': event['pass'],
                                'y': event['y'], 'data': event['data']})
 
+    def film_base_exposure(record, samples):
+        """CyberView's auto exposure on the PF1800 AFL, done from the scan itself: the bare
+        film base (brightest 0.5 % of luminance) is brought to 0.85 in every channel on the
+        next scans. Verified linear on 2026-10-31 (base 0.84/0.855/0.856 at 120/168/269)."""
+        nonlocal scan_options
+        used = (record.get('requested_settings') or {}).get('exposure')
+        if bridge.kind != 'afl-native-experimental' or not used or (record.get('requested_settings') or {}).get('film') != 'negative':
+            return
+        rgb = samples[..., :3].reshape(-1, 3)
+        luminance = rgb @ np.array([.3, .5, .2])
+        base = rgb[luminance >= np.percentile(luminance, 99.5)].mean(axis=0)
+        if np.any(base <= .02):
+            return
+        exposure = [int(min(workspace.EXPOSURE_MAX, max(50, round(e * .85 / b)))) for e, b in zip(used, base)]
+        record['film_base'] = {'measured': [round(float(b), 4) for b in base], 'exposure_used': used, 'next_exposure': exposure}
+        if exposure != scan_options['exposure'] and workspace.validated_options(scan_options | {'exposure': exposure}):
+            scan_options = ScanOptions(**(scan_options | {'exposure': exposure})).model_dump()
+            store.save('cv_preferences', {'id': 'workspace', 'settings': scan_options})
+
     def finalize(session, event, index):
         """Moves one delivered TIFF into place, hashes it and writes its previews."""
         incoming = Path(event['path']).resolve()
@@ -326,6 +345,7 @@ def register(app, store, publish):
                   'adjustments': Adjustments(monochrome=event.get('binary_recipe_requested',False), invert=bridge.image_kind == 'vendor-calibrated-transmission' and
                                              session.get('requested_settings', {}).get('film', 'negative') == 'negative').model_dump()}
         # CyberView applies Auto Gamma to every scan; so does CyberScan X (toggle per frame).
+        film_base_exposure(record, samples)
         record['adjustments']['auto_color'] = autocolor.for_positive(before_levels(samples, Adjustments(**record['adjustments'])))
         if align_settings['auto'] and session.get('purpose', 'scan') == 'scan':
             align_record(record, samples, align_settings['bleed_mm'])

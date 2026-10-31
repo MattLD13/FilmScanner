@@ -322,6 +322,17 @@ Validation: `python -m pytest -q` → 172 passed, 2 xfailed. `npm run lint`, `bu
 `services/native_bridge/build.ps1 -Fixtures` and `services/cyberview_bridge/build.ps1` built
 without warnings.
 
+## Supervised direct-capture session (October 31 2026, afternoon)
+
+On the real PF1800 AFL through CyberScan's own driver copy: a vendor bug in IO_PORT
+(random register write on every close) found and fixed in both bridges; film-base
+exposure validated (linear, 120/168/269); live preview (212 rows per frame), 8-bit
+prescans, fine film moves (1.20 mm per 20 steps) and one stitched scan (exact
+36 x 24 mm) verified. `nudge` and `exposure_range` 50-300 recorded in
+`native_validation.json`. Each direct negative scan now sets the next exposure from its
+film base. Validation: `python -m pytest -q` → 193 passed, 2 xfailed; lint, build,
+skin, native-ui, live-preview, e2e and desktop suites passed.
+
 ## Standalone CyberScan X in software (October 31 2026, evening)
 
 Direct capture by default, no CyberView option in the UI, CyberView's auto colour applied

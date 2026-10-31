@@ -235,6 +235,15 @@ calibration; likely one per channel, gamma or lookup) and three 16 KB tables at
 from 2026-10-31 hold only 64 bytes of each; the tracer now logs bulk OUT in full, so
 the next traced scan gives the whole tables.
 
+## Vendor bug: random register write on every close (found 2026-10-31)
+
+IO_PORT's `CloseTransferPort` on USB (`0x100013a5`) calls
+`SystemRequest(0, 2, 0xB0, 0, 2, &stack)` with an uninitialised stack slot, so each
+close writes a random register. It explains the stray "uninitialised-looking" writes noted
+above, white frames that persisted until a power cycle, and likely the earlier
+"Preparing film scanner" hangs. Both bridges now zero those bytes
+(`services/native_bridge/vendorfix.h`). Details in [standalone-plan.md](standalone-plan.md).
+
 ## Not yet known
 
 - The real values written during calibration, exposure and a scan (the trace gives them).

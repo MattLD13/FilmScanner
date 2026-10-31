@@ -110,3 +110,19 @@ def test_direct_capture_stops_and_ends_a_driver_stuck_on_a_sensor(tmp_path,bridg
         session=wait_session(client)
         assert session['state']=='error' and 'take the film out' in session['error']
         assert client.get('/api/cyberview/status').json()['session_open'] is False
+
+
+def test_each_direct_scan_sets_the_next_exposure_from_its_film_base(tmp_path,bridge,monkeypatch):
+    monkeypatch.setenv('FRAME_SCANNER_BACKEND','afl-native-experimental')
+    monkeypatch.setenv('FRAME_ALLOW_EXPERIMENTAL_SCANNER','1')
+    monkeypatch.setenv('FRAME_NATIVE_BRIDGE',__import__('os').environ['FRAME_CVBRIDGE'])
+    proven={'actions':[],'configurations':[workspace.ScanOptions().model_dump()],'exposure_range':[50,300]}
+    monkeypatch.setattr(workspace,'validation',lambda:proven)
+    with TestClient(create_app(tmp_path/'library')) as client:
+        login(client)
+        assert client.post('/api/cyberview/scan',json={'count':1}).status_code==200
+        assert wait_session(client)['state']=='complete'
+        record=client.get('/api/cyberview/captures').json()['captures'][0]
+        measured=record['film_base']
+        assert measured['exposure_used']==[100,100,100] and len(measured['measured'])==3
+        assert client.get('/api/cyberview/workspace').json()['settings']['exposure']==measured['next_exposure']

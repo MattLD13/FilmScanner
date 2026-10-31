@@ -17,6 +17,7 @@
 #include "afl_contract.h"
 #include "usbtrace.h"
 #include "usbwatch.h"
+#include "vendorfix.h"
 /* SCAN08 is polling a sensor that never sets (usbwatch.h). Its loop has no timeout and
  * holds this thread, so report it now; the service ends this process. */
 static void native_stuck(void) {
@@ -205,6 +206,8 @@ static int scan_current(const char *path, LONG generation) {
     request.scan.mode = settings.channels==3?(settings.bits==16?7:3):(settings.bits==16?6:2);
     for (unsigned c = 0; c < 3; c++) {
         request.scan.exposure[c] = settings.exposure[c]; request.scan.offset[c] = 100;
+        /* Identity for every mode: SCAN08 scales to 8 bits itself (a /16 table gave a
+         * frame 16x too dark at 300 dpi 8-bit on 2026-10-31). */
         for (unsigned i = 0; i < 4096; i++) tables[c][i] = (WORD)i;
         request.scan.lut[c] = tables[c];
     }
@@ -517,6 +520,8 @@ int main(int argc, char **argv) {
         if (slots < 0) { FreeLibrary(module); CloseHandle(mutex); error("trace","Could not open the USB trace file"); return 1; }
         watch_on = 1;
         printf("{\"event\":\"%s\",\"slots\":%d}\n",trace?"trace":"watch",slots); fflush(stdout);
+        /* IO_PORT's USB close writes an uninitialised register pair (vendorfix.h). */
+        printf("{\"event\":\"vendorfix\",\"close_write_zeroed\":%s}\n",vendorfix_install()?"true":"false"); fflush(stdout);
     }
     result = serve(module);
     FreeLibrary(module); CloseHandle(mutex);

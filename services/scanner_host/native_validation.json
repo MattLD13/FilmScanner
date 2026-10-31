@@ -6,7 +6,8 @@
     "previous",
     "eject_forward",
     "autofocus",
-    "calibrate"
+    "calibrate",
+    "nudge"
   ],
   "configurations": [
     {
@@ -114,5 +115,14 @@
       },
       "user_observation": "User confirmed strip came out normally and reloaded it."
     }
-  ]
+  ],
+  "exposure_range": [
+    50,
+    300
+  ],
+  "notes": {
+    "nudge": "2026-10-31 supervised: 20 steps back moved the frame 1.20 mm (28.4 px at 600 dpi, about 16.6 steps per mm); 20 forward returned within 0.11 mm; same frame throughout.",
+    "exposure_range": "2026-10-31 supervised: 1800 dpi 16-bit at exposure 120/168/269 (from the measured film base) scanned normally; response linear (base came out 0.84/0.855/0.856 for a 0.85 target). Range kept to 300 because nothing above 269 was scanned.",
+    "calibrate": "Selector 17 returned zeros twice on 2026-10-31, while the scanner was in a state poked by the IO_PORT close bug (services/native_bridge/vendorfix.h); not retested since. CyberScan measures the film base from its own scan instead."
+  }
 }

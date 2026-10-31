@@ -43,6 +43,25 @@ Needs one supervised session: a direct scan with film-base exposure (then record
 `exposure_range`), the live preview on a real direct scan, and the fine film move for
 stitched scans (then add `nudge`). Only after that, CyberView X can be uninstalled.
 
+## Supervised session on the scanner (2026-10-31, 15:00-15:50)
+
+Direct capture only (aflbridge, CyberScan's own driver copy, USB trace on). Results:
+
+| Check | Result |
+| --- | --- |
+| Driver copy in `%LOCALAPPDATA%\CyberScanX\driver` | Works (after the vendor fix and a power cycle) |
+| **Vendor bug: IO_PORT close write** | Every driver close wrote 2 uninitialised bytes as a register write. Seen hitting `0x78`, `0x17`, `0x23`, `0x27` (AFE): frames went white and stayed white until a power cycle; status page `0x0d` read `0xaa`, as before the earlier "Preparing film scanner" hang. Fixed in both bridges by `services/native_bridge/vendorfix.h` (zeros, as the parallel transport sends) |
+| Film-base exposure | 1800 dpi 16-bit at 120/168/269 scanned normally; base came out 0.84/0.855/0.856 for a 0.85 target, so exposure is linear. Ratio 1 : 1.40 : 2.24 against CyberView's 1 : 1.34 : 2.11 |
+| Selector 17 (film-base measurement) | Returned zeros twice, while the scanner was in the poked state; not retested. CyberScan measures the base from its own scans instead (`film_base_exposure` in the routes) |
+| Live preview on the real scanner | 212 preview rows per 1800 dpi frame |
+| 8-bit prescan (300 dpi) | Works with the identity table (an earlier flat frame was the poked state) |
+| Fine film move (selector 10) | 20 steps back = 1.20 mm (28.4 px at 600 dpi); 20 forward returned within 0.11 mm |
+| Stitched scan through the app code | Back 20, forward 28, back 8; 2648 x 1713 px mosaic, one edge found, exact 36.00 x 24.00 mm crop, skew -0.46 deg, 15.3 steps per mm learned |
+
+Recorded in `native_validation.json`: `nudge`, and `exposure_range` 50-300 (nothing above 269
+was scanned). Not yet compared side by side with CyberView's own output: the tone of
+CyberScan's negative conversion (bright, slightly cyan highlights after auto colour).
+
 ## Order of work (original plan)
 
 1. **Auto colour in the render recipe.** Add per-channel curves (master, R, G, B points)
