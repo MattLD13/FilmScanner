@@ -61,6 +61,13 @@ class Store:
             self.db.backup(destination)
         return target
 
+    def save_many(self, kind, items):
+        """Publish a batch of reversible metadata edits in one transaction."""
+        with self._lock, self.db:
+            self.db.executemany('INSERT INTO entities VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE kind=excluded.kind',
+                                [(kind,item['id'],json.dumps(item)) for item in items])
+        return items
+
     def close(self):
         with self._lock:
             self.db.close()

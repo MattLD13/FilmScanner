@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -35,6 +36,8 @@ EventCallback = Callable[[dict], Awaitable[None] | None]
 # Time allowed from "enabled" to the first image. A healthy AFL took 60-120 s here,
 # including lamp warm-up; a stuck one never starts.
 FIRST_IMAGE_TIMEOUT = 300
+SENSOR = ('The scanner could not find its film position, so CyberView would wait forever at "Preparing film '
+          'scanner". Turn the scanner off and on, take the film out and put it back in, then scan again.')
 FILM_TIMEOUT = 120  # Forward One Frame took 3.4 s
 STUCK = ('The scanner did not start. It may be stuck at "Preparing film scanner": '
          'turn it off and on again (power and USB), then scan again.')
@@ -46,6 +49,31 @@ class CyberViewBusy(ScannerError):
 
 def bridge_path() -> Path:
     return Path(os.environ.get('FRAME_CVBRIDGE') or PROJECT / 'services' / 'cyberview_bridge' / 'bin' / 'cvbridge.exe')
+
+
+def trace_args() -> list[str]:
+    """``--trace-usb`` for a new driver session when FRAME_USB_TRACE_DIR is set.
+
+    The bridge then logs every call the vendor FVC.dll makes to usbscan.sys
+    (docs/scanner-protocol.md). Tracing is passive: no extra scanner traffic.
+    """
+    folder = os.environ.get('FRAME_USB_TRACE_DIR')
+    if not folder:
+        return []
+    Path(folder).mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    return ['--trace-usb', str(Path(folder) / f'usb-{stamp}-{os.getpid()}.jsonl')]
+
+
+VALIDATION = Path(__file__).with_name('cyberview_validation.json')
+
+
+def validated_commands() -> set[str]:
+    """CyberView menu commands proven on this scanner (version-controlled, not user-settable)."""
+    try:
+        return set(json.loads(VALIDATION.read_text(encoding='utf-8')).get('actions', []))
+    except (OSError, ValueError):
+        return {'next'}
 
 
 def settings_path() -> Path:
@@ -75,6 +103,8 @@ def read_settings(path: Path | None = None) -> dict:
     return {
         'found': True,
         'film_term': value('TOOLBAR FILMTERM', 'Film Term Name') or None,
+        # 0 with a colour negative term on this PC; 1 is assumed to be positive (slide).
+        'film_type': {'0': 'negative', '1': 'positive'}.get(value('TOOLBAR FILMTERM', 'Film Type')),
         'auto_exposure': value('SETUPDLG DEFAULT PAGE', 'Auto Exposure') == '1',
         'auto_gamma': value('SETUPDLG DEFAULT PAGE', 'Auto Gamma') == '1',
         'scan_depth': int(value('MAIN PANEL', 'Scan Depth', '0') or 0),
@@ -116,10 +146,47 @@ async def reset_scanner() -> bool:
     """
     if not await asyncio.to_thread(reset_available):
         return False
-    if await asyncio.to_thread(_quiet_run, ['schtasks', '/Run', '/TN', RESET_TASK], 15) is None:
+    # Own the same named resource as both x86 helpers BEFORE restarting USB.
+    # Otherwise a second service could reset a scanner another process is using.
+    handle = _claim_reset_ownership()
+    if handle is None:
         return False
-    await asyncio.sleep(12)  # the task restarts the device; Windows rebinds usbscan
-    return True
+    try:
+        if await asyncio.to_thread(_quiet_run, ['schtasks', '/Run', '/TN', RESET_TASK], 15) is None:
+            return False
+        await asyncio.sleep(12)  # the task restarts the device; Windows rebinds usbscan
+        return True
+    finally:
+        _release_reset_ownership(handle)
+
+
+def _claim_reset_ownership():
+    if sys.platform != 'win32':
+        return None
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.CreateMutexW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    ctypes.set_last_error(0)
+    handle = kernel.CreateMutexW(None, True, r'Local\FRAME_PF1800AFL')
+    if not handle:
+        return None
+    if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS; never wait or reset its owner
+        kernel.CloseHandle(handle)
+        return None
+    return handle
+
+
+def _release_reset_ownership(handle):
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.ReleaseMutex.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.ReleaseMutex(handle)
+    kernel.CloseHandle(handle)
 
 
 def scanner_present() -> bool | None:
@@ -132,6 +199,12 @@ def scanner_present() -> bool | None:
 
 class CyberViewBridge:
     """Owns one hidden CyberView driver session and runs scans in it, one at a time."""
+
+    kind = 'cyberview-twain'
+    image_kind = 'cyberview-processed-positive'
+    supports_next = True
+    max_count = 40
+    enabled = True
 
     def __init__(self, exe: Path | None = None, first_image_timeout: float = FIRST_IMAGE_TIMEOUT):
         self.exe = exe or bridge_path()
@@ -194,10 +267,12 @@ class CyberViewBridge:
             raise CyberViewBusy('CyberView is open. Close it so only one program uses the scanner.')
         # A session that scanned leaves the film where the next one cannot start from it
         # (observed twice on 2026-10-30), so a fresh session begins with a USB restart.
-        await reset_scanner()
+        await self._prepare_device()
+        if self.cancel_requested:
+            return
         self.events = asyncio.Queue()
         self.process = await asyncio.create_subprocess_exec(
-            *self._command('serve', '--timeout', str(int(self.first_image_timeout))),
+            *self._command(*self._serve_args(), *trace_args()),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
         self.reader = asyncio.create_task(self._read(self.process))
         while True:
@@ -210,6 +285,15 @@ class CyberViewBridge:
             if event.get('event') == 'error':
                 await self.release()
                 raise ScannerError(event.get('message') or 'The CyberView driver did not open')
+
+    async def _prepare_device(self) -> None:
+        await reset_scanner()
+
+    def _serve_args(self) -> list[str]:
+        return ['serve', '--timeout', str(int(self.first_image_timeout))]
+
+    def acquisition_settings(self) -> dict:
+        return read_settings()
 
     async def _ended(self) -> None:
         """The bridge exited; make sure CyberView's settings are back."""
@@ -255,7 +339,7 @@ class CyberViewBridge:
                 result = on_event(event)
                 if asyncio.iscoroutine(result):
                     await result
-            if kind == until or (until == 'command_done' and kind == 'error'):
+            if kind == until or (until in ('command_done', 'configured') and kind == 'error'):
                 break
         if await self._next(30) is None:  # the bridge's "ready" after every command
             await self._ended()
@@ -280,6 +364,8 @@ class CyberViewBridge:
                     await self._start()
                 out.parent.mkdir(parents=True, exist_ok=True)
                 for index in range(1, count + 1):
+                    if self.cancel_requested:
+                        break
                     if index > 1:
                         if self.cancel_requested:
                             break
@@ -296,6 +382,10 @@ class CyberViewBridge:
         if self.cancel_requested:
             return images
         if error and not images:
+            if error.get('code') == 'position_sensor':
+                # Seen 2026-10-31: a USB restart did not clear it; a power cycle and reseating the film did.
+                await self.release()
+                raise ScannerError(SENSOR)
             if error.get('code') == 'timeout':
                 # A stuck driver session is not worth keeping; the next scan starts a fresh one.
                 await self.release()
@@ -317,10 +407,41 @@ class CyberViewBridge:
             raise CyberViewBusy('A scan is running')
         async with self.lock:
             self.scanning = True
+            self.cancel_requested = False
             try:
                 if not self.open:
                     await self._start()
+                if self.cancel_requested:
+                    raise ScannerError('Film movement was cancelled before it started')
                 _, error = await self._exchange(f'film {action}', 'command_done', on_event, FILM_TIMEOUT)
+            finally:
+                self.scanning = False
+        if error:
+            raise ScannerError(error.get('message') or 'CyberView could not move the film')
+
+    def can_nudge(self) -> bool:
+        return {'step_forward', 'step_back'} <= validated_commands()
+
+    async def control(self, action: str, on_event: EventCallback | None = None, value: str | None = None) -> None:
+        """Fine film moves with CyberView's Forward/Backward One Step (one motor step each).
+
+        ``value`` is "forward N" or "back N", N 1-300. Refused until both step commands
+        are in cyberview_validation.json.
+        """
+        direction, _, steps = (value or '').partition(' ')
+        if action != 'nudge' or direction not in ('forward', 'back') or not steps.isdigit() or not 1 <= int(steps) <= 300:
+            raise ValueError(f'{action} {value}')
+        if not self.can_nudge():
+            raise ScannerError('CyberView step moves have not been tested on this scanner yet')
+        if self.scanning:
+            raise CyberViewBusy('A scan is running')
+        async with self.lock:
+            self.scanning = True
+            self.cancel_requested = False
+            try:
+                if not self.open:
+                    await self._start()
+                _, error = await self._exchange(f'film step {direction} {steps}', 'command_done', on_event, FILM_TIMEOUT)
             finally:
                 self.scanning = False
         if error:
@@ -328,8 +449,9 @@ class CyberViewBridge:
 
     async def cancel(self) -> None:
         """Asks the driver to stop the current scan; the session stays open."""
-        if self.scanning and self.open:
+        if self.scanning:
             self.cancel_requested = True
+        if self.scanning and self.open:
             try:
                 await self._send('cancel')
             except (ConnectionError, RuntimeError):

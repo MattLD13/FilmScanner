@@ -23,7 +23,7 @@ import numpy as np
 
 CLASSES = {'NEG': 'negative', 'REV': 'reversal', 'B': 'bw', 'B&&W': 'bw', 'B&W': 'bw'}
 MAX_FILE_BYTES = 512_000
-DEFAULT_ROOTS = (r'%WINDIR%\twain_32\CyberViewX_SF\GAMMA',)
+DEFAULT_ROOTS = (r'%WINDIR%\twain_32\CyberViewX_SF\GAMMA', r'%WINDIR%\twain_32\CyberViewX_MF\GAMMA')
 
 
 def parse(text: str) -> dict:

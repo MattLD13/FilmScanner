@@ -1,9 +1,12 @@
 """CyberScan X API against a fake cvbridge: no driver, no scanner, same protocol."""
 import hashlib
+import json
 from io import BytesIO
 from pathlib import Path
 import sys
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi.testclient import TestClient
 import numpy as np
@@ -104,11 +107,66 @@ def test_one_driver_session_serves_many_scans(tmp_path, bridge):
         assert len({c['sha256'] for c in captures[:3]}) == 3
         assert client.post('/api/cyberview/film', json={'action': 'next'}).status_code == 200
         # Backward One Frame hung the real driver; it is not offered.
-        assert client.post('/api/cyberview/film', json={'action': 'previous'}).status_code == 422
+        assert client.post('/api/cyberview/film', json={'action': 'previous'}).status_code == 409
         released = client.post('/api/cyberview/release').json()
         assert released['session_open'] is False
     calls = bridge.read_text().splitlines()
     assert sum(line.startswith('serve') for line in calls) == 1, calls
+
+
+def test_usb_trace_is_requested_only_when_a_trace_folder_is_set(tmp_path, bridge, monkeypatch):
+    traces = tmp_path / 'traces'
+    monkeypatch.setenv('FRAME_USB_TRACE_DIR', str(traces))
+    app = create_app(tmp_path / 'library')
+    with TestClient(app) as client:
+        login(client)
+        assert client.post('/api/cyberview/scan', json={'count': 1}).status_code == 200
+        assert wait_session(client)['state'] == 'complete'
+        client.post('/api/cyberview/release')
+    serve = next(line for line in bridge.read_text().splitlines() if line.startswith('serve'))
+    assert '--trace-usb' in serve
+    [trace] = traces.glob('usb-*.jsonl')
+    assert json.loads(trace.read_text())['module'] == 'fvc.dll'
+    monkeypatch.delenv('FRAME_USB_TRACE_DIR')
+    assert cyberview.trace_args() == []
+
+
+def test_live_preview_rows_reach_clients_and_late_joiners(tmp_path, bridge):
+    app = create_app(tmp_path / 'library')
+    with TestClient(app) as client:
+        login(client)
+        with client.websocket_connect('/api/events', headers={'origin': 'http://testserver'}) as socket:
+            assert client.post('/api/cyberview/scan', json={'count': 1}).status_code == 200
+            seen = []
+            while not any(e.get('type') == 'cyberview_capture' for e in seen):
+                seen.append(socket.receive_json())
+        start = next(e for e in seen if e['type'] == 'cyberview_live_start')
+        assert start['width'] == 48 and start['scale'] == 8 and start['frame'] == 1
+        assert [e['y'] for e in seen if e['type'] == 'cyberview_live'] == list(range(30))
+        live = client.get('/api/cyberview/live').json()['live']
+        assert live['width'] == 48 and len(live['rows']) == 30
+        sys.path.insert(0, str(FAKE.parent))
+        from fake_cvbridge import live_row
+        assert __import__('base64').b64decode(live['rows'][7]) == live_row(7)
+
+
+def test_stuck_position_sensor_asks_for_a_power_cycle_without_usb_retry(tmp_path, bridge, monkeypatch):
+    monkeypatch.setenv('FAKE_CVBRIDGE_MODE', 'sensor')
+    monkeypatch.setattr(cyberview, 'reset_available', lambda: True)
+    resets = []
+    async def reset():
+        resets.append(1)
+        return True
+    monkeypatch.setattr(cyberview, 'reset_scanner', reset)
+    app = create_app(tmp_path / 'library')
+    with TestClient(app) as client:
+        login(client)
+        assert client.post('/api/cyberview/scan', json={'count': 1}).status_code == 200
+        session = wait_session(client)
+        assert session['state'] == 'error' and 'take the film out' in session['error']
+        assert client.get('/api/cyberview/status').json()['session_open'] is False
+    # Only the routine restart before the session; no automatic retry for this failure.
+    assert len(resets) <= 1
 
 
 def test_stuck_driver_reports_power_cycle_and_reopens(tmp_path, bridge, monkeypatch):
@@ -159,6 +217,48 @@ def test_crash_is_an_error_not_a_success(tmp_path, bridge, monkeypatch):
         assert client.get('/api/cyberview/captures').json()['captures'] == []
 
 
+def test_empty_transfer_is_an_error_not_a_success(tmp_path, bridge, monkeypatch):
+    monkeypatch.setenv('FAKE_CVBRIDGE_MODE', 'empty')
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        client.post('/api/cyberview/scan', json={'count': 1})
+        session = wait_session(client)
+        assert session['state'] == 'error'
+        assert 'delivered 0 of 1' in session['error']
+
+
+def test_parallel_start_requests_reserve_one_session(tmp_path, bridge, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def held_vendor_check():
+        calls.append(1)
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(5)
+        return False
+    monkeypatch.setattr(cyberview, 'vendor_running', held_vendor_check)
+    monkeypatch.setenv('FAKE_CVBRIDGE_DELAY', '.15')
+    with TestClient(create_app(tmp_path / 'library')) as client:
+        login(client)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(client.post, '/api/cyberview/scan', json={'count': 1})
+            assert entered.wait(3)
+            second = pool.submit(client.post, '/api/cyberview/scan', json={'count': 1})
+            try:
+                time.sleep(.05)
+                assert not second.done()
+            finally:
+                release.set()
+            accepted, refused = first.result(timeout=5), second.result(timeout=5)
+        assert accepted.status_code == 200
+        assert refused.status_code == 409
+        session = wait_session(client)
+        assert session['id'] == accepted.json()['id'] and session['state'] == 'complete'
+        captures = client.get('/api/cyberview/captures').json()['captures']
+        assert len(captures) == 1 and captures[0]['session_id'] == session['id']
+        assert session['captures'] == [captures[0]['id']]
+
+
 def test_cancel_between_frames(tmp_path, bridge, monkeypatch):
     monkeypatch.setenv('FAKE_CVBRIDGE_DELAY', '0.4')
     app = create_app(tmp_path / 'library')
@@ -198,3 +298,14 @@ def test_neutral_adjustments_are_identity_and_match_client_formula():
     matrix, offset = cyberview_routes.color_matrix(cyberview_routes.Adjustments(exposure=1, contrast=20, saturation=-50, temperature=40))
     # Values computed with colorMatrix() in apps/web/src/cyberscan.tsx for the same settings.
     assert np.allclose(matrix[0], [1.5424, .8582, .0814], atol=1e-3) and offset == pytest.approx(-.1)
+
+
+def test_negative_conversion_uses_explicit_film_base_and_keeps_input():
+    original = np.array([[[.5, .25, .125], [1, 1, 1], [0, 0, 0]]], dtype=np.float32)
+    before = original.copy()
+    result = cyberview_routes.apply(original, cyberview_routes.Adjustments(invert=True, film_base=[.5, .25, .125]))
+    assert np.array_equal(original, before)
+    assert np.allclose(result[0, :2], 0)
+    assert np.allclose(result[0, 2], 1)
+    with pytest.raises(ValueError):
+        cyberview_routes.Adjustments(invert=True, film_base=[0, 1, 1])

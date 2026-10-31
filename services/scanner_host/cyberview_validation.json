@@ -1,0 +1,7 @@
+{
+  "evidence": "docs/cyberview-bridge.md, docs/auto-align.md",
+  "note": "CyberView menu commands proven on the PF1800 AFL through the hidden bridge. Add step_forward and step_back only after a supervised test shows both move the film and return without hanging (Backward One Frame hung on 2026-10-30).",
+  "actions": [
+    "next"
+  ]
+}

@@ -1,4 +1,20 @@
 # FRAME v1 contracts
+
+## CyberScan X acquisition
+
+Authenticated `/api/cyberview/status` reports backend, supports_next, max_count,
+image_kind, experimental_enabled and measured session state. Diagnostics at
+`GET /api/cyberview/diagnostics` inspect installed files without opening hardware.
+`POST /api/cyberview/backend` accepts `{backend:'cyberview-twain'|'afl-native-experimental',acknowledged:boolean}`;
+native selection requires acknowledgment and the reviewed module hash, saves a
+local preference and never starts hardware. Switching is rejected during work.
+Native supports count1; transport requests are rejected. Its originals are
+vendor-calibrated transmission, with effective_bits:null. Per-capture adjustments
+also accept invert:boolean and film_base:[R,G,B], each finite0.01..1, default1.
+Inversion precedes the color matrix using1-clip(transmission/base,0,1)^1.6.
+Original export is immutable; previews/JPEG are8-bit and adjusted TIFF16-bit.
+
+## FRAME workflow
 Local single-origin JSON API under /api; dates are UTC epoch milliseconds. IDs are opaque UUID hex strings. Images use authenticated /media/{portable relative path}. WebSocket /api/events delivers bounded JSON events and begins with a snapshot; reconnect fetches /api/state. Session cookie is established by explicit POST /api/auth/local from the loopback same-origin UI. No network binding beyond 127.0.0.1.
 
 GET /api/state -> {rolls: Roll[], frames: Frame[], development: DevelopmentSession[], scan: ScanSession|null, scanner: object, recipes: Recipe[], server_time: number}

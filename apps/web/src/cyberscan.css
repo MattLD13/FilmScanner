@@ -66,7 +66,14 @@
 .cx-viewer { position: relative; flex: 1; min-height: 240px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #0f0e0d; }
 .cx-image { max-width: calc(100% - 64px); max-height: calc(100% - 64px); display: flex; transition: transform 200ms var(--ease); }
 .cx-image img { display: block; max-width: 100%; max-height: calc(100vh - 64px - 48px - 112px - 64px); object-fit: contain; user-select: none; }
+.cx-cropped-image { display: block; max-width: 100%; max-height: calc(100vh - 64px - 48px - 112px - 64px); width: auto; height: auto; }
+.cx-preview-error { position: absolute; left: 16px; right: 16px; bottom: 16px; padding: 10px 12px; border-radius: 8px; background: var(--card); color: var(--text); }
+.cx-original-badge { position: absolute; top: 16px; left: 16px; padding: 4px 8px; border-radius: 6px; background: rgba(18,17,15,.85); color: var(--text); font-size: 12px; }
+.cx-compare-bar { min-height: 36px; padding: 2px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); }
+.cx-compare-bar button[aria-pressed='true'] { color: var(--accent); }
 .cx-viewer-edge { position: absolute; left: 16px; bottom: 12px; }
+.cx-live { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 24px; }
+.cx-live canvas { width: 100%; height: 100%; object-fit: contain; }
 .cx-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 320px; text-align: center; color: var(--text-2); }
 .cx-empty svg { color: var(--muted); }
 .cx-empty strong { color: var(--text); font-weight: 500; }
@@ -175,6 +182,7 @@ a.cx-export:hover { background: var(--raised); border-color: var(--line-strong);
   .cx-workspace { display: flex; flex-direction: column; }
   .cx-viewer { min-height: 280px; height: 56vw; max-height: 420px; flex: none; }
   .cx-image img { max-height: calc(56vw - 48px); }
+  .cx-cropped-image { max-height: calc(56vw - 48px); }
   .cx-progress { bottom: 12px; padding: 12px; gap: 12px; }
   .cx-progress-frame { display: none; }
   .cx-inspector { border-left: 0; border-top: 1px solid var(--line); }
@@ -185,3 +193,84 @@ a.cx-export:hover { background: var(--raised); border-color: var(--line-strong);
 @media (prefers-reduced-motion: reduce) {
   .cx-app * { transition: none !important; animation: none !important; }
 }
+.cx-discoveries { margin-top: 20px; }
+.cx-discoveries summary { cursor: pointer; font-size: 13px; color: var(--text); }
+.cx-discovery { display: grid; gap: 6px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.cx-discovery > strong { font-size: 13px; font-weight: 500; }
+.cx-discovery .cx-help { margin: 0; }
+.cx-driver-hash { overflow-wrap: anywhere; font-size: 11px; color: var(--text-2); }
+.cx-native-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; font-size: 13px; color: var(--text-2); }
+.cx-native-check input { flex: none; margin: 3px 0 0; accent-color: var(--accent); }
+.cx-base-field { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; color: var(--text-2); font-size: 13px; }
+.cx-base-field input { width: 80px; background: var(--deep); border: 1px solid var(--line-strong); border-radius: 4px; padding: 4px 8px; }
+.cx-profile-field { display: grid; gap: 6px; margin-top: 16px; color: var(--text-2); font-size: 13px; }
+.cx-profile-field select { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--deep); }
+
+/* Scanner controls share the inspector and stack naturally on small screens. */
+.cx-scanner-panel { padding: 16px 0; border-bottom: 1px solid var(--line-strong); }
+.cx-scanner-panel > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-weight: 500; }
+.cx-scanner-panel > summary::after, .cx-subpanel > summary::after { content: '+'; color: var(--muted); font-size: 16px; margin-left: auto; }
+.cx-scanner-panel[open] > summary::after, .cx-subpanel[open] > summary::after { content: '−'; }
+.cx-scanner-panel > summary::-webkit-details-marker, .cx-subpanel > summary::-webkit-details-marker { display: none; }
+.cx-scanner-panel > summary .cx-meta { font-size: 10px; }
+.cx-prescan { width: 100%; margin-top: 16px; }
+.cx-control-title { font-size: 12px; color: var(--text-2); margin: 18px 0 8px; }
+.cx-control-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+.cx-control-grid .cx-button { height: auto; min-height: 36px; padding: 7px; font-size: 12px; }
+.cx-unavailable { margin-top: 7px !important; color: var(--muted); font-size: 11px; line-height: 16px; }
+.cx-unavailable strong { color: var(--text-2); font-weight: 500; }
+.cx-inline-number { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--text-2); font-size: 12px; }
+.cx-inline-number input { width: 54px; min-width: 0; }
+.cx-inline-number .cx-button { margin-left: auto; height: auto; min-height: 32px; padding: 4px 8px; font-size: 12px; }
+.cx-scanner-panel input, .cx-scanner-panel select { background: var(--deep); border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px; min-height: 32px; }
+.cx-scanner-panel input:disabled, .cx-scanner-panel select:disabled { opacity: .45; }
+.cx-subpanel { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.cx-subpanel > summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.cx-subpanel > summary .cx-meta { font-size: 10px; }
+.cx-scan-options { display: grid; gap: 8px; margin-top: 12px !important; }
+.cx-scan-options > label { display: grid; grid-template-columns: 76px minmax(0,1fr); align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+.cx-scan-options select { width: 100%; min-width: 0; }
+.cx-option-group { padding-top: 8px; font-size: 12px; color: var(--text-2); }
+.cx-option-group > span { display: flex; justify-content: space-between; }
+.cx-option-group small { color: var(--muted); }
+.cx-area-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 6px; }
+.cx-exposure-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.cx-area-grid label { display: grid; gap: 4px; text-transform: capitalize; color: var(--muted); }
+.cx-area-grid input { min-width: 0; width: 100%; text-transform: none; }
+.cx-apply-settings { width: 100%; margin-top: 12px; }
+.cx-last-prescan { width: 100%; margin-top: 12px; display: flex; gap: 10px; align-items: center; text-align: left; background: var(--deep); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.cx-last-prescan img { width: 54px; height: 38px; object-fit: cover; border-radius: 4px; }
+.cx-last-prescan strong, .cx-last-prescan small { display: block; font-size: 12px; }
+.cx-last-prescan small { color: var(--muted); }
+.cx-modal-shade { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.65); }
+.cx-modal { width: min(100%, 420px); border: 1px solid var(--line-strong); background: var(--card); border-radius: 14px; padding: 24px; box-shadow: 0 16px 60px #0008; }
+.cx-modal h2 { font-size: 18px; font-weight: 500; margin: 0 0 12px; }
+.cx-modal p { color: var(--text-2); margin-top: 8px; }
+.cx-modal > div { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.cx-histogram { margin-top: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--deep); overflow: hidden; }
+.cx-histogram svg { display: block; width: 100%; height: 70px; }
+.cx-histogram polyline { fill: none; stroke-width: 1; opacity: .7; vector-effect: non-scaling-stroke; }
+.cx-histogram-0 { stroke: #e5726c; }.cx-histogram-1 { stroke: #79ba86; }.cx-histogram-2 { stroke: #87a9e4; }
+.cx-histogram span { display: block; padding: 2px 6px 5px; color: var(--muted); font-size: 10px; line-height: 14px; }
+.cx-level-field { display: block; padding-top: 10px; color: var(--text-2); font-size: 12px; }
+.cx-level-field span { display: flex; justify-content: space-between; }
+.cx-level-field output { color: var(--text); font: 12px/20px var(--mono); }
+.cx-level-field input { width: 100%; margin: 5px 0 0; accent-color: var(--accent); }
+.cx-curve { width: 100%; height: 112px; margin-top: 8px; background: var(--deep); border: 1px solid var(--line); }
+.cx-curve polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.cx-curve-reference { stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cx-curve-grid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; }
+.cx-curve-grid label { font-size: 10px; }
+.cx-curve-grid input { padding: 4px 1px; width: 100%; min-width: 0; font-size: 11px; }
+.cx-variations { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 12px; }
+.cx-variations .cx-button { min-height: 34px; height: auto; padding: 6px; font-size: 12px; }
+@media (max-width: 820px) {
+  .cx-control-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 400px) {
+  .cx-control-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cx-settings { grid-template-columns: minmax(0,1fr); }
+}
+
+/* 35 mm auto-align row */
+.cx-align { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }

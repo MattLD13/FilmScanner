@@ -13,6 +13,11 @@
  * extension when the driver delivers more than one image. Writing "cancel" on
  * stdin requests a TWAIN cancel; the driver is always disabled and closed.
  *
+ * scan and serve watch the vendor FVC.dll's calls to usbscan.sys
+ * (../native_bridge/usbtrace.h) for live preview rows ("live_start", "live") and to
+ * stop a driver stuck waiting for a sensor ("position_sensor"). --trace-usb PATH also
+ * logs every call; --no-usb-watch turns the watch off. Neither adds scanner traffic.
+ *
  * Hidden mode: CyberViewX.ds hides its own window when [Non UI Information]
  * "Hide UI" is 1 and "Host Handle" names a live window (static analysis of
  * CyberViewX.ds 1.4.0.0, see docs/cyberview-bridge.md). The keys are set in the
@@ -25,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <tlhelp32.h>
+#include "../native_bridge/usbtrace.h"
 
 #pragma pack(push, 2)
 typedef char TW_STR32[34];
@@ -630,9 +636,8 @@ static void tame_driver_windows(void) { EnumWindows(tame_window, 0); }
  * them to its hidden main window runs the vendor's film transport code unchanged. */
 static const struct { const char *name; WPARAM id; } menu_commands[] = {
     { "next", 32867 },          /* Forward One Frame */
-    { "previous", 32866 },      /* Backward One Frame */
-    { "eject", 32864 },         /* Forward Eject */
-    { "rewind", 32861 },        /* Backward Eject */
+    { "step_forward", 32863 },  /* Forward One Step: SCAN08 selector 10 {2, 1}, one motor step */
+    { "step_back", 32862 },     /* Backward One Step: selector 10 {1, 1}; untested (Backward One Frame hung) */
 };
 
 static BOOL CALLBACK find_frame(HWND w, LPARAM out) {
@@ -644,16 +649,16 @@ static BOOL CALLBACK find_frame(HWND w, LPARAM out) {
     return TRUE;
 }
 
-static void run_menu_command(const char *name) {
+/* Runs a menu command ``repeat`` times; a step command moves one motor step each time. */
+static void run_menu_command(const char *name, int repeat) {
     HWND frame = NULL;
     for (size_t i = 0; i < sizeof menu_commands / sizeof *menu_commands; i++) {
         if (strcmp(name, menu_commands[i].name)) continue;
         EnumWindows(find_frame, (LPARAM)&frame);
         if (!frame) { emit_error("no_window", "CyberView's main window is not available", -1); return; }
-        printf("{\"event\":\"command\",\"name\":"); json_str(stdout, name); printf("}\n"); fflush(stdout);
-        /* Same thread as the driver's windows, so this runs to completion before returning. */
-        SendMessageA(frame, WM_COMMAND, menu_commands[i].id, 0);
-        tame_driver_windows();
+        printf("{\"event\":\"command\",\"name\":"); json_str(stdout, name); printf(",\"repeat\":%d}\n", repeat); fflush(stdout);
+        /* Same thread as the driver's windows, so each runs to completion before returning. */
+        for (int n = 0; n < repeat; n++) { SendMessageA(frame, WM_COMMAND, menu_commands[i].id, 0); tame_driver_windows(); }
         printf("{\"event\":\"command_done\",\"name\":"); json_str(stdout, name); printf("}\n"); fflush(stdout);
         return;
     }
@@ -684,10 +689,17 @@ static void pump(DWORD ms) {
 }
 
 /* One acquisition: enable hidden, transfer every pending image, disable. 1 ok, 0 failed, -1 cancelled. */
+#include "usbwatch.h"
+
 static int one_scan(const char *out, int count, int show_ui, int timeout_s) {
     report_set("autofeed", set_one(CAP_AUTOFEED, TWTY_BOOL, count > 1));
     report_set("xfercount", set_one(CAP_XFERCOUNT, TWTY_INT16, (DWORD)(WORD)(short)(count > 1 ? count : 1)));
     cancel_requested = 0;
+    if (watch_on) {
+        EnterCriticalSection(&watch_lock);
+        live_new_pass(); watch_progress(); InterlockedExchange(&watch_stuck, 0);
+        LeaveCriticalSection(&watch_lock);
+    }
     TW_USERINTERFACE ui = { (WORD)(show_ui ? 1 : 0), 0, hwnd };
     WORD rc = call_dsm(&src, DG_CONTROL, DAT_USERINTERFACE, MSG_ENABLEDS, &ui);
     if (rc != TWRC_SUCCESS && rc != TWRC_CHECKSTATUS) {
@@ -704,7 +716,13 @@ static int one_scan(const char *out, int count, int show_ui, int timeout_s) {
         if (!GetMessageA(&msg, NULL, 0, 0)) { quit_requested = 1; break; }
         if (msg.message == WM_TIMER) {
             tame_driver_windows();
+            live_flush();
             if (serving && parent_gone()) { quit_requested = 1; cancel_requested = 1; }
+            if (watch_stuck && !cancel_requested) {
+                emit_error("position_sensor", "The scanner could not find its film position. Turn the scanner off and on, "
+                           "take the film out and put it back in, then scan again.", -1);
+                result = 0; break;
+            }
         }
         if (msg.message == WM_STDIN_LINE) {
             if (!strncmp((char *)msg.lParam, "quit", 4)) { quit_requested = 1; cancel_requested = 1; }
@@ -782,11 +800,18 @@ static int run_serve(int dpi, int depth, const double *area, int timeout_s, int 
             else emit_error("usage", "scan COUNT PATH", -1);
             if (!quit_requested) { printf("{\"event\":\"ready\"}\n"); fflush(stdout); }
         } else if (!strncmp(line, "film ", 5)) {
-            char name[32] = "";
-            sscanf(line + 5, "%31s", name);
-            run_menu_command(name);
+            char name[32] = "", direction[16] = "";
+            int steps = 0;
+            if (sscanf(line + 5, "step %15s %d", direction, &steps) == 2) {
+                if (steps < 1 || steps > 300 || (strcmp(direction, "forward") && strcmp(direction, "back")))
+                    emit_error("usage", "film step forward|back STEPS (1-300)", -1);
+                else run_menu_command(strcmp(direction, "back") ? "step_forward" : "step_back", steps);
+            } else {
+                sscanf(line + 5, "%31s", name);
+                run_menu_command(name, 1);
+            }
             printf("{\"event\":\"ready\"}\n"); fflush(stdout);
-        } else emit_error("usage", "Commands: scan COUNT PATH, film next|previous|eject|rewind, cancel, quit", -1);
+        } else emit_error("usage", "Commands: scan COUNT PATH, film next, film step forward|back N, cancel, quit", -1);
         free(line);
     }
     KillTimer(NULL, idle_timer);
@@ -844,9 +869,33 @@ static int parse_area(const char *s, double *a) {
     return sscanf(s, "%lf,%lf,%lf,%lf", &a[0], &a[1], &a[2], &a[3]) == 4 && a[2] > a[0] && a[3] > a[1] && a[0] >= 0 && a[1] >= 0;
 }
 
+/* All scanner traffic leaves through FVC.dll (SCAN08 -> SQ_Scan -> IO_PORT -> fvc).
+ * Loading it first means the driver's own load reuses this hooked copy. The watch
+ * (live preview, stuck detection) is optional: without a trace file a failure to
+ * hook is reported and scanning goes on unwatched. */
+static int start_watch(const char *trace_path) {
+    char fvc[MAX_PATH];
+    const char *traced[] = {"fvc.dll", NULL};
+    UINT n = GetSystemDirectoryA(fvc, MAX_PATH);
+    if (!n || n > MAX_PATH - 10 || !LoadLibraryA(strcat(fvc, "\fvc.dll"))) {
+        emit_error(trace_path ? "trace" : "watch", "The vendor FVC.dll could not be loaded for the USB watch", -1);
+        return !trace_path;
+    }
+    InitializeCriticalSection(&watch_lock);
+    trace_on_register = watch_register; trace_on_status = watch_status; trace_on_bulk_in = watch_bulk_in;
+    int slots = usbtrace_install(trace_path, traced);
+    if (slots <= 0) {
+        emit_error(trace_path ? "trace" : "watch", "The USB watch could not start", -1);
+        return !trace_path;
+    }
+    watch_on = 1;
+    printf("{\"event\":\"%s\",\"slots\":%d}\n", trace_path ? "trace" : "watch", slots); fflush(stdout);
+    return 1;
+}
+
 int main(int argc, char **argv) {
-    const char *cmd = argc > 1 ? argv[1] : "", *source = NULL, *out = NULL;
-    int dpi = 300, depth = 8, show_ui = 0, timeout_s = 600, hidden_caps = 0;
+    const char *cmd = argc > 1 ? argv[1] : "", *source = NULL, *out = NULL, *trace = NULL;
+    int dpi = 300, depth = 8, show_ui = 0, timeout_s = 600, hidden_caps = 0, watch = 1;
     DWORD wait_pid = 0;
     int count = 1, settle_ms = 8000;
     double area[4]; int has_area = 0;
@@ -864,6 +913,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--set") && v && override_count < 32) { overrides[override_count++] = v; i++; }
         else if (!strcmp(a, "--count") && v) { count = atoi(v); i++; }
         else if (!strcmp(a, "--settle") && v) { settle_ms = atoi(v); i++; }
+        else if (!strcmp(a, "--trace-usb") && v) { trace = v; i++; }
+        else if (!strcmp(a, "--no-usb-watch")) watch = 0;
         else { emit_error("usage", a, -1); return 2; }
     }
     if (!strcmp(cmd, "restore")) return run_restore(wait_pid) ? 0 : 1;
@@ -872,6 +923,14 @@ int main(int argc, char **argv) {
     }
     if (!strcmp(cmd, "scan") && (!out || dpi < 50 || dpi > 10000 || (depth != 8 && depth != 16))) {
         emit_error("usage", "scan needs --out, a valid --dpi and --depth 8 or 16", -1); return 2;
+    }
+    /* Both bridges own the same physical scanner. Do not let an experimental
+     * native session race the proven TWAIN session in a different process. */
+    HANDLE device_mutex = CreateMutexA(NULL, TRUE, "Local\\FRAME_PF1800AFL");
+    if (!device_mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (device_mutex) CloseHandle(device_mutex);
+        emit_error("busy", "Another scanner session is already open. Release it before starting this bridge.", -1);
+        return 3;
     }
     if (strcmp(cmd, "sources") && loader_running()) {
         emit_error("busy", "CyberView is open. Close it so only one program uses the scanner.", -1); return 3;
@@ -890,6 +949,8 @@ int main(int argc, char **argv) {
     serving = !strcmp(cmd, "serve");
     if (serving) watch_parent();
     CreateThread(NULL, 0, stdin_watch, NULL, 0, NULL);
+    int scanning_command = !strcmp(cmd, "scan") || !strcmp(cmd, "serve");
+    if ((trace || (watch && scanning_command)) && !start_watch(trace)) { shutdown_all(); return 1; }
     if (!open_dsm()) { shutdown_all(); return 1; }
     int ok;
     if (!strcmp(cmd, "sources")) ok = run_sources();

@@ -8,11 +8,14 @@
     "test:e2e": "python tests/e2e/run_workflow.py",
     "preview:skin": "python scripts/preview_skin.py",
     "test:skin": "python tests/e2e/run_skin_preview.py",
+    "test:native-ui": "python tests/e2e/run_native_workspace.py",
+    "test:live-preview": "python tests/e2e/run_live_preview.py",
     "lint": "npm --prefix apps/web run lint",
     "setup": "python -m pip install -r requirements.txt && npm --prefix apps/web install && npm --prefix apps/desktop-shell install",
     "desktop": "npm --prefix apps/desktop-shell start",
     "cyberscan": "npm --prefix apps/desktop-shell start -- --cyberscan",
     "build:bridge": "powershell -NoProfile -ExecutionPolicy Bypass -File services/cyberview_bridge/build.ps1",
+    "build:native": "powershell -NoProfile -ExecutionPolicy Bypass -File services/native_bridge/build.ps1",
     "test:desktop": "npm --prefix apps/desktop-shell test",
     "smoke:desktop": "npm --prefix apps/desktop-shell run smoke"
   }

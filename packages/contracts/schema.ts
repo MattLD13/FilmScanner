@@ -1,5 +1,38 @@
 /** Portable v1 records. Times are UTC epoch milliseconds; image paths are relative. */
 export type FilmType = 'color_negative' | 'bw_negative' | 'positive';
+export type ScannerEvidence = 'verified_on_device' | 'recorded_on_device' | 'observed_vendor_call' | 'static_only' | 'unavailable';
+/** Read passively from SCAN08.dll's own %TEMP% log and calibration cache; no device I/O. */
+export interface VendorScannerReport {
+  device_io_performed: false;
+  log: null | { header: Partial<Record<'model' | 'usb' | 'ccd' | 'sdk' | 'firmware', string>>; geometry: Record<string, number>;
+    lamp_calibration: { steps: number; final_level: number | null }; scans_logged: number; updated_at: number;
+    last_scan: null | { film_type?: string; film_media?: string; lamp?: number; focus_step?: number; color_balance?: number[];
+      highlight?: number[]; shadow?: number[]; gain?: number[]; dc?: number[] } };
+  calibration_cache: null | { bytes: number; updated_at: number; age_hours: number };
+}
+export interface CyberScanOptions {
+  dpi: 300 | 360 | 450 | 600 | 900 | 1800; bits: 8 | 16;
+  channel: 'rgb' | 'gray' | 'bw'; film: 'negative' | 'positive';
+  crop: {left: number; top: number; right: number; bottom: number};
+  exposure: number[]; focus?: number | null;
+}
+export interface CyberScanWorkspace<TCapture = unknown> {
+  settings: CyberScanOptions;
+  capabilities: {actions: Record<string, {available: boolean; evidence: string; reason?: string}>;
+    resolutions: number[]; depths: number[]; channels: string[]; films: string[];
+    settings_validation?: {available: boolean; reason?: string}};
+  prescan: TCapture | null;
+}
+export interface CyberScanDiagnostics {
+  inspection: 'files_only'; device_io_performed: false;
+  native_bridge_built: boolean; native_module_recognized: boolean;
+  native_device_validation: 'pending' | 'current_frame_verified'; native_note: string;
+  active_backend?: string;
+  files: Array<{name: string; installed: boolean; bytes?: number; sha256?: string; recognized?: boolean; version?: string | null}>;
+  features: Array<{id: string; name: string; evidence: ScannerEvidence; available: boolean; detail: string}>;
+  catalog?: string;
+  scanner?: VendorScannerReport;
+}
 export type RollStatus = 'awaiting_development' | 'developing' | 'ready_to_scan' | 'scanning' | 'scanned' | 'archived';
 export interface Roll {
   id: string; stock: string; camera: string; iso: number; format: '35mm' | '120';

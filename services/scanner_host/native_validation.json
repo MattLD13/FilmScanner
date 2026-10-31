@@ -1,0 +1,118 @@
+{
+  "model_sha256": "da413438c0136338799cc7d49a14abae700e29feb7da1e993d4da1b8b5554b7f",
+  "evidence": "docs/cyberview-parity.md",
+  "actions": [
+    "next",
+    "previous",
+    "eject_forward",
+    "autofocus",
+    "calibrate"
+  ],
+  "configurations": [
+    {
+      "dpi": 1800,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.03,
+        "top": 0.003,
+        "right": 1.407,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null
+    },
+    {
+      "dpi": 300,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.03,
+        "top": 0.003,
+        "right": 1.407,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null
+    },
+    {
+      "dpi": 600,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.03,
+        "top": 0.003,
+        "right": 1.407,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null
+    }
+  ],
+  "observations": [
+    {
+      "date": "2026-10-30",
+      "operation": "300 dpi prescan",
+      "geometry": [
+        413,
+        283
+      ],
+      "bits": 8,
+      "channels": 3,
+      "result": "passed",
+      "source_sha256": "67dd01809330d658722e803ca83a00eae9b03716ee213383c14da6a7613e8e8b"
+    },
+    {
+      "date": "2026-10-30",
+      "operation": "Native frame navigation after a complete same-session scan",
+      "result": "passed",
+      "position_sequence": [
+        1,
+        2,
+        1
+      ],
+      "precondition": "A successful scan or prescan in the same driver session is required; fresh-session advance stalled and required a supervised power-off recovery."
+    },
+    {
+      "date": "2026-10-30",
+      "operation": "Initialized-session parity sequence",
+      "result": "passed",
+      "actions": [
+        "next",
+        "previous",
+        "autofocus",
+        "calibrate",
+        "eject_forward"
+      ],
+      "autofocus_step": 2,
+      "film_base_rgb": [
+        147,
+        197,
+        309
+      ],
+      "scan_after_focus": {
+        "dpi": 600,
+        "bits": 16,
+        "width": 826,
+        "height": 567,
+        "channels": 3
+      },
+      "user_observation": "User confirmed strip came out normally and reloaded it."
+    }
+  ]
+}
