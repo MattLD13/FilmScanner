@@ -13,7 +13,14 @@ const {
 
 const smoke = process.argv.includes('--smoke');
 // --cyberscan opens the CyberScan X front end for CyberView X instead of the FRAME library.
+// It is its own app to Windows: own icon, taskbar group, logs and single-instance lock.
 const cyberscan = process.argv.includes('--cyberscan');
+const icon = cyberscan ? path.join(__dirname, '..', 'assets', 'cyberscan.ico') : undefined;
+if (cyberscan) {
+  app.setName('CyberScan X');
+  app.setPath('userData', path.join(app.getPath('appData'), 'cyberscan-x'));
+  app.setAppUserModelId('FRAME.CyberScanX');
+}
 const screenshotArg = process.argv.find((arg) => arg.startsWith('--screenshot='));
 const root = workspaceRoot();
 let child = null;
@@ -90,7 +97,7 @@ function harden(allowedOrigin) {
 function createWindow() {
   window = new BrowserWindow({
     width: cyberscan ? 1440 : 1320, height: cyberscan ? 900 : 880, minWidth: 380, minHeight: 600, show: false,
-    title: cyberscan ? 'CyberScan X' : 'FRAME', backgroundColor: cyberscan ? '#161513' : '#111418', autoHideMenuBar: true,
+    title: cyberscan ? 'CyberScan X' : 'FRAME', backgroundColor: cyberscan ? '#161513' : '#111418', autoHideMenuBar: true, icon,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, spellcheck: false },
   });
   window.once('ready-to-show', () => { if (!smoke) window.show(); });

@@ -13,6 +13,19 @@ npm run build          # web client
 npm run cyberscan      # Electron window, starts or attaches to the local service
 ```
 
+Run the `npm` commands from the FRAME folder. To open CyberScan X like any other
+program, add Start menu and desktop shortcuts once (per user, no administrator
+rights):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-cyberscan-shortcut.ps1
+```
+
+The shortcut starts this checkout's Electron shell with `--cyberscan`. In that
+mode it has its own icon (`apps/desktop-shell/assets/cyberscan.ico`), taskbar
+group, logs (`%APPDATA%\cyberscan-x\logs`) and single-instance lock, separate
+from the FRAME desktop app.
+
 In a browser, use `http://127.0.0.1:8765/?workspace=cyberscan` while `npm start`
 runs. `npm run preview:skin` serves an offline demo (`&demo=1`) with sample photos.
 That demo makes no network requests and cannot scan.
