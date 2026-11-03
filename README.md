@@ -21,6 +21,17 @@ For the desktop scanner app, run `npm run frame` after building. The previous
 See [setup](docs/setup.md), [progress](docs/progress.md), [capabilities](docs/capability-matrix.md),
 [agent configuration](docs/agents.md) and [next work](docs/backlog.md).
 
+See the [current feature completion checklist](docs/feature-completion.md) and
+[independent driver workbench](docs/custom-driver.md). `npm run driver:console`
+opens the JSON command console in offline mode. The independent
+`npm run driver:console -- --identify` and `--status` reads have now been tested
+on the scanner without vendor DLLs; arbitrary commands and independent scanning
+remain unfinished.
+For finding and capturing the complete frame, use
+[Auto find borders](docs/auto-find-borders.md).
+The [film material interface](docs/film-lab-ui.md) adapts the workspace to color
+negative, B&W or slide film while preserving existing photographs and edits.
+
 Python owns the API, SQLite archive, simulator, developing timers and image pipeline. React/TypeScript provides a shared desktop and phone layout. The original file is saved unchanged with a SHA-256 record; edits and exports are separate. The water-only practice recipe is demonstration data, never chemistry guidance.
 
 Isolated vendor/protocol research remains under `research/`. Only commands with

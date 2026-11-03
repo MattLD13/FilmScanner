@@ -1,6 +1,496 @@
 # FRAME implementation progress
 
-Updated 2026-10-31. FRAME_SPEC.md remains authoritative.
+## November 3 commits and validation
+
+- A bounded diff/dependency review produced [logical commit groups](COMMIT_REVIEW_PLAN.md).
+  The user then authorized committing all source work. Desktop, independent USB
+  research, archive deletion, integrated capture/imaging/client, and documentation
+  form five logical commits. Preview tone remains off by default.
+- The staged backend full suite passed 427 tests, skipped 63 optional checks and
+  xfailed 2 in 507.60 s. After compiling Windows helpers, the overlapping native,
+  USB-watch, vendor imaging and precision subset passed 83 tests. Build, native UI,
+  36-frame simulator workflow, skin and live-preview checks passed. The live-preview
+  fixture pause was lengthened after a missed transient assertion; an unchanged
+  retry also passed. See the commit record for exact commands and log caveats.
+- Fixed an older native position-sensor error path that force-killed its helper:
+  active calls are now quarantined/cancel-requested with position uncertainty
+  retained. A known terminal ready event ends reservation without silently
+  restoring position. Tests cover live-call retention and the ready/error race.
+- Focused native gate/API/safety tests passed27 in92.71s; native UI passed.
+  Native gates passed10 in1.01s after the added ready-race test. Desktop tests
+  passed8 and offline independent-driver tests passed71.
+- Clarified that the statistics cutoff is800 rows/160 columns at1800 DPI under
+  the current per-side5% policy. No hardware commands were issued for this review.
+
+Updated 2026-11-03. FRAME_SPEC.md remains authoritative.
+
+## Engineering-review guards
+
+- Statistics exclude the observed acquisition-edge region without changing source
+  pixels, display height or manual crops; small custom windows are not over-trimmed.
+- Unacknowledged/cancelled motion latches a persistent position-uncertain state.
+  Recovery requires a fresh300-DPI view plus explicit user reindex before archival
+  work/relative seeks resume.
+- Refused advances wait for confirm/retry/keep-film-stop unless the expected frame
+  count matches. Moving resolution actions recheck the stopped image and counter.
+  Return-to-first now has a built-in optical verification and distinct counter-only
+  warning state. X/Y containment evidence is separate in the contract.
+- Corrected full suite:486 passed,2 xfailed in547.98s. Later safety subset:9 passed
+  in85.93s. Build, native UI and simulated workflow passed. No new physical scanner
+  move was run. [Review response](ENGINEER_REVIEW_RESPONSE.md) records failures,
+  corrections, exact checkpoints, archived profile analysis and remaining limits.
+
+## User appearance preference: preview tone off
+
+- New negative previews/scans retain the generic vendor conversion without the
+  extra automatic preview tone. Generation is only requested through the explicit
+  Auto colour adjustment; a favorite still retains an explicitly chosen tone.
+- Existing saved edits and all original acquisitions are preserved. Earlier
+  default-on processing results below remain historical verification evidence.
+- Targeted API checks: `python -m pytest -q tests/api/test_vendor_auto_tone_api.py`
+  passed9 tests in63.48s; build and native UI workflow passed, with no browser
+  exceptions. An initial shell edit failed before changing
+  the implementation, so its accompanying run saw6 expected default-on/default-off
+  mismatches. The implementation was then patched successfully and the9-test
+  rerun passed. No scanner commands were issued for this preference change.
+
+## Observed automatic tone sequence and preview reuse (November2,2026)
+
+- Successful vendor UI observation proves Generic Negative film conversion precedes
+  automatic histogram tone. Its16-bit scan reused the cropped prescan table; exact
+  Python replay of mode7 matches the saved vendor TIFF pixel-for-pixel.
+- New supported negative captures/review previews receive reversible automatic
+  tone, and planned/favorite scans reuse their verified preview tone. Metadata and
+  acquired-region checks preserve originals and explain guarded fallbacks.
+- A physical FRAME one-frame preview/favorite scan passed with20 matching hashes,
+  verified side borders and final relative frame1/fine offset0. The initial
+  no-film attempt remains recorded separately. Vertical containment stays unknown.
+- CyberView's pre-film pixels and final TIFF also contain the bottom light band;
+  this is not unique to FRAME display/TIFF handling. Exact cause remains unresolved.
+  See [the processing report](cyberview-processing-validation-2026-11-02.md) for
+  comparisons, software checks, physical recovery and evidence boundaries.
+- Final current-code verification:475 passed,2 xfailed in450.44s; build, native UI
+  and simulated workflow passed. All97 successful vendor processing buffers and
+  20 new physical FRAME source/master hashes match; vendor settings restored.
+
+## Vertical-containment investigation (November 2, 2026)
+
+- Read-only vendor inspection confirms the installed module's1708-row Y clamp;
+  FRAME already requests the maximum supported height. No acquisition gate or
+  production limit was loosened.
+- Fresh300RGB8,1800RGB16 and1800RGB8 scans succeeded on the loaded first frame.
+  The three new originals plus twelve prior source tiles do not establish both
+  vertical film-base borders. All15 hashes match; full height remains retained.
+- The1800 bottom low-signal band appears in both8/16-bit modes; its mechanism
+  and complete picture containment are not inferred from that observation.
+-30 imaging/planning tests passed in7.51s. No production code changed. See the
+  [vertical investigation](vertical-containment-2026-11-02.md) for measured
+  dimensions, vendor addresses, inspection figure and precision limitations.
+
+## Six-frame physical acceptance (November 2, 2026)
+
+- After correcting fragmented rebate detection, rounded-mosaic planning, and the
+  stale end-boundary reference, the ordinary API captured all six photographs on
+  the loaded strip with verified horizontal borders and fixed-exposure tiles.
+- A refused further advance passed the fresh optical witness plus unchanged
+  vendor-counter check; five confirmed backward moves returned to frame 1. A new
+  acquisition strongly registered to the starting photograph. All six masters
+  reproduced exactly from original source tiles and recorded plans.
+- `python -m pytest -q`: 467 passed, 2 xfailed in459.42s. Build, native UI and
+  simulated workflow passed. Follow the [acceptance report](strip-acceptance-2026-11-02.md)
+  for supplementary favorites/repeats, final integrity results and final film state.
+- This is evidence for one six-frame strip. Vertical containment, mounted slides,
+  uncut-roll acceptance and calibrated sensor effective precision remain separate.
+
+## Repeat-offset correction and wide-frame exposure locking (November 1, 2026)
+
+- Repeated scans now subtract measured median RGB offsets relative to the first
+  source over their shared acquired/unclipped interior before averaging. Original
+  TIFFs remain unchanged; vectors, contribution counts, and final mean range-clamp
+  counts are recorded in the derived recipe and TIFF metadata.
+- Multi-tile archival captures freeze one exposure after film-base measurement
+  and force vendor flag0 across both tiles. Single-tile vendor-auto preference
+  remains unchanged. Per-source settings and final exposure policy are auditable;
+  an inconsistent auto-exposure report fails with the source retained.
+- The retained actual repeats show full-interior red median bias decrease from
+  about167 to0.68 16-bit codes relative to source1; edge contributor counts and
+  hashes remain unchanged. This is an additive correction, not calibrated gain
+  recovery. No new physical acquisition was needed.
+- Targeted/regression tests, build, and native UI workflow passed. See the
+  [feature report](cyberview-feature-port-2026-11-01.md) for commands and limits.
+
+## Additional CyberView ports and measured output precision (November 1, 2026)
+
+- Native vendor flag-1 exposure, legacy-preview callback compatibility, bounded
+  goto/readback, adjacent manual focus, realignment, software frame labels, and
+  additional exact acquisition modes are integrated with evidence gates.
+- Optional exact isolated vendor auto-tone tables/application, generic cleanup
+  filters, and optically aligned repeat averaging are integrated into saved
+  recipes, preview/export, and UI controls. Full UI parity and exact ROC/GEM are
+  not claimed; see [the feature-port report](cyberview-feature-port-2026-11-01.md).
+- 32 completed original physical acquisitions verified unchanged. Three stationary
+  originals show 12-bit-spaced codes in 16-bit storage; sensor/ADC effective bits
+  remain unmeasured without calibrated target/linear-response evidence. User has
+  a strip only; mounted-slide handling remains unverified.
+- Full Python suite: 452 passed, 2 expected failures in 347.29 seconds. Build and
+  native UI workflow passed; scoped physical failures, fixes, and successful
+  retries are preserved in the report. No runtime data/vendor tables committed.
+
+## Optical acquisition planning and bounded physical validation (November 1, 2026)
+
+- Implemented padded 300 DPI border/rebate search, optical one/two-tile planning,
+  constrained/ambiguity-checked stitching, replay verification and feedback,
+  fine-offset reconciliation, in-place Scan all, configurable end actions, and
+  favorites arrival verification. The active native path no longer searches at
+  archival resolution. Top/bottom containment is reported independently.
+- Physical two-frame batch and one favorite rescan passed, using exactly two
+  archival tiles per frame. Seek drift was about 8.06 preview pixels; fresh local
+  geometry prevented stale-coordinate reuse. All 23 retained source hashes
+  verified. The film returned to relative frame 1 with fine offset zero.
+- Automated imaging/API tests and the native UI build/workflow passed. An initial
+  hardware run exposed an immutable-metadata overwrite bug; it was corrected and
+  the subsequent batch passed. See the [full report](planned-scanning-validation-2026-11-01.md)
+  for commands, failures corrected, timings, before/after outputs, and test scope.
+
+## Per-line status and photographed B&W film-base colour (November 1, 2026)
+
+- Restored explicit line counts alongside elapsed time and transfer percentage.
+  When the driver supplies a transfer height, status shows e.g. `20 / 40 lines ·
+  50%`; before that, it shows the actual received preview-line count without
+  inventing a full-resolution total. Count and scan beam use the same transfer
+  fraction once that height is known. The small layout wraps on narrow screens.
+- User requested real Kentmere PAN 200 base-colour evidence. Manufacturer product
+  and technical sources identify a clear low-density acetate base, but that alone
+  did not justify the initial neutral-grey UI choice. Actual developed-strip image
+  research found Simon King's 35mmc comparison, with Kentmere identified as the
+  lower strip and edge-labelled in the photo. Its unexposed top rebate was sampled
+  at median RGB **172/161/176**, **#ACA1B0**, a muted lavender-grey.
+- That photographed colour now drives the B&W decorative base. Hole/lettering
+  colours were adjusted for the lighter backing; scanned image samples and
+  calibration coefficients are not changed. This is a referenced photographic
+  appearance, not a calibrated universal B&W stock colour. Sources and sampling
+  details: [film-lab-ui.md](film-lab-ui.md).
+- Source photograph and sampling JSON are private ignored research artifacts.
+  The CDN and one forum attachment returned 403; the publisher's canonical
+  same-image URL succeeded and was visually inspected before sampling. No image
+  assets from the article were installed in the product.
+
+Checks: `npm run build`, `npm run lint`, `npm run test:skin`, `npm run test:live-preview` and
+`npm run test:e2e` passed for the restored line-count/initial base update. The
+live-preview fixture checks rising individual preview counts, then exact `20 / 40`
+and `50%` transfer status. Final photographed-colour static checks passed; B&W
+desktop/phone and exact transfer-counter screenshots were visually inspected.
+No physical scanner command or library edit was made.
+
+## Home proportions, wide layout and fullscreen photos (November 1, 2026)
+
+- User review replaced the original square featured-image treatment with a
+  **3:2 opening**, matching 36 × 24 mm frame proportions. This is a display ratio,
+  not a claim of physical millimetres on a monitor. Saved images use contain
+  fitting so neither crop nor stretching is burned into them.
+- Removed Home's fixed content-width caps. Hero and workspace cards now fill the
+  available window; the featured photo receives the larger grid column. Wide
+  2560 × 1440 and phone layouts were inspected.
+- Added a fullscreen icon beside Shuffle. The photo viewer requests native
+  fullscreen when available, with a full-viewport fallback. It preserves the
+  actual saved image aspect ratio, supports Escape/Close and Open in scanner,
+  traps keyboard focus, restores it on close and hides background content from
+  screen readers while open.
+- The desktop permission handlers now allow only `fullscreen` for FRAME's own
+  top-level local page. Automatic fullscreen, foreign origins, subframes and all
+  other permissions stay denied. This reuses the existing Windows/Electron stack;
+  no scanner capability or acquisition setting was changed.
+
+Executed: `npm run build`, `npm run lint`, `npm run test:skin`,
+`npm run test:native-ui`, `npm run test:e2e`, and `npm run test:desktop` passed.
+Desktop helper tests: **8 passed**. Static browser coverage checks 3:2 geometry,
+wide-window usage, fullscreen image proportions, keyboard focus/Escape/Close,
+native Chromium fullscreen and the unsupported-fullscreen fallback. An initial
+assertion used an eval-style predicate disallowed by the preview CSP; it was
+changed to a function predicate without weakening CSP.
+
+The desktop smoke command exited without its JSON result while the user's
+existing desktop instance held the single-instance lock; it also logged cache
+access errors. That attempt is not recorded as a successful Electron runtime
+fullscreen test. The existing app was not closed/restarted. No physical scanner
+commands or library edits were performed.
+
+## Scan motion, explanations, frame navigation and real zoom (November 1, 2026)
+
+- Restored the miniature frame in scan status, with an outline draw, row-driven
+  fill/beam, waiting pulse and transport cue. The live canvas beam also marks the
+  last row received. It is not elapsed-time simulation. Added restrained thumbnail,
+  favorite, tooltip and icon transitions; reduced motion disables decoration while
+  preserving actual row progress. No percentage is invented before the driver
+  supplies a transfer height.
+- Added hover/keyboard explanations to dock controls, including disabled transport
+  reasons. Previous and Next frame are both in the dock. Previous retains the
+  existing confirmation; both reuse validated actions and request a quick preview
+  afterward where supported. No new hardware capability was enabled.
+- Fit now measures the available viewer, visible crop and quarter-turn rotation.
+  Small previews enlarge to fit; fitted views adapt when the window is resized.
+  The percentage no longer labels every fitted image 100%. Actual size maps image
+  pixels to CSS screen pixels (recorded acquisition dimensions when present).
+  Clicking the percentage returns to 100%; zoom and fit do not change saved edits.
+- Automated checks caught an empty-view geometry edge case producing Infinity%;
+  dimensions are now bounded and zoom controls show a disabled dash without an
+  image, including during live transfer.
+
+Checks: `npm run build`, `npm run test:skin`, `npm run test:native-ui`,
+`npm run test:live-preview` and `npm run test:e2e` passed. New browser assertions
+check actual-size dimensions, reported scale, rotated fit and resize; hover/focus
+explanations; Previous frame confirmation/request; received-row beam progression;
+and reduced-motion behavior. The workflow suite still completes its 36-frame
+synthetic roll. Desktop/phone/sample and synthetic live screenshots were inspected.
+No physical scanner command or library edit was performed in this UI continuation.
+
+## Quiet viewer, floating controls and image backing (November 1, 2026)
+
+Following user screenshots: removed decorative container rails/lettering, sidebar
+slogans and duplicated comparison captions. The large viewer is now a plain
+canvas; film base/perforations hug the image itself, and Slide mode retains its
+mount and small slide thumbnails. All image backing is external decoration;
+acquired pixels and crop/border coordinates are unchanged.
+
+Viewing controls now sit in a floating icon dock: zoom, fit, border toggle,
+before/after, next frame, rotate, mirror and favorite. Accessible labels, hover
+titles, pressed states and capability gates are retained. Progress is compact,
+with actual elapsed time/row percentage and Stop; a return move after the last
+source says Returning film rather than Moving to frame 4 of 3. Errors, pending
+driver dialogs and uncertain-boundary warnings remain visible.
+
+`npm run build`, `npm run test:skin`, `npm run test:native-ui`, `npm run test:e2e` and
+`npm run test:live-preview` passed. Sample desktop/phone views for all three film
+materials were inspected. Static checks also verify a floating dock, no viewer
+decoration and backing/image geometry consistent with the source aspect ratio.
+No physical scanner operation, backend modification or library change was made.
+
+## Correct film perforation orientation (November 1, 2026)
+
+User review correctly identified that the horizontal viewer had decorative
+sprocket holes down its left/right edges. They now run along the top/bottom, with
+edge lettering moved clear of them. Slide mode remains unperforated. No image
+pixels, crop coordinates, border detection or scanner behavior were changed.
+`npm run build`, `npm run test:skin` and `npm run test:e2e` passed; desktop and phone
+sample screenshots were inspected. The 36-frame synthetic workflow reported no
+JavaScript exceptions. No physical scanner commands were issued.
+
+## Film material UI redesign (October 31, 2026)
+
+- Reworked Home, Scan, Rolls, Settings and phone navigation around 35 mm film:
+  perforations, edge markings, frame numbers, contact sheets, a framed image gate,
+  larger editorial typography, better surface hierarchy and restrained transitions.
+- Persistent three-way film selector: amber/warm color negative, graphite/silver
+  B&W, and cool light-table slide mode with pale mounts. Shared CSS variables and
+  original SVG glyphs carry the material through the app. Develop receives the
+  same family without changing recipe or timer behavior.
+- The authenticated film-type endpoint persists the selection without opening the
+  bridge, blocks it during active scanner operations and stamps new captures with
+  their film type. New photographic B&W captures use reversible saturation -100,
+  retaining grey tones; they do not enable binary threshold acquisition. New slide
+  captures use positive polarity and retain existing hardware gates. Old photos,
+  originals and edit recipes are not migrated or recoloured.
+- The selector changes appearance immediately, saves through the API, and returns
+  to the prior selection on error. Demo changes use local storage only. Film choice
+  survives reload and navigation into Develop. B&W Reset retains grayscale defaults.
+- No new runtime dependencies, remote fonts, image effects or copied paid assets.
+  Supplied design sites were reviewed as references; motionvideo.xyz was not
+  accessible through the browsing tool. Details: [film-lab-ui.md](film-lab-ui.md).
+- Desktop and 390px phone screenshots for all three materials were visually
+  inspected under `.local/frame-ui/`. These use clearly labeled sample images.
+  Motion respects reduced-motion preferences; radio controls retain keyboard and
+  screen-reader semantics. Saved picture pixels are not tinted by the theme.
+
+Validation:
+
+- `python -m pytest -q tests/api/test_film_type_preferences.py`: **5 passed**, covering
+  no-I/O persistence/restart, active-capture refusal, unchanged existing recipes/
+  hashes, many-tone grayscale TIFF output and unverified slide refusal. A positive
+  fixture checks that an explicitly validated simulated slide keeps inversion off.
+- `python -m pytest -q`: **336 passed, 2 existing expected failures, 111.99 s**,
+  no skips or warnings on the combined checkout. This includes concurrent scanner
+  work already present in the shared files; this UI continuation did not replace it.
+- `npm run lint`, `npm run build`, `npm run test:skin` and the 36-frame
+  `npm run test:e2e` workflow passed. Static checks cover all materials, phone
+  overflow, persistence, unchanged saved-image URLs and reduced motion.
+- Final `npm run test:native-ui` and `npm run test:live-preview` also passed with
+  no JavaScript exceptions. The final native run checks successful persistence,
+  rollback after a rejected preference save and the selected palette in Develop.
+- The native UI check initially intercepted the historical stitched-scan URL;
+  the current Scan frame action now uses `/scan-frame`. Its request expectation
+  was updated to that contract. An asynchronous controlled-radio assertion was
+  corrected to wait for preference saving, and selection now updates immediately
+  with rollback on save failure. The final native run covers persistence, unchanged
+  saved edits, Develop handoff and failure rollback.
+
+No physical scanner commands, hardware-validation promotions, driver installs,
+user-library changes or live-service restart were performed for this redesign.
+
+## Independent USB identity and status (October 31, 2026, late evening)
+
+The user returned to the independent/custom-driver work. This continuation was
+performed without additional agents. The normal imaging application remains on
+its existing vendor-assisted bridge.
+
+- Added `usbscan_transport.py`: native descriptor/OVERLAPPED layouts, exclusive
+  device ownership, identity matching, control/bulk buffers, exact-transfer checks,
+  completion events, cancellation draining and an isolated helper process deadline.
+  Internal raw primitives have stand-in tests; arbitrary live payloads are not
+  exposed by the application or console.
+- Actual independent identity queries returned **2770:0119**, USB bcdDevice **0100**,
+  descriptor `7027190100010000`. The helper checked that SCAN08, SQ_SCAN, IO_PORT,
+  FVC, CyberViewX.ds and BeneScan were absent.
+- A fixed independently issued page-0 status sequence also worked: write `97 00`,
+  select `8B`, read one byte from offset `07`. The observed value was **3F**,
+  repeatedly. This exercises real control writes/reads but no motor/lamp register,
+  bulk transfer, image capture, firmware write or new driver installation.
+- Evidence is separately scoped in `custom_validation.json`; vendor/native
+  capabilities were not used to promote the independent path. It establishes
+  status reads in an already initialized unit, not independent cold startup,
+  calibration, acquisition, physical cancellation recovery or sensor precision.
+- Console supports `--identify`, `--status`, and the exact JSON hardware command
+  `{"op":"status_read","page":0}`. Another page, register, value or bulk request
+  stays disabled. Entire batches are admitted before the first hardware action;
+  malformed evidence/results and unknown operations fail closed. Timeout failures
+  preserve uncertain access/ownership rather than claiming no hardware was touched.
+- FRAME's idle session was observed initially. Its API had already closed by the
+  time an idle-release request was attempted, which returned connection-refused;
+  no application was interrupted. Independent exclusive opens then succeeded.
+  Private actual observations are under `.local/custom-driver/`.
+
+Validation:
+
+- `python -m pytest -q`: **327 passed, 2 existing expected failures, 63.19 s**,
+  no skips or warnings. Device-I/O boundary tests use stand-ins, including pending
+  completion, retained cancellation buffers, timeouts, wrong-device/owner refusal,
+  partial transfers, whole-batch admission and malformed worker/evidence results.
+- `npm run test:e2e`: passed the existing 36-frame simulated workflow, phone
+  reconnect, TIFF export and archive with no JavaScript exceptions.
+- `python -m services.scanner_host.custom_driver --identify` and `--status`:
+  passed on the attached scanner without vendor DLLs.
+- `python -m services.scanner_host.custom_driver --mode hardware --command '{"op":"status_read","page":0}'`:
+  passed on device, with verified-plan provenance and status `3f`. It sent only
+  the reviewed status-page/address sequence. No arbitrary command was attempted.
+
+Next: independently reconstruct initialization, shading/AFE calibration and one
+ordinary capture, then bring up exposure/gain, focus and transport one verified
+operation at a time. Extended continuous scans remain unverified. Full status:
+[custom-driver.md](custom-driver.md).
+
+## Auto find borders on loaded film (October 31, 2026, late evening)
+
+User clarification: stitched capture was a means of finding frame borders; the
+main feature should be automatic border finding. The user confirmed loaded film
+and authorized using it. This continuation was performed without additional agents.
+
+- Main scanner actions are now Auto find borders, Scan frame and Scan all frames.
+  Recover full frame is in Scanner controls. Border finding uses 300 dpi 8-bit
+  full-window previews; a first preview with both side borders stops without
+  additional film nudges. Otherwise the existing verified 20-step sequence expands
+  the preview coverage. Low-resolution previews remain separate from final frames.
+- Green overlays mark detected edges; dashed amber marks estimated edges. The
+  original crop is shown while inspecting borders. Missing vertical borders remain
+  nominal-height estimates. A border preview requiring wider coverage makes Scan
+  frame select full-resolution recovery automatically; it never stretches a single
+  frame to manufacture missing pixels. Scan all retains its regular path.
+- The real film exposed a hard nominal-width rejection: clear edges were about
+  438 pixels apart at declared 300 dpi, outside the old 0.9 mm tolerance. A 10%
+  spacing prior now retains such observed pairs. This is not optical DPI calibration.
+- Full-window 300 dpi acquisition was validated physically before adding its
+  configuration to native_validation.json. No raw USB command, new motor mode,
+  firmware change or driver installation was enabled.
+
+Physical results:
+
+- Four exploratory full-window previews completed (430 × 284, 8-bit RGB), using
+  already verified 20-step nudges. The two borders were confirmed visually from
+  retained acquisitions under `.local/border-finder/20261031-212332/`.
+- The new authenticated `/api/cyberview/find-borders` action then completed on
+  loaded film in **63.654 s**, preserving three 300 dpi 8-bit sources. Both side
+  borders were found at x=14 and x=452 in a 481 × 286 preview, with 100% coverage
+  of the suggested crop. No archival frame was counted and its preview stayed
+  uncropped for inspection.
+- Full-resolution recovery completed in **198.456 s** at the existing validated
+  1800 dpi/16-bit configuration and exposure 115/155/247. Derived image 2784 × 1708;
+  measured side borders x=35 and x=2665; applied crop **2630 × 1701**. Vertical
+  height remains nominal. The crop includes **270** filled corner pixels (0.0060%),
+  recorded in metadata; it is not 100% acquired coverage. All six original sources
+  and both derived image hashes were checked. The processed JPEG was inspected.
+- Completed motor steps balanced to zero; no final image was taken to verify exact
+  return positioning. No eject or whole-frame advance was issued. The owned driver
+  session was released after capture and the temporary review service was stopped.
+- Real saved-preview and final-frame UI screenshots were inspected under
+  `.local/border-finder/api-check/`; read-only browser review reported no JavaScript
+  errors. Existing acquisitions and edits were not migrated.
+
+Software validation:
+
+- `python -m pytest -q`: **287 passed, 2 existing expected failures, 66.07 s** on
+  the final repeat, with no skips or warnings.
+- `python -m pytest -q tests/api/test_frame_align_api.py tests/imaging/test_frame_align.py tests/scanner/test_native_gate.py`:
+  40 passed. New cases cover true 8-bit quick previews, preserved final settings,
+  immutable sources, one-preview/no-nudge success, unverified-window refusal and
+  cancellation between preview operations. A first targeted run reported an
+  all-NaN skew-margin warning; missing coverage is now masked and the repeat passed
+  without that warning.
+- `npm run lint`, `npm run build`, `npm run test:skin`, `npm run test:native-ui`
+  and `npm run test:e2e` passed. Native browser checks exercise border overlays,
+  unchanged frame counts and automatic wider-capture routing. The full workflow
+  still covers 36 synthetic frames, phone reconnect, TIFF export and archive.
+
+Usage and limits: [auto-find-borders.md](auto-find-borders.md). Whole-roll border
+recovery, automatic deskew, arbitrary formats and broader photographic validation
+remain open.
+
+## Scan actions, measured borders and independent-command workbench (October 31, 2026)
+
+- Replaced Current frame/All frames dropdown with separate Scan frame and Scan all
+  frames buttons. Both keep existing capability/busy/settings checks; full-roll
+  availability still depends on validated transport. Browser checks inspect the
+  actual request intent for each button.
+- Source views of stitched scans now use the source image's natural geometry,
+  without the wider mosaic's crop. Desktop synthetic screenshots of mosaic/source
+  views were inspected under ignored `.local/frame-ui-current/`.
+- Border detection finds complete frames between adjacent gaps even when a wider
+  strip has a gap at its centre. It records all complete horizontal candidates.
+  Crops use measured border spacing rather than forcing 36 × 24 mm wherever both
+  edges are visible. Missing dimensions remain nominal and labeled. Measured
+  borders are not shifted to conceal missing coverage. New stitched automatic
+  crops require both side borders and preserve existing edits when uncertain.
+- Offline inspection of the latest saved stitch still finds only its right
+  border; no new acquisition or alteration of that record was performed.
+- Added the independent protocol command workbench (`npm run driver:console`):
+  bounded raw register/status/bulk plans, strict synthetic replay, native IO_BLOCK
+  layout, short-transfer checks and a hard-disabled hardware mode. It is not a
+  replacement acquisition driver: native transport, initialization/calibration,
+  physical controls and extended capture remain unfinished.
+- Rea 6.8.0 with isolated Node 24.22.1 uses existing Ghidra 12.1.4/JDK 21 for static
+  analysis. Provider-scoped `rea doctor --provider ghidra --format json` passed;
+  `rea decompile SCAN08.dll 0x100110af --provider ghidra --snapshot PATH --format json`
+  confirmed horizontal 2586/vertical 1708 coordinate clamps. Private evidence is
+  under `.local/frame-rea/`. No agent registration or global runtime changes.
+- [Feature completion review](feature-completion.md) replaces stale backlog
+  assumptions with current gaps and explicit acceptance requirements.
+
+Checks executed:
+
+- `python -m pytest -q`: **282 passed, 2 existing expected failures, 61.67 s**, no skips.
+- `python -m pytest -q tests/scanner/test_custom_driver.py`: **31 passed**.
+- `python -m pytest -q tests/imaging/test_frame_align.py tests/api/test_frame_align_api.py`:
+  **26 passed** before adding the second uncertain-crop case, subsequently covered
+  in the full run. The first measured-border run had one old fixed-size bleed
+  expectation fail; it was replaced with border/bleed assertions and the detector's
+  existing two-pixel localization tolerance. Narrow/wide exposure regressions pass.
+- `npm run lint`, `npm run build`, `npm run test:skin`, `npm run test:native-ui`,
+  `npm run test:live-preview`, and `npm run test:e2e`: passed. The final full browser
+  workflow acquired 36 synthetic frames, exercised phone reconnect/export/archive,
+  and reported no JavaScript exceptions.
+- `npm run driver:console -- --command '{"op":"status_read","page":0}'`:
+  produced an unexecuted transfer plan with `hardware_accessed: false`.
+
+No physical scanner command, motor operation, new validation entry, driver install,
+live-service restart or original-image modification was performed. Independent
+hardware control and continuous two-frame capture are not claimed complete.
 
 ## FRAME rebrand and recovered vendor colour (October 31, 2026)
 

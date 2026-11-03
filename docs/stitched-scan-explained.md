@@ -1,5 +1,18 @@
 # What the stitched scan does
 
+The main UI now presents [Auto find borders](auto-find-borders.md), which locates
+the frame with quick previews before selecting the needed final coverage. The
+full-resolution recovery described below remains available as Recover full frame
+in Scanner controls. The new workflow was also tested on loaded film; current
+results are recorded in [progress.md](progress.md).
+
+Current software update (October 31, 2026): source views no longer use the wider
+mosaic's crop/dimensions. Crops now follow measured border spacing where two edges
+are visible; missing dimensions remain nominal estimates. A new stitched crop is
+applied automatically only when both horizontal borders are detected. Existing
+saved edits are retained. Historical fixed-size results below remain historical
+evidence, not measurements of this updated behavior. See [auto-align.md](auto-align.md).
+
 A stitched scan photographs the same negative three times through slightly
 different horizontal windows. FRAME joins the overlapping scans so a frame edge
 that fell outside the first window can be recovered. It increases the area

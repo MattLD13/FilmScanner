@@ -1,15 +1,21 @@
 # 35 mm auto-align
 
-CyberScan X finds the frame in a scan and crops it to exactly 36 × 24 mm (plus or
-minus a bleed of up to 2 mm). The crop is part of the edit recipe; originals are
+FRAME finds full-frame 35 mm exposures and crops at measured borders (plus or
+minus a bleed of up to 2 mm). Missing borders use a nominal 36 × 24 mm estimate.
+The crop is part of the edit recipe; originals are
 never changed. Code: `services/imaging/frame_align.py`.
 
 ## Why scans need to be longer
 
 The AFL module clamps one scan to 2586 × 1708 px at 1800 dpi, which is 36.5 × 24.1 mm
 (`0x100110af`, [scan08-feature-catalog.md](scan08-feature-catalog.md)). CyberView's
-default crop is narrower still: every existing scan in the library is
-34.98 × 24.03 mm, so none of them can take an exact 36 mm crop.
+default crop is narrower still: at the original October 30 checkpoint, single
+library scans were 34.98 × 24.03 mm and could not supply a complete nominal 36 mm
+crop. Full-window 1800 dpi acquisition now succeeds at 2585 × 1708 px. The current
+[Auto find borders](auto-find-borders.md) workflow checks preview rebates and
+measured frame width before using one full-resolution pass; ambiguous or wider
+frames use overlapping recovery. The high-resolution image must independently
+pass the rebate witness before its crop is applied.
 
 ## How it works
 
@@ -27,9 +33,19 @@ default crop is narrower still: every existing scan in the library is
    CyberView positive. The frame is the picture around the middle: it starts
    where the nearest gap on its left ends and ends where the nearest gap on its
    right begins. A sliver of the neighbouring frame beyond a gap is ignored.
-5. **Exact crop**: 36 × 24 mm (+2 × bleed) centred on the two edges, or anchored
-   to one edge, or centred on the scan if none is visible (and labelled so). Skew is
-   measured from the edge positions down the frame and reported.
+5. **Border crop**: use measured start/end positions wherever both edges are found;
+   use nominal dimensions anchored to one edge/scan centre for missing borders.
+   Bleed expands or trims these bounds without resizing any pixels. New stitched automatic crops
+   require both horizontal borders; uncertain suggestions leave the saved crop
+   unchanged. Skew is measured and reported, not automatically corrected.
+
+A wider strip can have an inter-frame gap at its centre. The detector searches
+adjacent gaps for complete frames near that centre before using a one-edge
+fallback. The `x.frames` result (saved as `alignment.edges_x.frames`) lists the
+measured horizontal start/end of every complete candidate; the preferred crop
+uses the one nearest the strip centre. Synthetic two-frame tests verify both
+sets of borders in this case; continuous physical
+two-frame capture is not yet implemented or verified.
 
 ## In the app
 

@@ -1,5 +1,12 @@
 # Native capture: device test record
 
+**November 1 update:** additional acquisition configurations, vendor automatic
+exposure, bounded go-to-frame, adjacent manual focus, and vendor realignment were
+tested and recorded. The [feature-port report](cyberview-feature-port-2026-11-01.md)
+and current `native_validation.json` supersede the October 30 control/configuration
+tables below. Full CyberView processing parity, mounted-slide media, and calibrated
+effective sensor bits remain distinct open items; no fixture test promotes them.
+
 `services/scanner_host/native_validation.json` decides which native-capture
 controls CyberScan X enables. This page is the readable record behind it.
 
@@ -21,10 +28,11 @@ native control is disabled.
 | Next frame | 9 forward | Position 1 → 2 after a scan in the same session | Only after a scan or prescan in the current native session |
 | Previous frame | 9 reverse | Position 2 → 1 after a scan in the same session | Same. The equivalent CyberView command hung the driver (see [cyberview-bridge.md](cyberview-bridge.md)) |
 | Eject forward | 8 forward | "User confirmed strip came out normally and reloaded it" | Asks for confirmation |
+| Eject backward | 8 reverse | User observed the strip exit backward on 2026-11-01; the module's post-eject sensor still reported loaded | Asks for confirmation; stale sensor state is advisory after selector completion |
 | Autofocus | 14 | Focus step 2; a 600 dpi scan afterwards delivered 826 × 567, 16-bit RGB | Asks for confirmation |
 | Film-base measurement | 17 | R/G/B 147 / 197 / 309 | Asks for confirmation |
 
-Not recorded, so not enabled: eject backward, go to frame, manual focus step.
+Not recorded, so not enabled: go to frame, manual focus step.
 
 ## Enabled scan configurations
 

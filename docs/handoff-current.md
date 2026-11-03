@@ -1,4 +1,60 @@
-# Current handoff — FRAME, October 31, 2026
+# Current handoff — FRAME, November 3, 2026
+
+November3 bounded commit review: [commit grouping and sensor-path fix](COMMIT_REVIEW_PLAN.md)
+records an older forced-termination exception now replaced by native quarantine
+and uncertainty handling. Source, tests and handoff documents are now organized
+into user-authorized commits; see the linked execution record for exact checks.
+Full staged backend suite: 427 passed, 63 skipped, 2 xfailed; compiled helper subset:
+83 passed. Build, native UI, simulated 36-frame, skin and live-preview checks
+passed. The subset overlaps the full suite. No new physical recovery claim is made.
+
+Latest processing continuation: [observed CyberView sequence and FRAME validation](cyberview-processing-validation-2026-11-02.md)
+records exact auto-table/TIFF stage replay, automatic negative tone defaults and
+per-preview archival/favorite reuse. A physical FRAME one-frame check passed;
+the lower band is shared with the vendor pre-film path. Older tone-stage gaps
+below describe earlier checkpoints; acquisition/calibration parity remains bounded.
+
+Latest vertical follow-up: [maximum-height investigation](vertical-containment-2026-11-02.md)
+confirms the vendor module's1708-row clamp, three new successful captures and
+15 original-source audits without a verified vertical border pair. Full height
+is retained; no production limits or sensor-precision claims were broadened.
+
+November 2 update: the corrected six-frame physical batch captured all six images,
+passed the fresh-witness end check, returned to frame 1, and optically matched the
+starting photograph. All six masters reproduced exactly. Current software checks:
+467 passed, 2 xfailed; build, native UI, and simulated workflow passed. Read the
+[loaded-strip acceptance report](strip-acceptance-2026-11-02.md) for the latest
+supplementary favorite/repeat result, final film state, failures, and evidence.
+Older dated sections below are historical and do not replace that report.
+
+Latest continuation: [CyberView feature port and validation](cyberview-feature-port-2026-11-01.md)
+documents new native modes/controls, vendor exposure, optional automatic-tone worker,
+cleanup filters, repeats, precision measurements, and explicit remaining limits.
+Current native evidence gates, not older dated tables, determine availability.
+
+November 1 implementation: [FRAME_SUMMARY.md](../FRAME_SUMMARY.md) is the
+canonical conversation summary. The optical one/two-tile planner, padded 300 DPI
+search, fine-offset reconciliation, in-place whole-roll acquisition, optional end
+actions, and favorites arrival verification are implemented. See the
+[validation report](planned-scanning-validation-2026-11-01.md) for synthetic tests,
+bounded real-scanner results, failures corrected, and vertical-containment limits.
+
+UI continuation: the film-lab redesign and persistent color-negative/B&W/slide
+materials are implemented. See [film-lab-ui.md](film-lab-ui.md) and the top of
+[progress.md](progress.md). Selection affects the shell and future capture
+defaults; existing images and edits are retained.
+
+Latest continuation: [Auto find borders](auto-find-borders.md) is implemented and
+tested on loaded film, including final full-resolution recovery and measured-edge
+cropping. Read the top of [progress.md](progress.md) for current software/hardware
+results. Older sections below describe their dated checkpoints.
+
+Independent-driver follow-up: direct identity and fixed page-0 status reads now
+work without vendor DLLs. Windows control/bulk infrastructure, exclusive handles,
+cancellation draining and isolated deadlines are implemented. Live arbitrary
+commands, independent initialization/calibration/acquisition and advanced physical
+controls remain unfinished. See [custom-driver.md](custom-driver.md); the normal
+scanner workspace still uses the vendor-assisted bridge.
 
 Read AGENTS.md and FRAME_SPEC.md first. The scanner session is complete. The current
 continuation improves software negative conversion using saved acquisitions only.
@@ -31,13 +87,14 @@ continuation improves software negative conversion using saved acquisitions only
   `frame-phone-saved.png`. Scanner discovery and bridge were mocked for review.
 - Latest tests/results are at the top of [progress.md](progress.md). No physical
   scanner operation was performed and no live service was restarted. Shortcuts
-  were renamed after the build/checks passed. Source changes remain uncommitted.
+  were renamed after the build/checks passed. These were historical working-copy
+  observations; the November 3 commit record supersedes their git status.
 
 ## Checkout and hardware
 
-- Last committed checkpoint: `5fb63e2`, vendor close-write fix and supervised direct
-  capture. The checkout was clean when this continuation began; subsequent colour
-  changes are uncommitted. Never commit `data/`, `.local/`, vendor DLLs or tokens.
+- The continuation began after `5fb63e2`, the vendor close-write fix and supervised
+  direct capture. Subsequent source changes are committed in the November 3
+  sequence described above. Never commit `data/`, `.local/`, vendor DLLs or tokens.
 - Direct SCAN08 capture is the default. CyberView/TWAIN is a research/test path via
   `FRAME_SCANNER_BACKEND=cyberview-twain`.
 - Hardware session evidence: [standalone-plan.md](standalone-plan.md). Direct
