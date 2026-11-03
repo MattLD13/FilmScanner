@@ -161,6 +161,59 @@ def test_native_timeout_reserves_session_without_killing_driver(monkeypatch):
     asyncio.run(scenario())
 
 
+def test_position_sensor_scan_dispatch_does_not_kill_a_still_active_vendor_call(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    async def scenario():
+        bridge=NativeAflBridge(exe=FAKE)
+        bridge.process=SimpleNamespace(returncode=None)
+        bridge._send=AsyncMock();bridge._kill=AsyncMock()
+        bridge.frame_initialized=True;bridge.last_frame_position=1
+        async def exchange(self,line,*args,**kwargs):
+            if line.startswith('settings '):return [],None
+            return [],{'code':'position_sensor','message':'Synthetic blocked sensor call'}
+        monkeypatch.setattr(cyberview.CyberViewBridge,'_exchange',exchange)
+        with pytest.raises(ScannerError,match='take the film out'):
+            await bridge.scan(tmp_path/'unused.tif',1,lambda e:None)
+        bridge._kill.assert_not_awaited()
+        bridge._send.assert_awaited_once_with('cancel')
+        assert bridge.open and bridge.busy and bridge.quarantined
+        assert bridge.transport_position_uncertain
+        assert not bridge.frame_initialized and bridge.last_frame_position is None
+        with pytest.raises(ScannerError,match='remains reserved'):await bridge.release()
+        class Stream:
+            def __aiter__(self):return self.values()
+            async def values(self):
+                yield b'{"event":"scan_done","images":0,"result":-1}\n'
+                yield b'{"event":"ready"}\n'
+        await bridge._read(SimpleNamespace(stdout=Stream()))
+        assert not bridge.quarantined and bridge.transport_position_uncertain
+        bridge._kill.assert_not_awaited()
+    asyncio.run(scenario())
+
+
+def test_sensor_terminal_ready_before_error_handler_does_not_leave_false_quarantine():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    async def scenario():
+        bridge=NativeAflBridge(exe=FAKE)
+        bridge.process=SimpleNamespace(returncode=None)
+        bridge._send=AsyncMock();bridge._kill=AsyncMock()
+        class Stream:
+            def __aiter__(self):return self.values()
+            async def values(self):
+                yield b'{"event":"error","code":"position_sensor"}\n'
+                yield b'{"event":"scan_done","images":0,"result":0}\n'
+                yield b'{"event":"ready"}\n'
+        await bridge._read(SimpleNamespace(stdout=Stream()))
+        assert (await bridge.events.get())['code']=='position_sensor'
+        await bridge._stuck()
+        assert bridge.open and not bridge.quarantined and bridge.transport_position_uncertain
+        assert bridge.events.empty()
+        bridge._send.assert_not_awaited();bridge._kill.assert_not_awaited()
+    asyncio.run(scenario())
+
+
 @pytest.mark.skipif(__import__('sys').platform != 'win32', reason='Windows scanner ownership mutex')
 def test_reset_does_not_touch_an_owned_scanner(monkeypatch):
     import ctypes

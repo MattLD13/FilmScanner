@@ -1,4 +1,4 @@
-"""Find a 35 mm frame in one or more overlapping scans and crop it to exactly 36 x 24 mm.
+"""Find a 35 mm frame in overlapping scans and crop at its measured borders.
 
 The AFL module clamps a single scan to 2586 x 1708 px at 1800 dpi (36.5 x 24.1 mm,
 docs/scan08-feature-catalog.md), so frame edges may sit outside one scan. Several
@@ -22,6 +22,22 @@ LUMA = np.array([.2126, .7152, .0722])
 
 def mm_to_px(mm: float, dpi: float) -> float:
     return mm / MM_PER_INCH * dpi
+
+
+def rebate_witness(alignment: dict, width_px: int, dpi: float, minimum_mm: float = .15) -> dict:
+    """Require both measured side borders and a small acquired film-base margin outside them.
+
+    Missing edges are uncertain, not evidence that a nominal crop is complete.
+    """
+    edges = alignment.get('x', {})
+    if edges.get('found') != 'both' or edges.get('start') is None or edges.get('end') is None:
+        return {'verified': False, 'minimum_mm': minimum_mm, 'reason': 'Both side borders were not detected.'}
+    left_mm = float(edges['start']) / dpi * MM_PER_INCH
+    right_mm = (width_px - float(edges['end'])) / dpi * MM_PER_INCH
+    verified = left_mm >= minimum_mm and right_mm >= minimum_mm
+    return {'verified': verified, 'minimum_mm': minimum_mm,
+            'left_margin_mm': round(left_mm, 4), 'right_margin_mm': round(right_mm, 4),
+            'reason': None if verified else 'The acquired film-base margin is too narrow to verify full-frame coverage.'}
 
 
 def base_likeness(samples: np.ndarray, transmission: bool) -> np.ndarray:
@@ -208,8 +224,27 @@ def _edges_along(base: np.ndarray, covered: np.ndarray, axis: int, expected_px: 
     # CyberView scans, 2026-10-30).
     if contrast < .08:
         return {'found': 'none'}
-    gap = (profile > base_level - .3 * contrast) & (spread < .1) & valid
+    bright = (profile > base_level - .3 * contrast) & valid
+    gap = bright & (spread < .1)
     min_run = max(2, int(mm_to_px(.25, dpi)))
+    # Film-base spread can fluctuate around .1 from grain/calibration noise.
+    # A strict pointwise threshold fragmented a physically present ~.3 mm
+    # rebate on the last frame of the real strip. Use bounded hysteresis:
+    # a connected bright region may grow through spread<.12 only when at
+    # least half its pixels (and at least two) already meet the strict test.
+    # Never bridge a dark picture pixel or accept a weak-only uniformity run.
+    soft = bright & (spread < .12)
+    i=0
+    while i<n:
+        if soft[i]:
+            j=i
+            while j<n and soft[j]:j+=1
+            strong=int(np.count_nonzero(gap[i:j]))
+            if j-i>=min_run and strong>=max(2,int(np.ceil((j-i)/2))):
+                gap[i:j]=True
+            i=j
+        else:
+            i+=1
     runs, i = [], 0
     while i < n:
         if gap[i]:
@@ -231,6 +266,27 @@ def _edges_along(base: np.ndarray, covered: np.ndarray, axis: int, expected_px: 
         best = lo + int(np.argmax(window))
         return best, float(np.nan_to_num(score[best]))
 
+    # A wide strip can have a gap at its centre. Find complete frames between
+    # neighbouring gaps before assuming that the centre itself is picture area.
+    # Always return measured positions; never resize the image to fit the model.
+    # Nominal 36 x 24 mm is a prior, not a reason to throw away two clear
+    # borders. The real low-resolution AFL preview measured ~37.1 mm between
+    # side borders at its declared DPI (2026-10-31); .9 mm rejected that pair.
+    tol = max(expected_px * .10, mm_to_px(.9, dpi), 4)
+    pairs = []
+    for before, after in zip(runs, runs[1:]):
+        s, ss = refine(before[1], start)
+        e, es = refine(after[0], end)
+        if ss > .05 and es > .05 and abs((e - s) - expected_px) <= tol:
+            pairs.append((s, e, ss + es))
+    if pairs:
+        s, e, strength = min(pairs, key=lambda pair: abs((pair[0] + pair[1]) / 2 - middle))
+        return {'start': s, 'end': e, 'found': 'both', 'strength': round(strength, 3),
+                'measured_mm': round((e - s) / dpi * MM_PER_INCH, 3),
+                'frames': [{'start': left, 'end': right, 'strength': round(score, 3),
+                            'measured_mm': round((right - left) / dpi * MM_PER_INCH, 3)}
+                           for left, right, score in pairs]}
+
     left = [r for r in runs if (r[0] + r[1]) / 2 < middle and r[1] < n]   # a gap reaching the far edge still counts
     right = [r for r in runs if (r[0] + r[1]) / 2 >= middle and r[0] > 0]
     edges = {}
@@ -242,7 +298,6 @@ def _edges_along(base: np.ndarray, covered: np.ndarray, axis: int, expected_px: 
         gap_run = min(right, key=lambda r: r[0])
         pos, strength = refine(gap_run[0], end)
         edges['end'] = (pos, strength, gap_run)
-    tol = max(mm_to_px(.9, dpi), 4)
     if 'start' in edges and 'end' in edges:
         s, e = edges['start'][0], edges['end'][0]
         if abs((e - s) - expected_px) <= tol:
@@ -271,9 +326,13 @@ def _skew(base, covered, start, end, dpi, bands=8):
             continue
         for b in range(bands):
             r0, r1 = int(h * (.1 + .8 * b / bands)), int(h * (.1 + .8 * (b + 1) / bands))
-            prof = np.nanmedian(np.where(covered[r0:r1, lo - k:hi + k], base[r0:r1, lo - k:hi + k], np.nan), axis=0)
-            prof = np.nan_to_num(prof, nan=np.nanmedian(prof))
-            grad = sign * (prof[:-k] - prof[k:])
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
+                prof = np.nanmedian(np.where(covered[r0:r1, lo - k:hi + k], base[r0:r1, lo - k:hi + k], np.nan), axis=0)
+            valid = np.isfinite(prof[:-k]) & np.isfinite(prof[k:])
+            if not valid.any():
+                continue
+            grad = np.where(valid, sign * (prof[:-k] - prof[k:]), -np.inf)
             xs.append(lo - k + int(np.argmax(grad)) + k / 2); ys.append((r0 + r1) / 2)
     if len(xs) < 4:
         return None
@@ -283,7 +342,7 @@ def _skew(base, covered, start, end, dpi, bands=8):
 
 def align_35mm(samples: np.ndarray, dpi: float, transmission: bool, bleed_mm: float = 0.0,
                covered: np.ndarray | None = None, frame_mm: tuple[float, float] = FRAME_MM) -> dict:
-    """Locates the frame and returns an exact frame_mm (+ 2 x bleed) crop rectangle."""
+    """Use measured border spacing where both edges are visible, otherwise nominal size."""
     if not -2 <= bleed_mm <= 2:
         raise ValueError('Bleed must be between -2 and 2 mm')
     base = base_likeness(samples, transmission)
@@ -292,10 +351,9 @@ def align_35mm(samples: np.ndarray, dpi: float, transmission: bool, bleed_mm: fl
         raise ValueError('Coverage must match the image dimensions')
     h, w = base.shape
     want_w, want_h = mm_to_px(frame_mm[0], dpi), mm_to_px(frame_mm[1], dpi)
-    crop_w, crop_h = round(mm_to_px(frame_mm[0] + 2 * bleed_mm, dpi)), round(mm_to_px(frame_mm[1] + 2 * bleed_mm, dpi))
     result = {'dpi': dpi, 'frame_mm': list(frame_mm), 'bleed_mm': bleed_mm, 'image_px': [w, h],
               'image_mm': [round(w / dpi * MM_PER_INCH, 3), round(h / dpi * MM_PER_INCH, 3)]}
-    centers = []
+    centers, spans = [], []
     for axis, size, want in ((1, w, want_w), (0, h, want_h)):
         edges = _edges_along(base, covered, axis, want, dpi)
         if edges['found'] == 'both':
@@ -309,6 +367,11 @@ def align_35mm(samples: np.ndarray, dpi: float, transmission: bool, bleed_mm: fl
             center = (ys_or_xs[0] + ys_or_xs[-1]) / 2 if len(ys_or_xs) else size / 2
         result['x' if axis == 1 else 'y'] = edges
         centers.append(center)
+        spans.append(edges['end'] - edges['start'] if edges['found'] == 'both' else want)
+    crop_w, crop_h = [round(span + 2 * mm_to_px(bleed_mm, dpi)) for span in spans]
+    result['crop_basis'] = {axis: 'detected_borders' if result[axis]['found'] == 'both' else 'nominal'
+                            for axis in ('x', 'y')}
+    result['requested_crop_mm'] = [round(size / dpi * MM_PER_INCH, 3) for size in (crop_w, crop_h)]
     cx, cy = centers
     x0 = int(round(cx - crop_w / 2)); y0 = int(round(cy - crop_h / 2))
     clamped = x0 < 0 or y0 < 0 or x0 + crop_w > w or y0 + crop_h > h
@@ -316,9 +379,11 @@ def align_35mm(samples: np.ndarray, dpi: float, transmission: bool, bleed_mm: fl
     cw, ch = min(crop_w, w), min(crop_h, h)
     if np.count_nonzero(~covered[y0:y0 + ch, x0:x0 + cw]):
         # Stitched mosaics have ragged corners (each scan sits a few px higher or lower).
-        # Slide the exact-size crop by at most 0.2 mm, vertically first, onto covered pixels.
+        # Never shift measured borders onto picture content to hide missing coverage.
         reach = int(round(mm_to_px(.2, dpi)))
-        moves = sorted(((dy, dx) for dy in range(-reach, reach + 1) for dx in range(-reach, reach + 1)
+        ys = (0,) if result['y']['found'] == 'both' else range(-reach, reach + 1)
+        xs = (0,) if result['x']['found'] == 'both' else range(-reach, reach + 1)
+        moves = sorted(((dy, dx) for dy in ys for dx in xs
                         if 0 <= y0 + dy <= h - ch and 0 <= x0 + dx <= w - cw), key=lambda m: (abs(m[1]), abs(m[0])))
         for dy, dx in moves:
             if covered[y0 + dy:y0 + dy + ch, x0 + dx:x0 + dx + cw].all():
@@ -356,9 +421,14 @@ def align_35mm(samples: np.ndarray, dpi: float, transmission: bool, bleed_mm: fl
         result['note'] = (f'The requested crop contains {missing_pixels} unacquired pixels '
                           f'({coverage_fraction:.6%} coverage); the crop was not applied. '
                           'Adjust the crop or acquire more coverage.')
-    elif not result['exact']:
+    elif crop_w > w or crop_h > h:
         result['note'] = (f"The scan is {result['image_mm'][0]} x {result['image_mm'][1]} mm, smaller than the "
-                          f"{frame_mm[0] + 2 * bleed_mm:g} x {frame_mm[1] + 2 * bleed_mm:g} mm crop; scan the full window or stitch.")
+                          f"{result['requested_crop_mm'][0]:g} x {result['requested_crop_mm'][1]:g} mm crop; scan the full window or stitch.")
+    elif not result['exact']:
+        result['note'] = ('The detected frame extends beyond the scanned area; automatic cropping was not applied. '
+                          'Adjust the crop or acquire wider coverage.')
     elif confidence == 'centered':
         result['note'] = 'No frame edge was visible; the crop is centred on the scan.'
+    elif confidence == 'frame_found' and result['y']['found'] != 'both':
+        result['note'] = 'Both side borders were found; the crop height uses the nominal frame size because vertical borders are missing.'
     return result

@@ -126,3 +126,36 @@ def apply(samples: np.ndarray, profile: dict) -> np.ndarray:
     gamma = np.stack([np.interp(np.clip(samples[..., c], 0, 1), np.linspace(0, 1, 4096),
                                 (4095 - table[:, c]) / 4095) for c in range(3)], axis=-1)
     return vendor_filmterm.apply(gamma, profile)
+
+
+def exposure_normalized_input(samples: np.ndarray, film_base) -> np.ndarray:
+    """Prepare saved identity-LUT transmission for the vendor's 0.85-base path.
+
+    Software normalization is explicit and reversible; it is not a claim that
+    weak-channel sensor noise or clipping can be repaired after acquisition.
+    """
+    base=np.asarray(film_base,dtype=float)
+    if base.shape!=(3,) or not np.isfinite(base).all() or np.any(base<=.02) or np.any(base>=.99):
+        raise ValueError('Vendor input normalization requires a valid measured RGB film base')
+    return np.clip(np.asarray(samples)*(.85/base),0,1)
+
+
+def default_profile(store) -> dict | None:
+    """Manufacturer generic negative/model curves; never choose a fitted photo profile."""
+    cached=[p for p in filmterms.reference_profiles(store) if p.get('kind')=='vendor-negative'
+            and p.get('name','').casefold()=='generic negative' and p.get('source_folder','').casefold()=='gamma']
+    if cached:
+        return next((p for p in cached if p.get('engine')==VERSION),cached[0])
+    for folder in filmterms.roots():
+        film,gamma=folder/'Generic Negative.ft',folder/'37.GG'
+        if not film.is_file() or not gamma.is_file():
+            continue
+        try:
+            if max(film.stat().st_size,gamma.stat().st_size)>filmterms.MAX_FILE_BYTES:
+                continue
+            profile=create(film.read_bytes(),gamma.read_bytes(),film.name,folder.name)
+            filmterms.remember(store,profile)
+            return profile
+        except (OSError,ValueError):
+            continue
+    return None

@@ -5,11 +5,52 @@
     "next",
     "previous",
     "eject_forward",
+    "eject_backward",
     "autofocus",
     "calibrate",
-    "nudge"
+    "nudge",
+    "focus",
+    "goto",
+    "realign",
+    "auto_exposure"
   ],
   "configurations": [
+    {
+      "dpi": 300,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null
+    },
+    {
+      "dpi": 1800,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null
+    },
     {
       "dpi": 1800,
       "bits": 16,
@@ -63,9 +104,543 @@
         100
       ],
       "focus": null
+    },
+    {
+      "dpi": 360,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 450,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 600,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 900,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 900,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 300,
+      "bits": 8,
+      "channel": "gray",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 600,
+      "bits": 16,
+      "channel": "gray",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 1800,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 1800,
+      "bits": 8,
+      "channel": "gray",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 1800,
+      "bits": 16,
+      "channel": "gray",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 300,
+      "bits": 8,
+      "channel": "bw",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 300,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "positive",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 1800,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "positive",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 600,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.1,
+        "top": 0.05,
+        "right": 1.3,
+        "bottom": 0.9
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 600,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
     }
   ],
   "observations": [
+    {
+      "date": "2026-11-01",
+      "operation": "Stationary original acquisitions and optically aligned repeat mean",
+      "result": "passed_output_code_and_repeat_analysis_not_adc_enob",
+      "evidence": "docs/cyberview-feature-port-2026-11-01.md",
+      "source_sha256": [
+        "fee4d154e70bdd596ffa7fe85c63802ecf51248426ff11dc77f3cfdf027720a0",
+        "b40acb3bbf1e3cece58b158ca3869afc30946b55f1ca27fe72be6478e70f371b",
+        "2702d2812ac8d960df4554dff4884d7eb2538db59abdd7bc42fa1c721883c541"
+      ],
+      "repeat_count": 3,
+      "container_bits": 16,
+      "observed_code_lattice_step": [
+        16,
+        16,
+        16
+      ],
+      "effective_sensor_bits": null,
+      "effective_adc_bits": null,
+      "note": "Three real1800DPI RGB16 originals withmanual100/100/100 andidentityLUT; no requestedinterveningmovement. Allsourcehashesmatched. Actualoutput12bit-alignedcodes; repeat noiseincludeslamp/calibration/residualregistration/filmtexture andisnotADCENOB. Derivedalignedmean retainsoriginals andcontributioncounts, about99.8443percent fullrepeatcoverage. User hasfilmstriponly,nocalibratedtarget."
+    },
+    {
+      "date": "2026-11-01",
+      "operation": "Vendor automatic exposure at the existing default inset scan area",
+      "result": "passed_bounded_negative_rgb_modes",
+      "evidence": "docs/cyberview-feature-port-2026-11-01.md",
+      "captures": [
+        {
+          "geometry": [
+            413,
+            283
+          ],
+          "dpi": 300,
+          "bits": 8,
+          "seconds": 28.878,
+          "sha256": "dd810ece5a18dc60475620169070d537669300a6f897ccd62c6d6d09fdf0e600"
+        },
+        {
+          "geometry": [
+            2479,
+            1703
+          ],
+          "dpi": 1800,
+          "bits": 16,
+          "seconds": 75.713,
+          "sha256": "e59e8298edbd0523fd9d5b57bfbc30aeeca3e40e17251604afa276de10d30679"
+        }
+      ],
+      "note": "Actual300RGB8 and1800RGB16 withbalanced120/168/269seeds; currentdefaultscanarea0.03,0.003,1.407,0.95in. Productionautoflagallowlist includes these plusfullwindowRGB300/1800. Not arbitrarypositive/gray/otherDPIautomaticexposure."
+    },
+    {
+      "date": "2026-11-01",
+      "operation": "Vendor selector32 flag1 automatic exposure, bounded modes",
+      "result": "passed_transfer_after_legacy_preview_callback_fix",
+      "evidence": "docs/cyberview-feature-port-2026-11-01.md",
+      "captures": [
+        {
+          "label": "vendor-auto-300",
+          "seconds": 14.543,
+          "geometry": [
+            430,
+            284
+          ],
+          "requested_exposure": [
+            100,
+            100,
+            100
+          ],
+          "source_sha256": "19a5d54f99e8958a479c3793466eb772a90be7b6914a991d2698a376fe3e49ab"
+        },
+        {
+          "label": "vendor-auto-1800",
+          "seconds": 75.874,
+          "geometry": [
+            2585,
+            1708
+          ],
+          "requested_exposure": [
+            100,
+            100,
+            100
+          ],
+          "source_sha256": "4a050c05ffae3983dfc4d8398fac64af0f7d8a519c729b97c17905d3939b813b"
+        },
+        {
+          "label": "vendor-auto-1800-balanced",
+          "seconds": 75.885,
+          "geometry": [
+            2585,
+            1708
+          ],
+          "requested_exposure": [
+            120,
+            168,
+            269
+          ],
+          "source_sha256": "b1e8bdac36555f401d5ad27f413598744bc3c5a17abe90d0c35cc0477de6430e"
+        }
+      ],
+      "helper_sha256": "bc5d0c6a9c21074bc36e65a6da193c67bec3281e188eb0aa2aedf5e4c92b1584",
+      "note": "Initial300RGB8 trial failed strict remaining-lines check. Static code0x100074e6..0x100075a8 proves shortcut uses0x24byte legacy strip without0x28tail. Host now validates cumulativeheight/last only in exactflag1/300RGB8 branch; ordinarystrips remainstrict. Subsequent300RGB8 and1800RGB16fullwindow flag1 captures completed with100/100/100 and balanced120/168/269seeds. Requestblock remained unchanged; effectiveinternalexposure is not inferred from it orselector33. This flag is vendor clipping/density adjustment preserving seedchannelratios, not proof of CyberView UI complete DMin/AutoGamma pipeline. Productionflag limited to recorded negativeRGB geometries; repeats requirefixedmanualexposure."
+    },
+    {
+      "date": "2026-11-01",
+      "operation": "Additional acquisition modes, bounded goto, adjacent focus, and vendor realignment",
+      "result": "passed_bounded_strip_validation",
+      "evidence": "docs/cyberview-feature-port-2026-11-01.md",
+      "source_sha256": "13ffa485312ec44668ec33b6f408873fb465f470a5ba61cda866787bb8f0c292",
+      "configurations_added": [
+        "360-rgb8",
+        "450-rgb16",
+        "600-rgb8",
+        "900-rgb8",
+        "900-rgb16",
+        "300-gray8",
+        "600-gray16",
+        "1800-rgb8",
+        "1800-gray8",
+        "1800-gray16",
+        "300-binary",
+        "300-positive-rgb8",
+        "1800-positive-rgb16",
+        "600-custom-rgb16",
+        "autofocus-baseline-600"
+      ],
+      "goto_sequence": [
+        1,
+        2,
+        1
+      ],
+      "focus_steps": [
+        2,
+        3,
+        2
+      ],
+      "note": "Actual loaded film strip; original depths/channel counts/geometries verified. Positive-mode transfer on negative film is not mounted-slide validation. Focus limited to measured adjacent range2..3, not whole0..200. Realign retained frame1 and was followed by300dpi image. First sweep stopped beforefocus capture because isolated test lacked600RGB16fullwindow configuration; resumed explicit bounded run passed. No absolute encoder or all-frame goto range accuracy claim."
+    },
+    {
+      "date": "2026-11-01",
+      "operation": "Optically planned in-place two-frame batch followed by one selected favorite",
+      "result": "passed_horizontal_coverage_and_confirmed_relative_return",
+      "evidence": "docs/planned-scanning-validation-2026-11-01.md",
+      "source_sha256": "705faf687f7f3378edf95bf717313cab24aa741070aa0908e0713d4171e6d83b",
+      "geometries": [
+        [
+          2824,
+          1710
+        ],
+        [
+          2898,
+          1712
+        ],
+        [
+          2883,
+          1709
+        ]
+      ],
+      "archival_tiles_per_frame": [
+        2,
+        2,
+        2
+      ],
+      "favorite_seek_registration_300px": {
+        "dx": -8.056,
+        "dy": -1.101,
+        "peak_ratio": 27.298
+      },
+      "source_files_hash_verified": 23,
+      "note": "Two real frames acquired in place using padded low-resolution optical planning and exactly two 2585x1708 RGB16 tiles each; one favorite was reverified and rescanned after seeking. All three masters verified side borders. Final acknowledged relative frame index was 1 and fine-step offset zero. Vertical borders were not visible; full acquired height retained. This bounded test does not establish whole-roll reliability, an absolute encoder position, or a repeatability bound for the provisional 18-pixel uncertainty pad. End-action hold/eject gates were tested synthetically, not physically repeated here."
+    },
+    {
+      "date": "2026-11-01",
+      "operation": "Backward film eject with a loaded strip",
+      "result": "user_observed_ejected; feeder status disagreed",
+      "note": "The user confirmed the film physically exited backward. SCAN08 selector 8 completed, but the immediate status query still reported film loaded. Backward eject is enabled based on the observed physical result; the helper reports the stale sensor state as advisory and does not treat it as a failed eject."
+    },
+    {
+      "date": "2026-10-31",
+      "operation": "Supervised 20-step nudge followed by stay-put 300/1800/300 dpi captures",
+      "geometries": [
+        [
+          430,
+          284
+        ],
+        [
+          430,
+          284
+        ],
+        [
+          2585,
+          1708
+        ],
+        [
+          430,
+          284
+        ]
+      ],
+      "result": "passed",
+      "source_sha256": "6ebecb192ac5c58b76ddb05e7537f20108fd536b672264d054b5e429b316eb3b",
+      "preview_registration_px": {
+        "nudged_a_to_b_dx": 21.99,
+        "stay_put_b_to_c_dx": -0.01,
+        "stay_put_b_to_c_dy": 1.463
+      },
+      "detected_right_edge_px": {
+        "preview_b": 416,
+        "scan_1800": 2504,
+        "preview_c": 416
+      },
+      "note": "The +20-step move shifted image content 21.99 px at 300 dpi (about 1.86 mm), versus the earlier 1.20 mm observation for a 20-step backward move; direction/load dependence remains to be measured. The same right rebate edge was detected in preview B and C; after scaling for the measured pixel ratio, the 1800 dpi edge was within about 0.5 preview pixel. Cross-resolution correlation offsets include scan-grid effects. Only one specimen and one run; not a repeatability bound. No left edge was visible, so full-frame single-pass coverage was not established. Film remains parked at the verified +20-step offset."
+    },
+    {
+      "date": "2026-10-31",
+      "operation": "Supervised zero-nudge full-window 300/1800/300 dpi sequence",
+      "geometries": [
+        [
+          430,
+          284
+        ],
+        [
+          2585,
+          1708
+        ],
+        [
+          430,
+          284
+        ]
+      ],
+      "result": "passed",
+      "source_sha256": "4d5e9663152033786b19cd0b75b380f7eab99903eb81a5f504e4b9015c901dd3",
+      "preview_registration_px": {
+        "dx": -0.012,
+        "dy": 0.473
+      },
+      "note": "Full-window 1800 dpi configuration completed. Preview A/B registered within half a 300 dpi pixel. No frame rebates were detected in this subject; coverage eligibility was not demonstrated. One sequence only; repeatability distribution remains unknown."
+    },
+    {
+      "date": "2026-10-31",
+      "operation": "Supervised full-window 300 dpi 8-bit border previews",
+      "geometry": [
+        430,
+        284
+      ],
+      "bits": 8,
+      "channels": 3,
+      "result": "passed",
+      "source_sha256": "f4fc840a6507f736a414cdbd6fe2f314a069272c95fee6ff51b209b422113dc0",
+      "note": "Four previews completed with loaded film. Previously verified 20-step nudges revealed opposite borders; registration measured 438 pixels between them, approximately 37.1 mm at the declared DPI. This is not independent optical DPI calibration. Completed nudge steps balanced to zero; final physical return was not re-imaged."
+    },
     {
       "date": "2026-10-30",
       "operation": "300 dpi prescan",
@@ -124,5 +699,87 @@
     "nudge": "2026-10-31 supervised: 20 steps back moved the frame 1.20 mm (28.4 px at 600 dpi, about 16.6 steps per mm); 20 forward returned within 0.11 mm; same frame throughout.",
     "exposure_range": "2026-10-31 supervised: 1800 dpi 16-bit at exposure 120/168/269 (from the measured film base) scanned normally; response linear (base came out 0.84/0.855/0.856 for a 0.85 target). Range kept to 300 because nothing above 269 was scanned.",
     "calibrate": "Selector 17 returned zeros twice on 2026-10-31, while the scanner was in a state poked by the IO_PORT close bug (services/native_bridge/vendorfix.h); not retested since. CyberScan measures the film base from its own scan instead."
-  }
+  },
+  "focus_range": [
+    2,
+    3
+  ],
+  "auto_exposure_configurations": [
+    {
+      "dpi": 300,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 1800,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.0,
+        "top": 0.0,
+        "right": 1.4366666666666668,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 300,
+      "bits": 8,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.03,
+        "top": 0.003,
+        "right": 1.407,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    },
+    {
+      "dpi": 1800,
+      "bits": 16,
+      "channel": "rgb",
+      "film": "negative",
+      "crop": {
+        "left": 0.03,
+        "top": 0.003,
+        "right": 1.407,
+        "bottom": 0.95
+      },
+      "exposure": [
+        100,
+        100,
+        100
+      ],
+      "focus": null,
+      "auto_exposure": false
+    }
+  ]
 }

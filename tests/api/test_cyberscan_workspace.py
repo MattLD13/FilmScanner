@@ -10,8 +10,45 @@ import tifffile
 
 from services.api.main import create_app
 from services.scanner_host import workspace
+from services.imaging import filmterms,vendor_negative
 from test_cyberview import bridge, wait_session
 from test_workflow import login
+
+
+def test_color_negative_uses_cached_manufacturer_generic_as_default_without_display_boost(tmp_path,bridge,monkeypatch):
+    monkeypatch.setenv('FRAME_SCANNER_BACKEND','afl-native-experimental')
+    monkeypatch.setenv('FRAME_NATIVE_BRIDGE',__import__('os').environ['FRAME_CVBRIDGE'])
+    monkeypatch.setenv('FRAME_ALLOW_EXPERIMENTAL_SCANNER','1')
+    monkeypatch.setenv('FAKE_CVBRIDGE_MODE','strip')
+    monkeypatch.setenv('FAKE_CVBRIDGE_RESPECT_SETTINGS','1')
+    monkeypatch.setattr(workspace,'validation',lambda:{'actions':[],'configurations':[workspace.DEFAULT_OPTIONS]})
+    film=('FilmClass NEG;\nFilmName Generic Negative;\nFilmMfgr Fixture;\nFilmLut\n'+
+          '\n'.join(f'{i} {i} {i}' for i in range(256))+';\nFilmMatR 1 0 0 0;\nFilmMatG 0 1 0 0;\nFilmMatB 0 0 1 0;\n').encode()
+    gamma=('FilmLut\n'+'\n'.join(f'{i} {i} {i}' for i in range(4096))+';').encode()
+    profile=vendor_negative.create(film,gamma,'Generic Negative.ft','GAMMA')
+    app=create_app(tmp_path/'library')
+    filmterms.remember(app.state.store,profile)
+    with TestClient(app) as client:
+        login(client)
+        assert client.post('/api/cyberview/scan',json={'count':1}).status_code==200
+        assert wait_session(client)['state']=='complete'
+        record=client.get('/api/cyberview/captures').json()['captures'][0]
+        recipe=record['adjustments']
+        assert recipe['film_profile']==profile['id']
+        assert recipe['vendor_input_balance'] is True
+        assert recipe['gamma']==1 and recipe['curve']==[0,.25,.5,.75,1]
+        assert recipe['black_point']==0 and recipe['white_point']==1
+        assert recipe['rgb_balance']==[1,1,1] and recipe['auto_color'] is None
+        assert record['display_suggestion']['reference_used'] is False
+        url=f"/api/cyberview/captures/{record['id']}"
+        original=client.get(url+'/export/original').content
+        response=client.get(url+'/rendered/preview')
+        assert response.status_code==200
+        balanced=client.post(url+'/balance-negative')
+        assert balanced.status_code==200
+        assert balanced.json()['adjustments']['vendor_input_balance'] is True
+        assert hashlib.sha256(original).hexdigest()==record['sha256']
+        assert client.get(url+'/export/original').content==original
 
 
 def test_workspace_persists_but_unverified_values_do_not_reach_driver(tmp_path,bridge,monkeypatch):
@@ -100,7 +137,7 @@ def test_film_base_measurement_becomes_exposure_but_scans_wait_for_validation(tm
         assert view['capabilities']['actions']['scan']['available'] is True
 
 
-def test_direct_capture_stops_and_ends_a_driver_stuck_on_a_sensor(tmp_path,bridge,monkeypatch):
+def test_direct_capture_sensor_failure_keeps_uncertainty_after_fake_driver_returns(tmp_path,bridge,monkeypatch):
     monkeypatch.setenv('FRAME_SCANNER_BACKEND','afl-native-experimental')
     monkeypatch.setenv('FRAME_ALLOW_EXPERIMENTAL_SCANNER','1')
     monkeypatch.setenv('FRAME_NATIVE_BRIDGE',__import__('os').environ['FRAME_CVBRIDGE'])
@@ -110,10 +147,17 @@ def test_direct_capture_stops_and_ends_a_driver_stuck_on_a_sensor(tmp_path,bridg
         assert client.post('/api/cyberview/scan',json={'count':1}).status_code==200
         session=wait_session(client)
         assert session['state']=='error' and 'take the film out' in session['error']
-        assert client.get('/api/cyberview/status').json()['session_open'] is False
+        status=client.get('/api/cyberview/status').json()
+        assert status['session_open'] is True
+        assert status['transport_position_uncertain'] is True
 
 
-def test_each_direct_scan_sets_the_next_exposure_from_its_film_base(tmp_path,bridge,monkeypatch):
+@pytest.mark.parametrize('mode,has_usable_base',[('strip',True),('ok',False)])
+def test_each_direct_scan_sets_the_next_exposure_only_from_a_usable_film_base(tmp_path,bridge,monkeypatch,mode,has_usable_base):
+    monkeypatch.setenv('FAKE_CVBRIDGE_MODE',mode)
+    monkeypatch.setenv('FAKE_CVBRIDGE_RESPECT_SETTINGS','1')
+    monkeypatch.setenv('FAKE_FRAME_WIDTH_MM','34.5')
+    monkeypatch.setenv('FAKE_FRAME_OFFSET_MM','0')
     monkeypatch.setenv('FRAME_SCANNER_BACKEND','afl-native-experimental')
     monkeypatch.setenv('FRAME_ALLOW_EXPERIMENTAL_SCANNER','1')
     monkeypatch.setenv('FRAME_NATIVE_BRIDGE',__import__('os').environ['FRAME_CVBRIDGE'])
@@ -124,6 +168,12 @@ def test_each_direct_scan_sets_the_next_exposure_from_its_film_base(tmp_path,bri
         assert client.post('/api/cyberview/scan',json={'count':1}).status_code==200
         assert wait_session(client)['state']=='complete'
         record=client.get('/api/cyberview/captures').json()['captures'][0]
+        if not has_usable_base:
+            # The generic pipe fixture has a flat green channel; it cannot
+            # establish a film-base measurement or justify changing exposure.
+            assert 'film_base' not in record
+            assert client.get('/api/cyberview/workspace').json()['settings']['exposure']==[100,100,100]
+            return
         measured=record['film_base']
         assert measured['exposure_used']==[100,100,100] and len(measured['measured'])==3
         assert client.get('/api/cyberview/workspace').json()['settings']['exposure']==measured['next_exposure']

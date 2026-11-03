@@ -24,6 +24,7 @@ FAKE = Path(__file__).resolve().parents[1] / 'scanner' / 'fake_cvbridge.py'
 
 @pytest.fixture
 def bridge(tmp_path, monkeypatch):
+    monkeypatch.setenv('FRAME_FILMTERM_DIRS',str(tmp_path/'no-installed-vendor-curves'))
     log = tmp_path / 'bridge.log'
     ini = tmp_path / 'CyberViewX.ini'
     ini.write_text('[TOOLBAR FILMTERM]\nFilm Term Name=Kodak 200\n[SETUPDLG DEFAULT PAGE]\nAuto Exposure=1\n'

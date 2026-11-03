@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
+#include <ctype.h>
 #include "afl_contract.h"
 #include "usbtrace.h"
 #include "usbwatch.h"
@@ -37,8 +38,8 @@ static int allow_controls;
 static int allow_settings;
 static int frame_initialized;
 static char permitted_controls[256] = ",";
-typedef struct { int dpi, bits, channels, monochrome, negative; float left,top,right,bottom; WORD exposure[3]; } Settings;
-static Settings settings = {1800,16,3,0,1,.03f,.003f,1.407f,.95f,{100,100,100}};
+typedef struct { int dpi, bits, channels, monochrome, negative; float left,top,right,bottom; WORD exposure[3]; int auto_exposure; } Settings;
+static Settings settings = {1800,16,3,0,1,.03f,.003f,1.407f,.95f,{100,100,100},0};
 static int control_allowed(const char *name) {
     char token[80]; sprintf_s(token,sizeof token,",%s,",name);
     return allow_controls && strstr(permitted_controls,token) != NULL;
@@ -179,9 +180,18 @@ static int __cdecl receive_strip(void *parameter) {
         acquisition.dpi=settings.dpi; acquisition.bits=settings.bits; acquisition.channels=settings.channels; acquisition.mode=s->mode;
         printf("{\"event\":\"image_start\",\"width\":%lu,\"height\":%lu,\"bits\":%lu,\"samples\":%lu,\"dpi\":%lu,\"pixel_type\":%d}\n",s->width,s->height,acquisition.bits,acquisition.channels,acquisition.dpi,settings.channels==3?2:1); fflush(stdout);
     }
+    /* SCAN08 0x100074e6..0x100075a8 constructs a legacy 0x24-byte callback
+     * for the flag-1 300/RGB8 preview shortcut. Its reserved24/remaining_lines
+     * tail is not populated (it aliases stack locals). Validate cumulative
+     * rows and last instead, only for this exact reviewed branch. Ordinary
+     * acquisitions retain strict remaining_lines validation. */
+    int legacy_auto_preview=settings.auto_exposure && settings.dpi==300 && settings.bits==8 && settings.channels==3;
+    DWORD expected_remaining=acquisition.height-acquisition.rows;
+    if (s->lines>expected_remaining) return fail_strip(s,"Native image strip exceeds remaining height");
+    expected_remaining-=s->lines;
     if (s->width != acquisition.width || s->height != acquisition.height || acquisition.last ||
-        s->lines > acquisition.height-acquisition.rows || s->remaining_lines != acquisition.height-acquisition.rows-s->lines ||
-        (!!s->last != (s->remaining_lines == 0)))
+        (!legacy_auto_preview && s->remaining_lines != expected_remaining) ||
+        (!!s->last != (expected_remaining == 0)))
         return fail_strip(s,"Inconsistent or incomplete native image strip sequence");
     DWORD count=s->width*s->lines*acquisition.channels*(acquisition.bits/8);
     /* Preserve acquired grayscale samples even for requested binary output.
@@ -201,6 +211,7 @@ static int __cdecl receive_strip(void *parameter) {
 static int scan_current(const char *path, LONG generation) {
     AflScanRequest request; WORD tables[3][4096]; DWORD status[2] = {0x1f,0};
     memset(&request,0,sizeof request);
+    request.flags = settings.auto_exposure ? 1 : 0;
     request.scan.dpi = (WORD)settings.dpi;
     request.scan.left=settings.left; request.scan.top=settings.top; request.scan.right=settings.right; request.scan.bottom=settings.bottom;
     request.scan.mode = settings.channels==3?(settings.bits==16?7:3):(settings.bits==16?6:2);
@@ -233,6 +244,15 @@ static int scan_current(const char *path, LONG generation) {
         LeaveCriticalSection(&watch_lock);
     }
     int result = device_io(0x20,&request);
+    if (settings.auto_exposure) {
+        /* These are the caller block's values after selector32 returned. Do not
+         * label them measured/effective sensor exposures: the vendor worker may
+         * scan through a local copy. Its own log/trace is independent evidence. */
+        printf("{\"event\":\"vendor_auto_exposure\",\"request_flags\":1,\"requested_exposure\":[%u,%u,%u],\"request_exposure_after\":[%u,%u,%u],\"effective_exposure\":null,\"synthetic\":%s}\n",
+               settings.exposure[0],settings.exposure[1],settings.exposure[2],
+               request.scan.exposure[0],request.scan.exposure[1],request.scan.exposure[2],synthetic?"true":"false");
+        fflush(stdout);
+    }
     if (acquisition.timed_out) { output_discard(); error("timeout","The native acquisition exceeded its callback time limit"); return 0; }
     if (acquisition.cancelled || InterlockedCompareExchange(&input_closed,0,0) ||
         InterlockedCompareExchange(&cancel_generation,0,0) != generation) {
@@ -243,14 +263,28 @@ static int scan_current(const char *path, LONG generation) {
     }
     if (!output_finish()) { error("write","Could not atomically finish the native TIFF"); return 0; }
     frame_initialized=1;
+    DWORD frame_position=0;
+    if (device_io(12,&frame_position) && frame_position<=39)
+        printf("{\"event\":\"frame_position\",\"position\":%lu,\"confirmed\":true,\"basis\":\"vendor_relative_counter\"}\n",frame_position+1);
+    else
+        printf("{\"event\":\"frame_position\",\"position\":null,\"confirmed\":false,\"basis\":\"vendor_relative_counter\"}\n");
     printf("{\"event\":\"image\",\"path\":"); json_string(path);
-    printf(",\"width\":%lu,\"height\":%lu,\"bits\":%lu,\"samples\":%lu,\"dpi\":%lu,\"synthetic\":%s,\"processing\":\"vendor-calibrated transmission; identity LUT\",\"binary_recipe_requested\":%s}\n",acquisition.width,acquisition.height,acquisition.bits,acquisition.channels,acquisition.dpi,synthetic?"true":"false",settings.monochrome?"true":"false"); fflush(stdout);
+    printf(",\"width\":%lu,\"height\":%lu,\"bits\":%lu,\"samples\":%lu,\"dpi\":%lu,\"synthetic\":%s,\"processing\":\"vendor-calibrated transmission; identity LUT\",\"binary_recipe_requested\":%s,\"vendor_auto_exposure\":%s}\n",acquisition.width,acquisition.height,acquisition.bits,acquisition.channels,acquisition.dpi,synthetic?"true":"false",settings.monochrome?"true":"false",settings.auto_exposure?"true":"false"); fflush(stdout);
     return 1;
 }
 static void configure(const char *line) {
-    Settings next=settings; char channel[8],film[12],tail; unsigned r,g,b;
-    if (sscanf(line,"settings %d %d %7s %11s %f %f %f %f %u %u %u %c",&next.dpi,&next.bits,channel,film,&next.left,&next.top,&next.right,&next.bottom,&r,&g,&b,&tail)!=11) {
+    Settings next=settings; char channel[8],film[12],tail; unsigned r,g,b,auto_exposure=0; int consumed=0;
+    if (sscanf(line,"settings %d %d %7s %11s %f %f %f %f %u %u %u %n",&next.dpi,&next.bits,channel,film,&next.left,&next.top,&next.right,&next.bottom,&r,&g,&b,&consumed)!=11) {
         error("settings","Invalid acquisition settings"); return;
+    }
+    const char *remaining=line+consumed;
+    while (*remaining && isspace((unsigned char)*remaining)) remaining++;
+    if (*remaining && (sscanf(remaining,"%u %c",&auto_exposure,&tail)!=1 || auto_exposure>1)) {
+        error("settings","Invalid optional vendor auto-exposure flag"); return;
+    }
+    next.auto_exposure=(int)auto_exposure;
+    if (next.auto_exposure && !control_allowed("auto_exposure")) {
+        error("unverified_auto_exposure","Vendor auto exposure has not been enabled for device validation"); return;
     }
     if (!(next.dpi==300||next.dpi==360||next.dpi==450||next.dpi==600||next.dpi==900||next.dpi==1800)||
         !(next.bits==8||next.bits==16)||!isfinite(next.left)||!isfinite(next.top)||!isfinite(next.right)||!isfinite(next.bottom)||
@@ -262,11 +296,11 @@ static void configure(const char *line) {
     }
     next.channels=!strcmp(channel,"rgb")?3:1; next.monochrome=!strcmp(channel,"bw"); next.negative=!strcmp(film,"negative");
     next.exposure[0]=(WORD)r;next.exposure[1]=(WORD)g;next.exposure[2]=(WORD)b;
-    if (!allow_settings && !(next.dpi==1800&&next.bits==16&&next.channels==3&&next.negative&&next.left==.03f&&next.top==.003f&&next.right==1.407f&&next.bottom==.95f&&r==100&&g==100&&b==100)) {
+    if (!allow_settings && !(next.dpi==1800&&next.bits==16&&next.channels==3&&next.negative&&next.left==.03f&&next.top==.003f&&next.right==1.407f&&next.bottom==.95f&&r==100&&g==100&&b==100&&!next.auto_exposure)) {
         error("unverified_settings","This acquisition configuration needs supervised device validation"); return;
     }
     settings=next;
-    printf("{\"event\":\"configured\",\"dpi\":%d,\"bits\":%d,\"channel\":\"%s\",\"film\":\"%s\"}\n",settings.dpi,settings.bits,channel,film);fflush(stdout);
+    printf("{\"event\":\"configured\",\"dpi\":%d,\"bits\":%d,\"channel\":\"%s\",\"film\":\"%s\",\"auto_exposure\":%s}\n",settings.dpi,settings.bits,channel,film,settings.auto_exposure?"true":"false");fflush(stdout);
 }
 static int operation_cancelled(LONG generation) {
     if (input_closed||InterlockedCompareExchange(&cancel_generation,0,0)!=generation) {
@@ -296,7 +330,7 @@ static void control(const char *line,LONG generation) {
     }
     else if (sscanf(verb,"%47s %c",name,&extra)!=1) {error("control","Invalid film command");return;}
     if (!control_allowed(name)) {error("unverified_control","This scanner operation has not been enabled for device validation");return;}
-    if ((!strcmp(name,"next")||!strcmp(name,"previous")||!strcmp(name,"goto"))&&!frame_initialized) {
+    if ((!strcmp(name,"next")||!strcmp(name,"previous")||!strcmp(name,"goto")||!strcmp(name,"realign"))&&!frame_initialized) {
         error("prescan_required","Prescan or acquire a frame in this session before moving film");return;
     }
     if (operation_cancelled(generation)||!status_query(&state))return;
@@ -313,6 +347,7 @@ static void control(const char *line,LONG generation) {
             motion[0]=(WORD)(reverse?1:2);motion[1]=1;
             /* Selector9 wrapper does not guarantee a C return value. Verify position. */
             device_io(9,motion);
+            if (operation_cancelled(generation))return;
             if (!device_io(12,&after)||after!=(reverse?before-1:before+1)) {error("position","The driver did not confirm the requested frame movement");return;}
             before=after;
         }
@@ -321,31 +356,58 @@ static void control(const char *line,LONG generation) {
         if (!device_io(12,&before)) {error("position","Could not read current film position");return;}
         if (operation_cancelled(generation))return;
         device_io(10,motion);
+        if (operation_cancelled(generation))return;
         /* A nudge stays within the frame; the frame counter must not change. */
         if (!device_io(12,&after)||after!=before) {error("position","The film moved to another frame during a nudge");return;}
         printf("{\"event\":\"nudge\",\"direction\":\"%s\",\"steps\":%u}\n",motion[0]==1?"back":"forward",motion[1]);
+    } else if (!strcmp(name,"realign")) {
+        if (!device_io(12,&before)||before>39) {error("position","Could not establish the frame before alignment");return;}
+        if (operation_cancelled(generation))return;
+        device_io(23,NULL);
+        if (operation_cancelled(generation))return;
+        if (!device_io(12,&after)||after!=before) {error("position","The frame changed during vendor realignment");return;}
+        printf("{\"event\":\"realignment\",\"position\":%lu,\"optical_verification_required\":true}\n",before+1);
     } else if (!strcmp(name,"eject_forward")||!strcmp(name,"eject_backward")) {
         /* Selector8 is actual Eject; selector11 is a separate 99-frame long-travel routine. */
-        motion[0]=!strcmp(name,"eject_backward")?1:2;
+        int backward = !strcmp(name,"eject_backward");
+        motion[0]=backward?1:2;
         if (operation_cancelled(generation))return;
-        device_io(8,motion);
-        if (!status_query(&state)||state&4) {error("eject","The driver has not confirmed that film was ejected");return;}
+        int eject_result = device_io(8,motion);
+        if (!backward) {
+            if (!eject_result||!status_query(&state)||(state&4)) {error("eject","The driver has not confirmed that film was ejected");return;}
+        } else {
+            /* On the supervised PF1800 AFL backward eject removed the film, but the
+             * feeder status stayed latched as loaded. Trust selector completion and
+             * surface the stale sensor state as an advisory event. */
+            int status_ok = status_query(&state);
+            if (!eject_result || !status_ok || (state&4))
+                printf("{\"event\":\"eject_sensor_warning\",\"direction\":\"backward\",\"selector_returned\":%s,\"status_confirmed\":%s}\n",
+                       eject_result?"true":"false", status_ok && !(state&4)?"true":"false");
+        }
         frame_initialized=0;
     } else if (!strcmp(name,"focus")) {
         if (operation_cancelled(generation))return;
-        device_io(16,&target);device_io(15,&after);
+        device_io(16,&target);
+        if (!device_io(15,&after)) {error("focus","Could not read back the saved focus value");return;}
+        if (operation_cancelled(generation))return;
         if (after!=target) {error("focus","The driver did not retain the requested focus value");return;}
     } else if (!strcmp(name,"autofocus")) {
         float point[2]={(settings.left+settings.right)*.5f,(settings.top+settings.bottom)*.5f};
         if (operation_cancelled(generation))return;
-        device_io(14,point);device_io(15,&after);
-        if (!after||after>200) {error("focus","Autofocus did not return a bounded focus position");return;}
+        device_io(14,point);
+        if (!device_io(15,&after)) {error("focus","Could not read back the autofocus value");return;}
+        if (operation_cancelled(generation))return;
+        if (after>200) {error("focus","Autofocus did not return a bounded focus position");return;}
     } else if (!strcmp(name,"calibrate")) {
         WORD balance[3]={0,0,0};if (operation_cancelled(generation))return;device_io(17,balance);
         if (!balance[0]||!balance[1]||!balance[2]) {error("calibration","Film-base measurement did not return valid values");return;}
         printf("{\"event\":\"calibration\",\"rgb\":[%u,%u,%u]}\n",balance[0],balance[1],balance[2]);
     } else {error("unsupported","Unknown native operation");return;}
-    printf("{\"event\":\"command_done\",\"name\":");json_string(name);printf(",\"position\":%lu,\"focus\":%lu}\n",before+1,after);fflush(stdout);
+    printf("{\"event\":\"command_done\",\"name\":");json_string(name);
+    if (!strcmp(name,"next")||!strcmp(name,"previous")||!strcmp(name,"goto")||!strcmp(name,"nudge")||!strcmp(name,"realign"))
+        printf(",\"position\":%lu",before+1);
+    else printf(",\"position\":null");
+    printf(",\"focus\":%lu}\n",after);fflush(stdout);
 }
 static DWORD WINAPI input_thread(void *unused) {
     char line[MAX_COMMAND]; (void)unused;
@@ -456,7 +518,7 @@ int main(int argc, char **argv) {
     if (!strcmp(command,"--describe")) {
         /* Describes the build, not what the service enables: controls and settings are
          * refused unless passed on the command line (see native_validation.json). */
-        printf("{\"event\":\"description\",\"backend\":\"afl_module\",\"experimental\":true,\"current_frame_verified\":true,\"device_io\":false,\"dpi\":1800,\"bits\":16,\"expected_adc_bits\":12,\"measured_effective_bits\":null,\"controls\":[\"next\",\"previous\",\"goto\",\"eject_forward\",\"eject_backward\",\"autofocus\",\"focus\",\"calibrate\"],\"controls_default\":\"refused\",\"settings_default\":\"1800 dpi 16-bit RGB negative only\",\"scan_commands\":1}\n"); return 0;
+        printf("{\"event\":\"description\",\"backend\":\"afl_module\",\"experimental\":true,\"current_frame_verified\":true,\"device_io\":false,\"dpi\":1800,\"bits\":16,\"expected_adc_bits\":12,\"measured_effective_bits\":null,\"controls\":[\"next\",\"previous\",\"goto\",\"eject_forward\",\"eject_backward\",\"autofocus\",\"focus\",\"calibrate\",\"realign\",\"auto_exposure\"],\"controls_default\":\"refused\",\"settings_default\":\"1800 dpi 16-bit RGB negative only\",\"scan_commands\":1}\n"); return 0;
     }
     if (strcmp(command,"serve")) { error("usage","aflbridge --describe | --self-test | serve --allow-experimental-device-io"); return 2; }
 #ifdef FRAME_NATIVE_TEST

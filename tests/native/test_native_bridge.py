@@ -293,6 +293,77 @@ def test_configured_capture_preserves_format(tmp_path,fixture,dpi,bits,channel,s
         if channel=='bw':assert len(np.unique(values))>2  # Acquired gray is preserved; thresholding is a recipe.
 
 
+@pytest.mark.parametrize('dpi,bits,film',[(300,8,'negative'),(1800,16,'negative'),(600,16,'positive')])
+def test_vendor_auto_exposure_flag_is_separate_and_reports_only_known_values(tmp_path,fixture,dpi,bits,film):
+    native=fixture(extra=['--allow-experimental-settings','--allow-experimental-controls','--controls','auto_exposure'])
+    native.until('ready')
+    native.send(f'settings {dpi} {bits} rgb {film} 0 0 1.4366666 .95 110 100 90 1')
+    configured=native.until('ready')
+    assert next(e for e in configured if e['event']=='configured')['auto_exposure'] is True
+    native.send(f'scan 1 {tmp_path / "auto.tif"}')
+    events=native.until('scan_done')
+    assert events[-1]['result']==1,events
+    report=next(e for e in events if e['event']=='vendor_auto_exposure')
+    assert report['request_flags']==1 and report['requested_exposure']==[110,100,90]
+    assert report['request_exposure_after']==[101,123,157]  # fixture-observable mutation only
+    assert report['effective_exposure'] is None and report['synthetic'] is True
+    assert next(e for e in events if e['event']=='image')['vendor_auto_exposure'] is True
+    assert next(e for e in events if e['event']=='frame_position')['position']==1
+    native.until('ready')
+    # Omitting the optional field restores legacy false, rather than retaining true.
+    native.send('settings 1800 16 rgb negative .03 .003 1.407 .95 100 100 100')
+    events=native.until('ready')
+    assert next(e for e in events if e['event']=='configured')['auto_exposure'] is False
+
+
+def test_auto_exposure_requires_control_gate_and_rejects_trailing_garbage(tmp_path,fixture):
+    native=fixture(extra=['--allow-experimental-settings']);native.until('ready')
+    native.send('settings 1800 16 rgb negative .03 .003 1.407 .95 100 100 100 1')
+    events=native.until('ready')
+    assert any(e.get('code')=='unverified_auto_exposure' for e in events)
+    for tail in ('2','junk','1 junk','0 junk'):
+        native.send('settings 1800 16 rgb negative .03 .003 1.407 .95 100 100 100 '+tail)
+        events=native.until('ready')
+        assert any(e['event']=='error' for e in events) and not any(e['event']=='configured' for e in events)
+    native.send(f'scan 1 {tmp_path / "unchanged.tif"}')
+    events=native.until('scan_done')
+    assert events[-1]['result']==1
+    assert not any(e['event']=='vendor_auto_exposure' for e in events)
+
+
+@pytest.mark.parametrize('auto,success',[(True,True),(False,False)])
+def test_legacy_auto_preview_callback_tail_is_ignored_only_in_exact_reviewed_branch(tmp_path,fixture,auto,success):
+    native=fixture(mode='legacy-auto-preview',extra=['--allow-experimental-settings','--allow-experimental-controls','--controls','auto_exposure'])
+    native.until('ready')
+    native.send(f'settings 300 8 rgb negative 0 0 1.4366666 .95 100 100 100 {1 if auto else 0}')
+    native.until('ready')
+    native.send(f'scan 1 {tmp_path / "legacy.tif"}')
+    events=native.until('scan_done')
+    assert (events[-1]['result']==1)==success,events
+    assert (tmp_path/'legacy.tif').exists()==success
+
+
+def test_vendor_realign_is_gated_initialized_and_checks_frame_counter(fixture,tmp_path):
+    native=fixture(extra=['--allow-experimental-controls','--controls','realign'])
+    native.until('ready')
+    native.send('film realign');events=native.until('ready')
+    assert any(e.get('code')=='prescan_required' for e in events)
+    native.send(f'scan 1 {tmp_path / "initialized.tif"}');events=native.until('ready')
+    assert next(e for e in events if e['event']=='frame_position')['position']==1
+    native.send('film realign');events=native.until('ready')
+    realign=next(e for e in events if e['event']=='realignment')
+    assert realign['position']==1 and realign['optical_verification_required'] is True
+    assert next(e for e in events if e['event']=='command_done')['position']==1
+
+
+def test_realign_that_changes_frame_never_reports_success(fixture,tmp_path):
+    native=fixture(mode='realign-slips',extra=['--allow-experimental-controls','--controls','realign'])
+    native.until('ready');native.send(f'scan 1 {tmp_path / "initialized.tif"}');native.until('ready')
+    native.send('film realign');events=native.until('ready')
+    assert any(e.get('code')=='position' for e in events)
+    assert not any(e['event']=='command_done' for e in events)
+
+
 def test_bad_settings_do_not_replace_current_configuration(tmp_path,fixture):
     native=fixture(extra=['--allow-experimental-settings']);native.until('ready')
     for line in ['settings 9000 16 rgb negative 0 0 1 .9 100 100 100','settings 300 8 rgb negative nan 0 1 .9 100 100 100','settings 300 8 rgb negative 0 0 1 .9 100 999 100','settings 300 16 bw negative 0 0 1 .9 100 100 100']:
@@ -300,6 +371,76 @@ def test_bad_settings_do_not_replace_current_configuration(tmp_path,fixture):
         assert any(e['event']=='error' for e in events),events
     native.send(f'scan 1 {tmp_path / "default.tif"}');events=native.until('scan_done')
     assert next(e for e in events if e['event']=='image')['dpi']==1800
+
+
+def test_zero_manual_focus_is_a_valid_stored_position(fixture,tmp_path):
+    native=fixture(extra=['--allow-experimental-controls','--controls','focus'])
+    native.until('ready')
+    native.send('focus 0');events=native.until('ready')
+    done=next(e for e in events if e['event']=='command_done')
+    assert done['focus']==0 and done['position'] is None
+
+
+def test_workspace_normalizes_old_evidence_and_requires_vendor_exposure_gate(monkeypatch):
+    from services.scanner_host import workspace
+    old=dict(workspace.DEFAULT_OPTIONS)
+    old.pop('auto_exposure')
+    monkeypatch.setattr(workspace,'validation',lambda:{'configurations':[old],'actions':[]})
+    assert workspace.validated_options(workspace.DEFAULT_OPTIONS)
+    assert not workspace.validated_options(workspace.DEFAULT_OPTIONS | {'auto_exposure':True})
+    monkeypatch.setattr(workspace,'validation',lambda:{'configurations':[old],'actions':['auto_exposure']})
+    assert workspace.validated_options(workspace.DEFAULT_OPTIONS | {'auto_exposure':True})
+    assert not workspace.validated_options(workspace.DEFAULT_OPTIONS | {'auto_exposure':True,'dpi':900})
+    assert workspace.border_preview_options(workspace.DEFAULT_OPTIONS | {'auto_exposure':True})['auto_exposure'] is False
+
+
+@pytest.mark.parametrize('limits',[[3,2],[-1,3],[2,201],[2],['2',3],[False,3],None,[2.0,3]])
+def test_invalid_recorded_focus_range_rejects_before_io(monkeypatch,limits):
+    import asyncio
+    from services.scanner_host import workspace
+    from services.scanner_host.native import NativeAflBridge
+    from services.scanner_host.backend import ScannerError
+    monkeypatch.setattr(workspace,'validation',lambda:{'actions':['focus'],'focus_range':limits})
+    bridge=NativeAflBridge(exe=Path('unused.py'))
+    async def forbidden():
+        pytest.fail('Invalid focus evidence must not start a scanner process')
+    monkeypatch.setattr(bridge,'_start',forbidden)
+    with pytest.raises(ScannerError,match='range is invalid'):
+        asyncio.run(bridge.control('focus',value=2))
+    capabilities=workspace.capabilities(bridge,workspace.DEFAULT_OPTIONS)
+    assert capabilities['focus_range']==[] and not capabilities['actions']['focus']['available']
+    assert bridge.process is None
+
+
+def test_recorded_focus_range_accepts_only_tested_steps(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from services.scanner_host import workspace,cyberview
+    from services.scanner_host.native import NativeAflBridge
+    from services.scanner_host.backend import ScannerError
+    monkeypatch.setattr(workspace,'validation',lambda:{'actions':['focus'],'focus_range':[2,3]})
+    sent=[]
+    async def exchange(self,line,*args,**kwargs):
+        sent.append(line)
+        return [],None
+    monkeypatch.setattr(cyberview.CyberViewBridge,'_exchange',exchange)
+    async def scenario():
+        bridge=NativeAflBridge(exe=Path('unused.py'))
+        bridge.process=SimpleNamespace(returncode=None)
+        for target in (2,3):
+            await bridge.control('focus',value=target)
+        for target in (1,4,200,2.0,True,None):
+            with pytest.raises(ScannerError,match='validated steps'):
+                await bridge.control('focus',value=target)
+        assert workspace.capabilities(bridge,workspace.DEFAULT_OPTIONS)['focus_range']==[2,3]
+    asyncio.run(scenario())
+    assert sent==['focus 2','focus 3']
+
+
+def test_focus_range_without_new_evidence_retains_legacy_bounds(monkeypatch):
+    from services.scanner_host import workspace
+    monkeypatch.setattr(workspace,'validation',lambda:{})
+    assert workspace.focus_limits()==[0,200]
 
 
 def test_explicit_control_allowlist_and_position_verification(fixture,tmp_path):
@@ -310,10 +451,22 @@ def test_explicit_control_allowlist_and_position_verification(fixture,tmp_path):
     for line,name in [('film next','next'),('film previous','previous'),('film goto 3','goto'),('focus auto','autofocus'),('focus 12','focus'),('calibrate','calibrate'),('film eject_forward','eject_forward')]:
         native.send(line);events=native.until('ready')
         assert any(e['event']=='command_done' and e['name']==name for e in events),events
+        done=next(e for e in events if e['event']=='command_done')
+        if name in ('next','previous','goto'):
+            assert done['position']=={'next':2,'previous':1,'goto':3}[name]
+        else:
+            assert done['position'] is None, 'Non-frame controls must not invent frame 1'
     native.send('film next');events=native.until('ready')
     assert any(e.get('code') in ('no_film','prescan_required') for e in events),events
     native.send('film eject_backward');events=native.until('ready')
     assert any(e.get('code')=='unverified_control' for e in events)
+
+
+def test_backward_eject_runs_only_when_explicitly_allowlisted(fixture,tmp_path):
+    native=fixture(extra=['--allow-experimental-controls','--controls','eject_backward']);native.until('ready')
+    native.send(f'scan 1 {tmp_path / "loaded.tif"}');native.until('ready')
+    native.send('film eject_backward');events=native.until('ready')
+    assert any(e['event']=='command_done' and e['name']=='eject_backward' for e in events),events
 
 
 def test_nudge_is_allowlisted_bounded_and_must_stay_on_the_frame(fixture, tmp_path):

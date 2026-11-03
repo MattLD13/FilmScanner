@@ -1,43 +1,79 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CyberScanDiagnostics, ScannerEvidence, CyberScanOptions, CyberScanWorkspace, FilmProfile, CyberScanAdjustments } from '../../../packages/contracts/schema';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { CyberScanDiagnostics, ScannerEvidence, CyberScanOptions, CyberScanWorkspace, FilmProfile, CyberScanAdjustments, FrameAlignment, FrameCoverageVerification, FilmType, RollEndAction } from '../../../packages/contracts/schema';
+import { FILM_LOOKS, FilmGlyph, FilmTypePicker, initialFilmType, rememberFilmType, workspaceFilmType } from './film-theme';
 import './cyberscan.css';
+import './film-lab.css';
 
 // FRAME's scanner workspace uses the local service. The legacy CyberScan URL and
 // API names remain supported. Demo mode makes no network requests.
 
 type Adjust = CyberScanAdjustments;
-type Alignment = { confidence: 'frame_found' | 'one_edge' | 'centered'; exact: boolean; crop_mm: number[]; skew_deg: number | null; bleed_mm: number; note?: string | null };
-type AlignInfo = { settings: { auto: boolean; bleed_mm: number; offset_mm: number; steps_per_mm: number | null }; stitched_scan: { available: boolean; reason: string }; max_window_mm: number[] };
+type Alignment = FrameAlignment;
+type FilmTypeDetection = { film_type: FilmType; confidence: number; method: string; note: string; applied?: boolean; previous_type?: FilmType };
+type AlignInfo = { settings: { auto: boolean; bleed_mm: number; offset_mm: number; steps_per_mm: number | null }; stitched_scan: { available: boolean; reason: string }; find_borders?: { available: boolean; reason: string }; max_window_mm: number[] };
 const ALIGN_LABEL: Record<Alignment['confidence'], string> = { frame_found: 'Both frame edges found', one_edge: 'One frame edge found', centered: 'No edge visible · centred' };
 type Capture = {
-  id: string; index: number; title: string; roll: string; created_at: number; width: number; height: number;
+  id: string; session_id?: string; index: number; title: string; roll: string; created_at: number; width: number; height: number;
   bits: number; dpi: number; sha256: string; favorite: boolean; adjustments: Adjust; demo?: boolean; src?: string;
+  effective_bits?: number | null; precision_measurement?: { summary?: string; effective_sensor_bits?: number | null; channels?: { code_lattice_bits_ceiling?: number | null }[] };
   cyberview?: Settings;
   backend?: string; image_kind?: string; hardware?: boolean;
-  purpose?: 'scan' | 'prescan' | 'stitched';
+  purpose?: 'scan' | 'prescan' | 'stitched' | 'coverage_attempt' | 'frame_scan' | 'roll_preview';
+  film_type?: FilmType;
+  film_type_detection?: FilmTypeDetection;
   alignment?: Alignment;
-  derived?: { kind: string; sources?: { label: string }[] };
+  coverage_verification?: FrameCoverageVerification;
+  border_preview?: boolean;
+  derived?: { kind: string; sources?: { label: string; width?: number; height?: number }[]; requires_wider_capture?: boolean; single_pass_eligible?: boolean; border_alignment?: Alignment };
 };
 type Settings = { found: boolean; film_term?: string | null; film_type?: 'negative' | 'positive' | null; auto_exposure?: boolean | null; auto_gamma?: boolean; scan_depth?: number; crop_inches?: number[] | null };
 type Session = {
   id: string; state: 'starting' | 'warming' | 'advancing' | 'recovering' | 'scanning' | 'saving' | 'cancelling' | 'complete' | 'cancelled' | 'error';
   count: number; completed: number; frame: number; rows: number; height: number; started_at: number; roll: string; error: string | null;
   driver_status?: string | null; driver_dialog?: string | null;
+  film_type_detection?: FilmTypeDetection;
   backend?: string;
-  purpose?: 'scan' | 'prescan' | 'stitched';
+  purpose?: 'scan' | 'prescan' | 'stitched' | 'frame_scan' | 'roll_preview' | 'favorites_scan' | 'scan_all';
   until_end?: boolean;
+  border_search?: boolean; alignment?: Alignment;
+  preview_scope?: 'one' | 'all'; preview_dpi?: 300 | 600;
+  roll_preview_parent_id?: string;
+  end_of_roll_unconfirmed?: boolean; end_of_roll_note?: string;
+  awaiting_end_confirmation?: boolean; expected_frames?: number | null; warning_code?: string;
+  end_action?: RollEndAction;
+  end_action_result?: { action: RollEndAction; confirmed: boolean; note?: string };
+  auto_detect_film_type?: boolean;
 };
 type Status = { bridge_built: boolean; busy: boolean; session_open: boolean; auto_reset: boolean; vendor_open: boolean; scanner_present: boolean | null; settings: Settings; session: Session | null; backend?: string; supports_next?: boolean; max_count?: number; experimental_enabled?: boolean };
 type ScanOptions = CyberScanOptions;
-type ActionName = 'next' | 'previous' | 'eject_forward' | 'eject_backward' | 'goto' | 'prescan' | 'autofocus' | 'focus' | 'calibrate';
+type ActionName = 'next' | 'previous' | 'eject_forward' | 'eject_backward' | 'goto' | 'prescan' | 'autofocus' | 'focus' | 'calibrate' | 'realign';
 type ScannerWorkspace = CyberScanWorkspace<Capture>;
 type Histogram = { bins: number[][]; percentiles: { black: number; white: number }; original: boolean; stage?: string };
 type View = 'home' | 'scan' | 'library' | 'settings';
 // Rows the scanner streams while it reads a frame: 1/8 size, 8-bit RGB, raw transmission (base64 per row).
 type Live = { session_id: string; frame: number; pass: number; width: number; rows: string[] };
-type IconName = 'home' | 'develop' | 'scan' | 'library' | 'settings' | 'rotate' | 'mirror' | 'download' | 'stop' | 'star' | 'reset' | 'alert' | 'check' | 'film' | 'minus' | 'plus' | 'fit' | 'close';
+type IconName = 'home' | 'develop' | 'scan' | 'library' | 'settings' | 'rotate' | 'mirror' | 'download' | 'stop' | 'star' | 'reset' | 'alert' | 'check' | 'film' | 'minus' | 'plus' | 'fit' | 'close' | 'next' | 'previous' | 'compare' | 'borders';
 
-const NEUTRAL: Adjust = { exposure: 0, contrast: 0, saturation: 0, temperature: 0, rotation: 0, mirror: false, invert: false, film_base: [1, 1, 1], black_point: 0, white_point: 1, gamma: 1, rgb_balance: [1, 1, 1], curve: [0, .25, .5, .75, 1], crop: { left: 0, top: 0, right: 1, bottom: 1 }, monochrome: false, film_profile: null };
+function FrameBorders({ capture }: { capture: Capture }) {
+  const a = capture.alignment!;
+  const edges = (axis: 'x' | 'y') => {
+    const evidence = axis === 'x' ? a.edges_x : a.edges_y;
+    const nominal = (axis === 'x' ? 36 : 24) / 25.4 * capture.dpi;
+    const crop = a.crop_px;
+    let start = evidence?.start, end = evidence?.end;
+    if (start === undefined && end !== undefined) start = end - nominal;
+    if (end === undefined && start !== undefined) end = start + nominal;
+    if (start === undefined) start = axis === 'x' ? crop?.left : crop?.top;
+    if (end === undefined && crop && start !== undefined) end = start + (axis === 'x' ? crop.width : crop.height);
+    return ([['start', start], ['end', end]] as const).filter(([, position]) => position !== undefined).map(([kind, position]) => {
+      const detected = evidence?.found === 'both' || evidence?.found === kind;
+      return <line key={`${axis}-${kind}`} data-border={`${axis}-${kind}`} data-detected={detected} x1={axis === 'x' ? position : 0} x2={axis === 'x' ? position : capture.width} y1={axis === 'y' ? position : 0} y2={axis === 'y' ? position : capture.height} stroke={detected ? '#8feaab' : '#f6b85b'} strokeDasharray={detected ? undefined : '6 5'} strokeWidth="2" vectorEffect="non-scaling-stroke" />;
+    });
+  };
+  return <svg className="cx-border-overlay" viewBox={`0 0 ${capture.width} ${capture.height}`} preserveAspectRatio="none" role="img" aria-label="Frame borders: green detected, amber estimated">{edges('x')}{edges('y')}</svg>;
+}
+
+const NEUTRAL: Adjust = { exposure: 0, contrast: 0, saturation: 0, temperature: 0, rotation: 0, mirror: false, invert: false, film_base: [1, 1, 1], black_point: 0, white_point: 1, gamma: 1, rgb_balance: [1, 1, 1], curve: [0, .25, .5, .75, 1], crop: { left: 0, top: 0, right: 1, bottom: 1 }, monochrome: false, film_profile: null, color_restoration: 0, grain_reduction: 0, sharpening: 0 };
 const DEMO: Capture[] = [
   ['forest', 'Forest'], ['coast', 'Coast'], ['street', 'Street'],
 ].map(([id, name], i) => ({
@@ -46,7 +82,7 @@ const DEMO: Capture[] = [
 }));
 const ACTIVE = new Set(['starting', 'warming', 'advancing', 'recovering', 'scanning', 'saving', 'cancelling']);
 const DEFAULT_OPTIONS: ScanOptions = { dpi: 1800, bits: 16, channel: 'rgb', film: 'negative', crop: { left: .03, top: .003, right: 1.407, bottom: .95 }, exposure: [100, 100, 100], focus: null };
-const ACTION_NAMES: Record<ActionName, string> = { next: 'Next frame', previous: 'Previous frame', eject_forward: 'Eject forward', eject_backward: 'Eject backward', goto: 'Go to frame', prescan: 'Prescan frame', autofocus: 'Autofocus', focus: 'Set focus', calibrate: 'Calibrate' };
+const ACTION_NAMES: Record<ActionName, string> = { next: 'Next frame', previous: 'Previous frame', eject_forward: 'Eject forward', eject_backward: 'Eject backward', goto: 'Go to frame', prescan: 'Prescan frame', autofocus: 'Autofocus', focus: 'Set focus', calibrate: 'Calibrate', realign: 'Realign frame' };
 
 const paths: Record<IconName, React.ReactNode> = {
   home: <><path d="m3 11 9-7 9 7M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></>,
@@ -67,10 +103,30 @@ const paths: Record<IconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   fit: <path d="M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
+  next: <><path d="M5 12h13m-5-5 5 5-5 5M21 5v14" /></>,
+  previous: <><path d="M19 12H6m5-5-5 5 5 5M3 5v14" /></>,
+  compare: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M12 3v18M6 15l3-4 3 2" /></>,
+  borders: <><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M8 8h8v8H8z" /></>,
 };
 function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
+
+function ToolButton({ label, explanation, disabled, pressed, onClick, icon, value }: {
+  label: string; explanation: string; disabled?: boolean; pressed?: boolean;
+  onClick: () => void; icon: IconName; value?: string;
+}) {
+  const tooltip = useId();
+  return <span className="cx-tool" tabIndex={disabled ? 0 : undefined}
+    role={disabled ? 'group' : undefined}
+    aria-label={disabled ? label : undefined} aria-describedby={disabled ? tooltip : undefined}>
+    <button className={value ? 'cx-zoom' : 'cx-icon'} aria-label={label} aria-describedby={tooltip} aria-pressed={pressed}
+      disabled={disabled} onClick={onClick}>{value || <Icon name={icon} />}</button>
+    <span className="cx-tool-tip" id={tooltip} role="tooltip"><strong>{label}</strong><span>{explanation}</span></span>
+  </span>;
+}
+
+const liveHeight = (live: Live) => Math.max(live.rows.length, Math.round(live.width * 1703 / 2479));
 
 // Same math as services/api/cyberview_routes.color_matrix, so exports match the screen.
 function colorMatrix(a: Adjust) {
@@ -222,7 +278,7 @@ function LivePreview({ live, negative }: { live: Live; negative: boolean }) {
     for (let y = rows.length; y < live.rows.length; y++) rows.push(Uint8Array.from(atob(live.rows[y]), (c) => c.charCodeAt(0)));
     const element = canvas.current, context = element?.getContext('2d');
     if (!element || !context || !rows.length) return;
-    const width = live.width, height = Math.max(rows.length, Math.round(width * 1703 / 2479));
+    const width = live.width, height = liveHeight(live);
     if (element.width !== width || element.height !== height) { element.width = width; element.height = height; }
     const levels = [0, 1, 2].map((c) => {
       const counts = new Uint32Array(256); let total = 0;
@@ -240,49 +296,51 @@ function LivePreview({ live, negative }: { live: Live; negative: boolean }) {
       for (let x = 0; x < width; x++) image.data[(y * width + x) * 4 + 3] = 255;
     });
     context.putImageData(image, 0, 0);
+    // The beam marks the last row actually received, never a timed simulation.
+    if (rows.length < height) {
+      context.save();
+      context.fillStyle = getComputedStyle(element).getPropertyValue('--accent').trim() || '#f1a75c';
+      const pixelScale = Math.max(.01, Math.min(element.clientWidth / width, element.clientHeight / height));
+      context.shadowColor = context.fillStyle; context.shadowBlur = 1 / pixelScale;
+      context.fillRect(0, rows.length - .5, width, 1 / pixelScale);
+      context.restore();
+    }
   }, [live, negative]);
   return <div className="cx-live">
     <canvas ref={canvas} role="img" aria-label={`Frame ${live.frame} as the scanner reads it`} />
-    <span className="cx-original-badge">Live from the scanner · uncorrected</span>
+    <span className="cx-original-badge">Live preview</span>
   </div>;
 }
 
-function ScanProgress({ session, onCancel, now }: { session: Session; onCancel: () => void; now: number }) {
-  const nativeMode = session.backend === 'afl-native-experimental';
+function ScanProgress({ session, onCancel, now, liveProgress, previewRows }: { session: Session; onCancel: () => void; now: number; liveProgress?: number; previewRows?: number }) {
   const elapsed = Math.max(0, Math.round((now - session.started_at) / 1000));
-  const fraction = session.height ? session.rows / session.height : 0;
-  // Most of a frame's time is CyberView scanning internally; lines arrive in the last seconds.
-  const driverScanning = /^scanning/i.test(session.driver_status || '');
+  const transferRowsKnown = session.state === 'scanning' && session.height > 0;
+  const fraction = Math.min(1, Math.max(0, transferRowsKnown ? session.rows / session.height : liveProgress ?? 0));
+  const receiving = session.state === 'scanning' || liveProgress !== undefined;
+  const lineCount = transferRowsKnown ? `${session.rows.toLocaleString()} / ${session.height.toLocaleString()} lines`
+    : previewRows !== undefined ? `${previewRows.toLocaleString()} preview lines` : null;
+  const frame = Math.min(session.count, Math.max(1, session.frame || session.completed + 1));
   const label = {
-    starting: nativeMode ? 'Starting scanner' : 'Starting CyberView',
-    warming: driverScanning ? `Scanning frame ${session.completed + 1} of ${session.count}` : 'Preparing the scanner',
-    advancing: `Moving to frame ${session.completed + 1} of ${session.count}`,
+    starting: 'Starting scanner',
+    warming: receiving ? `Scanning ${frame} / ${session.count}` : 'Preparing scanner',
+    advancing: session.completed >= session.count ? 'Returning film' : 'Positioning film',
     recovering: 'Restarting the scanner',
-    scanning: `Receiving frame ${session.frame} of ${session.count}`,
-    saving: 'Saving the original', cancelling: 'Stopping after this step', complete: 'Done', cancelled: 'Stopped', error: 'Stopped',
+    scanning: session.purpose === 'favorites_scan' ? `Scanning favorite ${session.completed + 1} / ${session.count}` : `Scanning ${frame} / ${session.count}`,
+    saving: session.border_search ? 'Finding borders' : 'Saving scan', cancelling: 'Stopping…', complete: 'Done', cancelled: 'Stopped', error: 'Stopped',
   }[session.state];
   return <div className="cx-progress" role="status" aria-live="polite">
-    <div className="cx-progress-frame" aria-hidden="true">
-      <div className="cx-progress-fill" style={{ transform: `scaleY(${session.state === 'scanning' ? fraction : 0})` }} />
-      {session.state === 'scanning' && <div className="cx-progress-line" style={{ top: `${fraction * 100}%` }} />}
-      <span className="cx-edge">{edgeNumber(session.state === 'scanning' ? session.frame : session.completed + 1)}</span>
+    <div className="cx-progress-frame" data-phase={receiving ? 'scanning' : session.state}
+      data-progress={fraction} key={`${session.id}-${frame}`} aria-hidden="true">
+      <svg className="cx-frame-outline" viewBox="0 0 56 40"><rect x="1" y="1" width="54" height="38" rx="3" pathLength="1" /></svg>
+      <div className="cx-frame-perforations" />
+      <div className="cx-progress-fill" style={{ transform: `scaleY(${receiving ? fraction : 0})` }} />
+      {receiving && <div className="cx-progress-line" style={{ top: `${fraction * 100}%` }} />}
+      <span className="cx-edge">{edgeNumber(frame)}</span>
     </div>
     <div className="cx-progress-text">
       <strong>{label}</strong>
-      <span>
-        {session.driver_dialog && `CyberView is asking: ${session.driver_dialog}. Answer it in the CyberView window.`}
-        {!session.driver_dialog && session.state === 'warming' && (session.driver_status
-          ? `${session.driver_status.replace(/[.\s]+$/, '')}${driverScanning ? '' : ' · the first frame takes two to three minutes'}`
-          : nativeMode ? 'The driver is preparing the current frame.' : 'The lamp warms up and the loader finds the frame. The first frame takes two to three minutes.')}
-        {!session.driver_dialog && session.state === 'scanning' && (session.rows
-          ? `${session.rows.toLocaleString()} of ${session.height.toLocaleString()} lines received`
-          : session.driver_status?.replace(/\.{2,}$/, '') || 'CyberView is scanning the frame')}
-        {session.state === 'starting' && (nativeMode ? 'Opening the direct scanner interface' : 'Loading the driver with its window hidden')}
-        {session.state === 'saving' && 'Writing the TIFF and its checksum'}
-        {session.state === 'recovering' && 'The scanner stalled. Restarting its USB connection, then continuing'}
-        {session.state === 'cancelling' && 'CyberView finishes its current step before stopping'}
-      </span>
-      <span className="cx-meta">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')} elapsed · {session.completed} of {session.count} saved</span>
+      {session.driver_dialog && <span>CyberView: {session.driver_dialog}</span>}
+      <span className="cx-meta"><span>{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</span>{lineCount && <span className="cx-line-count">{lineCount}</span>}{transferRowsKnown && <span>{Math.round(fraction * 100)}%</span>}</span>
     </div>
     <button className="cx-button" onClick={onCancel} disabled={session.state === 'cancelling'}><Icon name="stop" />Stop</button>
   </div>;
@@ -304,14 +362,88 @@ export function CyberScanSkin() {
     return page === 'scan' || page === 'settings' ? page : page === 'rolls' ? 'library' : 'home';
   });
   const [featured, setFeatured] = useState<string | null>(null);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<Capture | null>(null);
+  const [fullscreenAspect, setFullscreenAspect] = useState(1.5);
+  const appElement = useRef<HTMLDivElement>(null);
+  const fullscreenDialog = useRef<HTMLDivElement>(null);
+  const fullscreenOwned = useRef(false);
+  const fullscreenOpen = useRef(false);
+  const closeFullscreenPhoto = useCallback(() => {
+    fullscreenOpen.current = false;
+    setFullscreenPhoto(null);
+    if (fullscreenOwned.current && document.fullscreenElement) {
+      fullscreenOwned.current = false;
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  }, []);
+  const openFullscreenPhoto = (photo: Capture) => {
+    fullscreenOpen.current = true;
+    setFullscreenAspect(1.5);
+    setFullscreenPhoto(photo);
+    if (!document.fullscreenElement && document.fullscreenEnabled && appElement.current) {
+      void appElement.current.requestFullscreen().then(() => {
+        if (fullscreenOpen.current) fullscreenOwned.current = true;
+        else if (document.fullscreenElement === appElement.current) void document.exitFullscreen().catch(() => undefined);
+      }).catch(() => undefined); // The viewport overlay also works when native fullscreen is unavailable.
+    }
+  };
+  useEffect(() => {
+    if (!fullscreenPhoto) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = fullscreenDialog.current;
+    dialog?.querySelector<HTMLElement>('button')?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeFullscreenPhoto(); }
+      if (event.key === 'Tab' && dialog) {
+        const buttons = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled)'));
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement && fullscreenOwned.current) {
+        fullscreenOwned.current = false;
+        closeFullscreenPhoto();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      previous?.focus();
+    };
+  }, [fullscreenPhoto, closeFullscreenPhoto]);
   const [renderStamps, setRenderStamps] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string | null>(null);
-  const [count, setCount] = useState(1);
-  const [scanAll, setScanAll] = useState(false);
+  const [previewScope, setPreviewScope] = useState<'one' | 'all'>('all');
+  const [endAction, setEndAction] = useState<RollEndAction>('return_to_frame_1');
+  const [expectedFrames, setExpectedFrames] = useState('');
+  const [resolvingAdvance, setResolvingAdvance] = useState(false);
   const [newRoll, setNewRoll] = useState<string | null>(null);
   const [sourceView, setSourceView] = useState<number | null>(null);
+  const [showBorders, setShowBorders] = useState(false);
   const [roll, setRoll] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [fitView, setFitView] = useState(true);
+  const viewerElement = useRef<HTMLDivElement>(null);
+  const [viewerSpace, setViewerSpace] = useState({ width: 0, height: 0 });
+  const [imageSize, setImageSize] = useState({ url: '', width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const element = viewerElement.current;
+    if (!element) return;
+    const measure = () => {
+      const style = getComputedStyle(element);
+      const width = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const height = element.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      setViewerSpace((previous) => previous.width === width && previous.height === height ? previous : { width, height });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [view]);
   const [message, setMessage] = useState<{ text: string; tone: 'info' | 'error' } | null>(null);
   const [now, setNow] = useState(Date.now());
   const [diagnostics, setDiagnostics] = useState<CyberScanDiagnostics | null>(null);
@@ -320,6 +452,10 @@ export function CyberScanSkin() {
   const [switchingBackend, setSwitchingBackend] = useState(false);
   const [workspace, setWorkspace] = useState<ScannerWorkspace | null>(null);
   const [options, setOptions] = useState<ScanOptions>(DEFAULT_OPTIONS);
+  const [repeatSamples, setRepeatSamples] = useState<1 | 2 | 4>(1);
+  const [filmType, setFilmType] = useState<FilmType>(initialFilmType);
+  const [savingFilmType, setSavingFilmType] = useState(false);
+  const [autoDetectBusy, setAutoDetectBusy] = useState(false);
   const [workspaceError, setWorkspaceError] = useState('');
   const [savingOptions, setSavingOptions] = useState(false);
   const [optionsDirty, setOptionsDirty] = useState(false);
@@ -338,16 +474,22 @@ export function CyberScanSkin() {
   const inFlightSaves = useRef(new Map<string, Promise<void>>());
 
   // With nothing selected, show the newest frame of the chosen roll, or a newer quick preview.
-  const rollFrames = captures.filter((c) => (c.roll || '') === roll && c.purpose !== 'prescan');
-  const rollPreview = [...captures].reverse().find((c) => c.purpose === 'prescan' && (c.roll || '') === roll);
-  const newestOnRoll = rollPreview && (!rollFrames.length || rollPreview.created_at > rollFrames[rollFrames.length - 1].created_at) ? rollPreview : rollFrames[rollFrames.length - 1];
+  const rollFrames = captures.filter((c) => (c.roll || '') === roll && !['prescan', 'roll_preview', 'coverage_attempt'].includes(c.purpose || ''));
+  const rollPreviews = captures.filter((c) => c.purpose === 'roll_preview' && (c.roll || '') === roll);
+  const rollPreviewSessionId = rollPreviews[rollPreviews.length - 1]?.session_id;
+  const rollPreviewFrames = rollPreviewSessionId ? rollPreviews.filter((c) => c.session_id === rollPreviewSessionId).sort((a, b) => a.index - b.index) : [];
+  const quickPreview = [...captures].reverse().find((c) => c.purpose === 'prescan' && (c.roll || '') === roll);
+  const rollPreview = rollPreviews[rollPreviews.length - 1];
+  const newestPreview = !quickPreview || (rollPreview && rollPreview.created_at > quickPreview.created_at) ? rollPreview : quickPreview;
+  const newestOnRoll = newestPreview && (!rollFrames.length || newestPreview.created_at > rollFrames[rollFrames.length - 1].created_at) ? newestPreview : rollFrames[rollFrames.length - 1];
+  const favoritePreviews = rollPreviewFrames.filter((capture) => capture.favorite);
   const current = captures.find((c) => c.id === selected) || newestOnRoll || null;
   // Open on the roll that was scanned last.
   const rollChosen = useRef(false);
   useEffect(() => {
     if (rollChosen.current || !captures.length) return;
     rollChosen.current = true;
-    const last = [...captures].reverse().find((c) => c.purpose !== 'prescan');
+    const last = [...captures].reverse().find((c) => !['prescan', 'coverage_attempt'].includes(c.purpose || ''));
     if (last) setRoll(last.roll || '');
   }, [captures]);
   const adjust = current?.adjustments || NEUTRAL;
@@ -355,24 +497,36 @@ export function CyberScanSkin() {
   const scanning = !!session && ACTIVE.has(session.state);
   const showLive = scanning && !!live && live.session_id === session?.id && live.rows.length > 0 && session?.state !== 'saving';
   const nativeMode = status?.backend === 'afl-native-experimental';
-  const profilePreview = !showOriginal && !!adjust.film_profile && !!current && !current.demo && mode === 'live';
+  const profilePreview = !showOriginal && (!!adjust.film_profile || !!adjust.color_restoration || !!adjust.grain_reduction || !!adjust.sharpening || !!adjust.vendor_auto_gamma_tables) && !!current && !current.demo && mode === 'live';
   const vendorProfile = profiles.some((p) => p.id === adjust.film_profile && p.kind === 'vendor-negative');
+  const toneStamp = useMemo(() => {
+    let hash = 2166136261;
+    for (const channel of adjust.vendor_auto_gamma_tables || []) for (const value of channel) {
+      hash = Math.imul(hash ^ value, 16777619);
+    }
+    return (hash >>> 0).toString(16);
+  }, [adjust.vendor_auto_gamma_tables]);
   const viewingSource = !!current && current.purpose === 'stitched' && sourceView !== null;
-  const imageSrc = viewingSource ? `/api/cyberview/captures/${current!.id}/sources/${sourceView}/preview` : current && profilePreview ? `/api/cyberview/captures/${current.id}/profile-preview?${new URLSearchParams({ profile_id: adjust.film_profile || '', invert: String(!!adjust.invert), base_r: String(adjust.film_base?.[0] ?? 1), base_g: String(adjust.film_base?.[1] ?? 1), base_b: String(adjust.film_base?.[2] ?? 1), negative_response: String(adjust.negative_response ?? 1.6) }).toString()}` : current ? imageUrl(current, 'preview') : '';
+  const imageSrc = viewingSource ? `/api/cyberview/captures/${current!.id}/sources/${sourceView}/preview` : current && profilePreview ? `/api/cyberview/captures/${current.id}/processing-preview?${new URLSearchParams({ ...(adjust.film_profile ? { profile_id: adjust.film_profile } : {}), invert: String(!!adjust.invert), base_r: String(adjust.film_base?.[0] ?? 1), base_g: String(adjust.film_base?.[1] ?? 1), base_b: String(adjust.film_base?.[2] ?? 1), negative_response: String(adjust.negative_response ?? 1.6), vendor_input_balance: String(!!adjust.vendor_input_balance), color_restoration: String(adjust.color_restoration ?? 0), grain_reduction: String(adjust.grain_reduction ?? 0), sharpening: String(adjust.sharpening ?? 0), vendor_auto_tone: String(!!adjust.vendor_auto_gamma_tables), tone_stamp: toneStamp }).toString()}` : current ? imageUrl(current, 'preview') : '';
   const optionsChanged = JSON.stringify(options) !== JSON.stringify(workspace?.settings);
   const can = (name: string) => workspace?.capabilities.actions[name]?.available === true;
   const reason = (name: string) => workspace?.capabilities.actions[name]?.reason || 'Not available with the selected scanner interface.';
-  const controlsBusy = scanning || !!status?.busy || savingOptions || switchingBackend;
+  const focusMin=workspace?.capabilities.focus_range?.[0] ?? 0;
+  const focusMax=workspace?.capabilities.focus_range?.[1] ?? 200;
+  useEffect(() => {setTargetFocus((value) => Math.max(focusMin,Math.min(focusMax,value)));},[focusMin,focusMax]);
+  const controlsBusy = scanning || !!status?.busy || savingOptions || savingFilmType || autoDetectBusy || switchingBackend;
+  const filmLook = FILM_LOOKS[filmType];
   const matrix = useMemo(() => colorMatrix(adjust), [adjust]);
   const tone = useMemo(() => toneTable(adjust), [adjust]);
   const autoTables = useMemo(() => adjust.auto_color && !showOriginal ? autoColorTables(adjust.auto_color) : null, [adjust, showOriginal]);
   // The strip shows the chosen roll's frames (quick previews excluded), numbered in scan order.
-  const rollCaptures = useMemo(() => captures.filter((c) => (c.roll || '') === roll && c.purpose !== 'prescan')
+  const rollCaptures = useMemo(() => captures.filter((c) => (c.roll || '') === roll && !['prescan', 'roll_preview', 'coverage_attempt'].includes(c.purpose || ''))
     .sort((a, b) => a.created_at - b.created_at), [captures, roll]);
   const frameNumber = (c: Capture) => rollCaptures.findIndex((item) => item.id === c.id) + 1;
-  const frameLabel = (c: Capture) => c.purpose === 'prescan' ? 'Quick preview' : `Frame ${frameNumber(c) || c.index}${c.purpose === 'stitched' ? ' · stitched' : ''}`;
+  const frameLabel = (c: Capture) => c.purpose === 'coverage_attempt' ? 'Coverage check failed' : c.purpose === 'prescan' ? c.border_preview ? 'Border preview' : 'Quick preview' : c.purpose === 'roll_preview' ? `Preview ${String(c.index).padStart(2, '0')}` : `Frame ${frameNumber(c) || c.index}${c.purpose === 'stitched' ? ' · stitched' : ''}`;
   const rolls = useMemo(() => [...new Set(['', ...captures.filter((c) => !c.demo).map((c) => c.roll || ''), roll])], [captures, roll]);
-  const homeCaptures = useMemo(() => captures.filter((c) => c.purpose !== 'prescan' && (demo || (!c.demo && c.hardware !== false))), [captures, demo]);
+  const homeCaptures = useMemo(() => captures.filter((c) => !['prescan', 'roll_preview', 'coverage_attempt'].includes(c.purpose || '') && (demo || (!c.demo && c.hardware !== false))), [captures, demo]);
+  const archiveCaptures = captures.filter((c) => !['prescan', 'coverage_attempt'].includes(c.purpose || '') && (demo || (!c.demo && c.hardware !== false)));
   const homePhoto = homeCaptures.find((c) => c.id === featured) || null;
 
   // Home shows an actual saved frame. Demo photographs are explicitly marked as samples.
@@ -411,9 +565,20 @@ export function CyberScanSkin() {
     if (watched.current !== session.id) return;
     watched.current = null;
     if (session.state === 'error' && session.error) setMessage({ text: session.error, tone: 'error' });
-    if (session.state === 'complete') setMessage({ text: session.purpose === 'prescan' ? 'Prescan complete.' : `${session.completed} ${session.completed === 1 ? 'frame' : 'frames'} saved.`, tone: 'info' });
-  }, [session?.id, session?.state, session?.error, session?.completed]);
-  useEffect(() => { setZoom(1); setShowOriginal(false); }, [current?.id]);
+    if (session.state === 'complete' && session.auto_detect_film_type && session.film_type_detection) {
+      const detection = session.film_type_detection;
+      const guessed = FILM_LOOKS[detection.film_type].label;
+      const current = FILM_LOOKS[detection.applied ? detection.film_type : detection.previous_type || filmType].label;
+      setMessage({ text: detection.applied
+        ? `Auto selected ${guessed} · ${Math.round(detection.confidence * 100)}% confidence. ${detection.note}`
+        : `Auto kept ${current}; the first frame may be ${guessed} (${Math.round(detection.confidence * 100)}% confidence). ${detection.note}`,
+        tone: 'info' });
+      api<ScannerWorkspace>('/api/cyberview/workspace').then((data) => {
+        setWorkspace(data); setOptions(data.settings); setFilmType(workspaceFilmType(data)); rememberFilmType(workspaceFilmType(data));
+      }).catch((error: Error) => setMessage({ text: error.message, tone: 'error' }));
+    } else if (session.state === 'complete') setMessage({ text: session.end_of_roll_note || session.end_action_result?.note || (session.border_search && !session.roll_preview_parent_id ? session.alignment?.confidence === 'frame_found' ? 'Frame borders found. Review the green lines, then Scan frame.' : session.alignment?.note || 'Some borders are still missing. Review the preview before scanning.' : session.purpose === 'roll_preview' ? 'Roll preview complete. Star the frames to scan at full quality.' : session.purpose === 'prescan' ? 'Prescan complete.' : `${session.completed} ${session.completed === 1 ? 'frame' : 'frames'} saved.`), tone: session.warning_code ? 'error' : 'info' });
+  }, [session?.id, session?.state, session?.error, session?.completed, session?.film_type_detection]);
+  useEffect(() => { setZoom(1); setFitView(true); setShowOriginal(false); setShowBorders(!!current?.border_preview); }, [current?.id]);
   useEffect(() => {
     if (mode !== 'live' || !current || current.demo) { setHistogram(null); return; }
     let cancelled = false;
@@ -426,7 +591,8 @@ export function CyberScanSkin() {
         .catch(() => { if (!cancelled) setHistogram(null); });
     }, 800);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [mode, current?.id, adjust.invert, adjust.film_profile, adjust.negative_response, (adjust.film_base || []).join(',')]);
+  }, [mode, current?.id, adjust.invert, adjust.film_profile, adjust.negative_response, adjust.vendor_input_balance,
+      adjust.color_restoration, adjust.grain_reduction, adjust.sharpening, (adjust.film_base || []).join(',')]);
   useEffect(() => {
     if (mode !== 'live') return;
     let cancelled = false;
@@ -439,6 +605,7 @@ export function CyberScanSkin() {
   const refreshWorkspace = useCallback(async () => {
     const data = await api<ScannerWorkspace>('/api/cyberview/workspace');
     setWorkspace(data);
+    setFilmType(workspaceFilmType(data)); rememberFilmType(workspaceFilmType(data));
     setOptions(data.settings);
     setOptionsDirty(false);
     setWorkspaceError('');
@@ -448,7 +615,7 @@ export function CyberScanSkin() {
     if (mode !== 'live') return;
     let stale = false;
     api<ScannerWorkspace>('/api/cyberview/workspace').then((data) => {
-      if (!stale) { setWorkspace(data); setOptions(data.settings); setOptionsDirty(false); setWorkspaceError(''); }
+      if (!stale) { setWorkspace(data); setOptions(data.settings); setFilmType(workspaceFilmType(data)); rememberFilmType(workspaceFilmType(data)); setOptionsDirty(false); setWorkspaceError(''); }
     }).catch((error: Error) => { if (!stale) { setWorkspace(null); setWorkspaceError(error.message); } });
     return () => { stale = true; };
   }, [mode, status?.backend]);
@@ -495,10 +662,17 @@ export function CyberScanSkin() {
     pendingSaves.current.set(id, { timer, adjustments: next });
   };
   const toggleFavorite = () => {
-    if (!current) return;
-    const favorite = !current.favorite;
-    setCaptures((list) => list.map((c) => c.id === current.id ? { ...c, favorite } : c));
-    if (mode === 'live' && !current.demo) api(`/api/cyberview/captures/${current.id}`, { method: 'PATCH', body: JSON.stringify({ favorite }) }).catch(() => undefined);
+    if (current) void toggleFavoriteFor(current);
+  };
+  const toggleFavoriteFor = async (item: Capture) => {
+    const favorite = !item.favorite;
+    setCaptures((list) => list.map((c) => c.id === item.id ? { ...c, favorite } : c));
+    if (mode !== 'live' || item.demo) return;
+    try { await api(`/api/cyberview/captures/${item.id}`, { method: 'PATCH', body: JSON.stringify({ favorite }) }); }
+    catch (error) {
+      setCaptures((list) => list.map((c) => c.id === item.id ? { ...c, favorite: !favorite } : c));
+      setMessage({ text: (error as Error).message, tone: 'error' });
+    }
   };
   const toggleAutoColor = async (enabled: boolean) => {
     if (!current || current.demo || mode !== 'live') return;
@@ -546,6 +720,19 @@ export function CyberScanSkin() {
       document.body.appendChild(link); link.click(); link.remove();
     } catch (error) { setMessage({ text: `Save the edit before exporting: ${(error as Error).message}`, tone: 'error' }); }
   };
+  const vendorAutoTone = async (enabled = !adjust.vendor_auto_gamma_tables) => {
+    if (!current || current.demo || mode !== 'live') return;
+    setAutoLevelBusy(true);
+    try {
+      await flushSave(current.id);
+      const updated=await api<Capture>(`/api/cyberview/captures/${current.id}/vendor-auto-tone`,
+        {method:'POST',body:JSON.stringify({enabled})});
+      rememberRendered([updated]);
+      setCaptures((items)=>items.map((item)=>item.id===updated.id?updated:item));
+      setMessage({text:updated.adjustments.vendor_auto_gamma_tables?'Automatic colour and tone applied.':'Automatic colour and tone removed.',tone:'info'});
+    } catch (error) {setMessage({text:(error as Error).message,tone:'error'});}
+    finally {setAutoLevelBusy(false);}
+  };
   const applyRollColor = async () => {
     if (!current || current.demo || mode !== 'live') return;
     setConfirmRoll(false); setRollApplying(true);
@@ -591,7 +778,7 @@ export function CyberScanSkin() {
       rememberRendered([result.capture]);
       setCaptures((list) => list.map((c) => c.id === current.id ? result.capture : c));
       const a = result.alignment;
-      setMessage(a.exact ? { text: `${ALIGN_LABEL[a.confidence]}. Cropped to ${a.crop_mm[0]} × ${a.crop_mm[1]} mm.`, tone: 'info' }
+      setMessage((a.crop_applied ?? a.exact) ? { text: `${ALIGN_LABEL[a.confidence]}. Cropped to ${a.crop_mm[0]} × ${a.crop_mm[1]} mm.`, tone: 'info' }
         : { text: a.note || 'The frame could not be cropped exactly.', tone: 'error' });
     } catch (e) {
       setMessage({ text: (e as Error).message, tone: 'error' });
@@ -610,10 +797,24 @@ export function CyberScanSkin() {
       setMessage({ text: (e as Error).message, tone: 'error' });
     }
   };
-  const startScan = async () => {
+  const findBorders = async () => {
     try {
       setMessage(null);
-      const started = await api<Session>('/api/cyberview/scan', { method: 'POST', body: JSON.stringify({ count: 1, until_end: scanAll, roll, ...(workspace ? { settings: workspace.settings } : {}) }) });
+      const started = await api<Session>('/api/cyberview/find-borders', { method: 'POST', body: JSON.stringify({ roll, acknowledged: true }) });
+      setSession(started); setSelected(null); setSourceView(null); setNow(Date.now());
+    } catch (e) {
+      setMessage({ text: (e as Error).message, tone: 'error' });
+    }
+  };
+  const startScan = async (scanAll: boolean) => {
+    try {
+      setMessage(null);
+      const endpoint = scanAll && nativeMode ? '/api/cyberview/scan-all-verified'
+        : !scanAll && current?.border_preview ? '/api/cyberview/scan-frame' : '/api/cyberview/scan';
+      const body = endpoint.endsWith('scan-frame') ? { roll, acknowledged: true, repeat_samples: repeatSamples }
+        : endpoint.endsWith('scan-all-verified') ? { roll, end_action: endAction, repeat_samples: repeatSamples, expected_frames: expectedFrames ? Number(expectedFrames) : null }
+          : { count: 1, until_end: scanAll, roll, ...(workspace ? { settings: workspace.settings } : {}) };
+      const started = await api<Session>(endpoint, { method: 'POST', body: JSON.stringify(body) });
       setSession(started);
       setSelected(null);
       setNow(Date.now());
@@ -621,6 +822,56 @@ export function CyberScanSkin() {
       setMessage({ text: (e as Error).message, tone: 'error' });
       refresh().catch(() => undefined);
     }
+  };
+  const startRollPreview = async (dpi: 300 | 600) => {
+    try {
+      setMessage(null);
+      const started = await api<Session>('/api/cyberview/preview-roll', { method: 'POST', body: JSON.stringify({ scope: previewScope, dpi, roll, expected_frames: expectedFrames ? Number(expectedFrames) : null }) });
+      setSession(started); setSelected(null); setSourceView(null); setNow(Date.now());
+      setMessage({ text: `Starting ${previewScope === 'all' ? 'a whole-roll' : 'a current-frame'} preview at ${dpi} dpi. Star frames you want scanned at full quality.`, tone: 'info' });
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+  };
+  const scanSelectedSettings = async () => {
+    try {
+      setMessage(null);
+      const started = await api<Session>('/api/cyberview/scan', { method: 'POST', body: JSON.stringify({ count: 1, roll, settings: options, purpose: 'scan' }) });
+      setSession(started); setSelected(null); setSourceView(null); setNow(Date.now());
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+  };
+  const resolveStoppedAdvance = async (action: 'confirm_end' | 'retry_advance' | 'abort') => {
+    if (!session) return;
+    setResolvingAdvance(true);
+    try {
+      const updated = await api<Session>('/api/cyberview/refused-advance', { method: 'POST', body: JSON.stringify({ session_id: session.id, action }) });
+      setSession(updated); setMessage(null);
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+    finally { setResolvingAdvance(false); }
+  };
+  const scanFavoritePreviews = async () => {
+    if (!rollPreviewSessionId || !favoritePreviews.length) return;
+    try {
+      setMessage(null);
+      const started = await api<Session>('/api/cyberview/scan-favorites', { method: 'POST', body: JSON.stringify({
+        preview_session_id: rollPreviewSessionId, roll, preview_ids: favoritePreviews.map((capture) => capture.id), end_action: endAction, repeat_samples: repeatSamples,
+      }) });
+      setSession(started); setSelected(null); setSourceView(null); setNow(Date.now());
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+  };
+  const deleteArchiveRoll = async (label: string, rollValue: string) => {
+    const total = archiveCaptures.filter((item) => (item.roll || '') === rollValue).length;
+    if (!window.confirm(`Delete “${label}” and all ${total} saved previews, scans, and source images? This cannot be undone.`)) return;
+    try {
+      const result = await api<{ deleted: boolean; captures_deleted: number }>('/api/cyberview/rolls', {
+        method: 'DELETE', body: JSON.stringify({ roll: rollValue }),
+      });
+      setCaptures((items) => items.filter((item) => (item.roll || '') !== rollValue));
+      if (roll === rollValue) {
+        setSelected(null); setSourceView(null);
+        const nextRoll = archiveCaptures.find((item) => (item.roll || '') !== rollValue)?.roll || '';
+        setRoll(nextRoll);
+      }
+      setMessage({ text: `Deleted ${result.captures_deleted} saved images from ${label}.`, tone: 'info' });
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
   };
   const [moving, setMoving] = useState<string | null>(null);
   const moveFilm = async () => {
@@ -639,11 +890,36 @@ export function CyberScanSkin() {
     try {
       const data = await api<ScannerWorkspace>('/api/cyberview/workspace', { method: 'PUT', body: JSON.stringify(options) });
       setWorkspace(data); setOptions(data.settings); setOptionsDirty(false); setWorkspaceError('');
+      setFilmType(workspaceFilmType(data)); rememberFilmType(workspaceFilmType(data));
       setMessage({ text: 'Scan settings saved.', tone: 'info' });
     } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
     finally { setSavingOptions(false); }
   };
   const changeOptions = (patch: Partial<ScanOptions>) => { setOptions((value) => ({ ...value, ...patch })); setOptionsDirty(true); };
+  const chooseFilmType = async (value: FilmType) => {
+    if (value === filmType || controlsBusy || moving) return;
+    if (mode === 'demo') { setFilmType(value); rememberFilmType(value); return; }
+    if (mode !== 'live') return;
+    const previousFilmType = filmType;
+    setFilmType(value);
+    setSavingFilmType(true);
+    try {
+      const data = await api<ScannerWorkspace>('/api/cyberview/film-type', { method: 'PUT', body: JSON.stringify({ film_type: value }) });
+      setWorkspace(data); setOptions((previous) => ({ ...previous, film: data.settings.film }));
+      setFilmType(workspaceFilmType(data)); rememberFilmType(workspaceFilmType(data));
+    } catch (error) { setFilmType(previousFilmType); setMessage({ text: (error as Error).message, tone: 'error' }); }
+    finally { setSavingFilmType(false); }
+  };
+  const autoDetectFilmType = async () => {
+    if (mode !== 'live' || controlsBusy || moving) return;
+    setAutoDetectBusy(true); setMessage(null);
+    try {
+      const started = await api<Session>('/api/cyberview/film-type/auto-detect', { method: 'POST', body: JSON.stringify({ roll }) });
+      setSession(started); setSelected(null); setSourceView(null); setNow(Date.now());
+      setMessage({ text: 'Reading a quick first-frame preview to estimate film type…', tone: 'info' });
+    } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
+    finally { setAutoDetectBusy(false); }
+  };
   const startPrescan = async () => {
     if (!workspace || !can('prescan')) return;
     try {
@@ -660,11 +936,11 @@ export function CyberScanSkin() {
       const payload = filmAction ? { action, ...(action === 'goto' ? { frame: targetFrame } : {}), acknowledged } : { action, ...(action === 'focus' ? { value: targetFocus } : {}), acknowledged };
       await api(filmAction ? '/api/cyberview/film' : '/api/cyberview/control', { method: 'POST', body: JSON.stringify(payload) });
       const [, next] = await Promise.all([refresh(), refreshWorkspace()]);
-      if (action === 'next' && next?.capabilities.actions.prescan?.available) {
+      if ((action === 'next' || action === 'previous') && next?.capabilities.actions.prescan?.available) {
         // A quick 300 dpi pass shows what is now in the window; it is not saved as a frame.
         const started = await api<Session>('/api/cyberview/prescan', { method: 'POST', body: JSON.stringify({ roll, settings: next.settings }) });
         setSession(started); setSelected(null); setNow(Date.now());
-        setMessage({ text: 'Moved to the next frame. Showing a quick preview.', tone: 'info' });
+        setMessage({ text: `Moved to the ${action === 'previous' ? 'previous' : 'next'} frame. Showing a quick preview.`, tone: 'info' });
       } else setMessage({ text: `${ACTION_NAMES[action]} complete.`, tone: 'info' });
     } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
     finally { setMoving(null); }
@@ -674,7 +950,7 @@ export function CyberScanSkin() {
     setSwitchingBackend(true);
     try {
       await api('/api/cyberview/backend', { method: 'POST', body: JSON.stringify({ backend, acknowledged: nativeAcknowledged }) });
-      setCount(1);
+      setPreviewScope('all');
       await refresh();
       await refreshWorkspace();
       setMessage({ text: 'Scanner interface saved. No scan has started.', tone: 'info' });
@@ -689,15 +965,28 @@ export function CyberScanSkin() {
     try {
       const ids = new Set([...pendingSaves.current.keys(), ...inFlightSaves.current.keys()]);
       await Promise.all([...ids].map(flushSave));
-      window.location.assign('/?page=Develop&from=scanner');
+      window.location.assign(`/?page=Develop&from=scanner&film_type=${filmType}`);
     } catch (error) { setMessage({ text: (error as Error).message, tone: 'error' }); }
   };
-  const transform = showOriginal ? `scale(${zoom})` : `scale(${zoom}) rotate(${adjust.rotation}deg) scaleX(${adjust.mirror ? -1 : 1})`;
+  const transform = showOriginal ? 'none' : `rotate(${adjust.rotation}deg) scaleX(${adjust.mirror ? -1 : 1})`;
   const crop = adjust.crop || { left: 0, top: 0, right: 1, bottom: 1 };
-  const cropped = !showOriginal && (crop.left !== 0 || crop.top !== 0 || crop.right !== 1 || crop.bottom !== 1);
-  const imageWidth = current?.width || 1200, imageHeight = current?.height || 800;
+  const cropped = !showOriginal && !viewingSource && !showBorders && (crop.left !== 0 || crop.top !== 0 || crop.right !== 1 || crop.bottom !== 1);
+  const imageWidth = current?.width || (imageSize.url === imageSrc && imageSize.width > 0 ? imageSize.width : 1200);
+  const imageHeight = current?.height || (imageSize.url === imageSrc && imageSize.height > 0 ? imageSize.height : 800);
+  const sourceGeometry = viewingSource ? current?.derived?.sources?.[sourceView! - 1] : undefined;
+  const visibleWidth = cropped ? imageWidth * (crop.right - crop.left)
+    : viewingSource ? sourceGeometry?.width || (imageSize.url === imageSrc ? imageSize.width : imageWidth) : imageWidth;
+  const visibleHeight = cropped ? imageHeight * (crop.bottom - crop.top)
+    : viewingSource ? sourceGeometry?.height || (imageSize.url === imageSrc ? imageSize.height : imageHeight) : imageHeight;
+  const quarterTurn = !showOriginal && adjust.rotation % 180 !== 0;
+  const baseWidth = filmType === 'positive' ? 30 : 16;
+  const baseHeight = filmType === 'positive' ? 30 : 44;
+  const fitScale = viewerSpace.width > 0 && viewerSpace.height > 0
+    ? Math.max(.001, Math.min((viewerSpace.width - (quarterTurn ? baseHeight : baseWidth)) / (quarterTurn ? visibleHeight : visibleWidth),
+                              (viewerSpace.height - (quarterTurn ? baseWidth : baseHeight)) / (quarterTurn ? visibleWidth : visibleHeight))) : 1;
+  const actualZoom = fitView ? fitScale : zoom;
 
-  return <div className="cx-app">
+  return <div className="cx-app" data-film-type={filmType} ref={appElement}>
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
       <filter id="cx-adjust" colorInterpolationFilters="sRGB">
         <feComponentTransfer>
@@ -722,48 +1011,50 @@ export function CyberScanSkin() {
         </>}
       </filter>
     </svg>
-    <aside className="cx-sidebar">
-      <div className="cx-wordmark"><span className="cx-mark" aria-hidden="true" />FRAME<span className="cx-wordmark-dot">.</span></div>
-      <p className="cx-sidebar-intro">A little more time<br />with your photographs.</p>
+    <aside className="cx-sidebar" aria-hidden={fullscreenPhoto ? true : undefined}>
+      <div className="cx-wordmark"><span className="cx-brand-symbol"><FilmGlyph type={filmType} size={29} /></span><span>FRAME<span className="cx-wordmark-dot">.</span></span></div>
       <nav aria-label="Sections">
-        {nav.map(([id, label, icon]) => <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined}
+        {nav.map(([id, label, icon], index) => <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined}
           disabled={id === 'develop' && mode !== 'live'} title={id === 'develop' && mode !== 'live' ? 'Open the live app to develop a roll' : undefined}
-          onClick={() => id === 'develop' ? void openDevelop() : setView(id)}><Icon name={icon} />{label}</button>)}
+          onClick={() => id === 'develop' ? void openDevelop() : setView(id)}><span className="cx-nav-number" aria-hidden="true">0{index + 1}</span><Icon name={icon} /><span>{label}</span><span className="cx-nav-cue" aria-hidden="true">↗</span></button>)}
       </nav>
+      <FilmTypePicker value={filmType} onChange={(value) => void chooseFilmType(value)} onAutoDetect={() => void autoDetectFilmType()} autoDetecting={autoDetectBusy} disabled={controlsBusy || !!moving || (mode !== 'live' && mode !== 'demo')} />
       <div className="cx-device" aria-label="Scanner status">
         <span className={'cx-dot ' + (scanning || moving ? 'busy' : ready.ok ? 'ok' : 'off')} />
         <div><strong>{scanning ? 'Scanning' : ready.title}</strong><span>{scanning ? (nativeMode ? 'Direct capture' : 'Through CyberView X') : ready.detail}</span></div>
       </div>
-      <p className="cx-sidebar-note">{mode === 'demo' ? 'Sample photos, not scans' : nativeMode ? 'Direct capture · transmission image' : 'Scanner connection'}</p>
     </aside>
 
-    <main className="cx-main">
+    <main className="cx-main" aria-hidden={fullscreenPhoto ? true : undefined}>
       {view === 'home' && <section className="cx-home" aria-label="Home">
-        <div className="cx-home-top"><span>YOUR FILM JOURNAL</span><span>{mode === 'demo' ? 'SAMPLE MODE' : 'LOCAL WORKSPACE'}</span></div>
+        <div className="cx-home-top"><span>YOUR FILM JOURNAL <i>/</i> <b>{filmLook.label}</b></span><span>{mode === 'demo' ? 'SAMPLE MODE' : 'LOCAL WORKSPACE'}</span></div>
         <div className="cx-home-intro">
           <div className="cx-home-copy">
-            <p className="cx-eyebrow">THE ANALOGUE WORKFLOW</p>
+            <p className="cx-eyebrow"><span className="cx-tiny-film" aria-hidden="true" />{filmLook.eyebrow}</p>
             <h1>Good things<br /><em>take their time.</em></h1>
-            <p>From the first frame to the final scan. A home for every roll, and the stories on it.</p>
+            <p>{filmLook.description} From the first frame to the final print.</p>
             <div className="cx-home-actions"><button className="cx-button primary" onClick={() => setView('scan')}>Open scanner <span aria-hidden="true">↗</span></button>
               <button className="cx-home-link" onClick={() => void openDevelop()} disabled={mode !== 'live'}>Develop a roll <span aria-hidden="true">↗</span></button></div>
+            <div className="cx-home-stats"><div><strong>{String(homeCaptures.length).padStart(2, '0')}</strong><span>{demo ? 'Sample frames' : 'Saved frames'}</span></div><div><strong>{String(new Set(homeCaptures.map((c) => c.roll)).size).padStart(2, '0')}</strong><span>{demo ? 'Sample rolls' : 'Your rolls'}</span></div><div><strong>{filmLook.code}</strong><span>{filmLook.label}</span></div></div>
             <div className="cx-home-status"><span className={'cx-dot ' + (scanning ? 'busy' : ready.ok ? 'ok' : 'off')} />
               <div><strong>{scanning ? 'Scan in progress' : ready.title}</strong><span>{scanning ? `${session?.completed ?? 0} of ${session?.count ?? 0} frames saved` : ready.detail}</span></div></div>
           </div>
           <div className="cx-feature">
-            <div className="cx-feature-head"><span>THE FRAME COLLECTION</span><button onClick={shuffleHome} disabled={homeCaptures.length < 2}>Shuffle ↻</button></div>
+            <div className="cx-feature-head"><span>THE FRAME COLLECTION</span><div className="cx-feature-actions"><button onClick={shuffleHome} disabled={homeCaptures.length < 2}>Shuffle ↻</button><button aria-label="View featured photo fullscreen" title="View fullscreen" disabled={!homePhoto} onClick={() => homePhoto && openFullscreenPhoto(homePhoto)}><Icon name="fit" size={14} /></button></div></div>
+            <div className="cx-feature-film-edge" aria-hidden="true"><span>{filmLook.edge}</span><span>◀ {homePhoto ? String(homePhoto.index).padStart(2, '0') : '00'}</span></div>
             <div className="cx-feature-image">{homePhoto
               ? <button className="cx-feature-open" aria-label={`Open ${homePhoto.title}`} onClick={() => { setSelected(homePhoto.id); setView('scan'); }}><img src={rendered(homePhoto, 'preview')} alt={`${homePhoto.demo ? 'Sample photograph' : 'Saved photograph'} · ${homePhoto.title}`} /></button>
               : <div className="cx-feature-empty"><Icon name="film" size={28} /><strong>Your photographs<br />will live here.</strong><span>Scan a frame to begin.</span></div>}</div>
+            <div className="cx-feature-bottom-edge" aria-hidden="true"><span>FRAME / 35 MM</span><span>{filmLook.code} ▷</span></div>
             <div className="cx-feature-caption"><div><strong>{homePhoto ? homePhoto.roll || 'Untitled roll' : 'A space for your work'}</strong>
               <span>{homePhoto ? `${homePhoto.demo ? 'SAMPLE IMAGE' : 'SAVED FRAME'} · ${shortDate(homePhoto.created_at)}` : 'YOUR LIBRARY IS EMPTY'}</span></div><span>{homePhoto ? edgeNumber(homePhoto.index) : '—'}</span></div>
           </div>
         </div>
         <div className="cx-home-section-title"><span>YOUR WORKSPACE</span><span>01 — 03</span></div>
         <div className="cx-home-cards">
-          <button onClick={() => setView('scan')}><span>01 / SCAN</span><strong>Bring it to light.</strong><small>{scanning ? `${session?.completed ?? 0} of ${session?.count ?? 0} frames saved` : 'Your scanner workspace'}</small><b>OPEN SCANNER ↗</b></button>
-          <button onClick={() => void openDevelop()} disabled={mode !== 'live'}><span>02 / DEVELOP</span><strong>In the darkroom.</strong><small>Recipes and developing sessions</small><b>OPEN TIMER ↗</b></button>
-          <button onClick={() => setView('library')}><span>03 / ROLLS</span><strong>Keep the memories.</strong><small>{homeCaptures.length} {demo ? (homeCaptures.length === 1 ? 'sample photograph' : 'sample photographs') : (homeCaptures.length === 1 ? 'saved frame' : 'saved frames')}</small><b>EXPLORE ROLLS ↗</b></button>
+          <button onClick={() => setView('scan')}><span>01 / SCAN <Icon name="scan" size={20} /></span><strong>Bring it to light.</strong><small>{scanning ? `${session?.completed ?? 0} of ${session?.count ?? 0} frames saved` : 'Find the frame. Keep every detail.'}</small><b>OPEN SCANNER <span>↗</span></b></button>
+          <button onClick={() => void openDevelop()} disabled={mode !== 'live'}><span>02 / DEVELOP <Icon name="develop" size={20} /></span><strong>In the darkroom.</strong><small>Recipes and developing sessions</small><b>OPEN TIMER <span>↗</span></b></button>
+          <button onClick={() => setView('library')}><span>03 / ROLLS <Icon name="library" size={20} /></span><strong>Keep the memories.</strong><small>{homeCaptures.length} {demo ? (homeCaptures.length === 1 ? 'sample photograph' : 'sample photographs') : (homeCaptures.length === 1 ? 'saved frame' : 'saved frames')}</small><b>EXPLORE ROLLS <span>↗</span></b></button>
         </div>
       </section>}
       {view === 'scan' && <>
@@ -781,53 +1072,78 @@ export function CyberScanSkin() {
                   <span>New roll</span><input autoFocus value={newRoll} maxLength={120} onChange={(e) => setNewRoll(e.target.value)} aria-label="New roll name" onBlur={() => setNewRoll(null)} />
                 </form>}
             <button className="cx-text-button" onClick={() => setNewRoll(`Roll ${rolls.filter(Boolean).length + 1}`)} onMouseDown={(e) => e.preventDefault()} disabled={scanning || mode !== 'live'}>New roll</button>
-            <label className="cx-field cx-count"><span>Scan</span>
-              <select value={scanAll ? 'all' : 'current'} onChange={(e) => setScanAll(e.target.value === 'all')} disabled={scanning || mode !== 'live' || (status?.max_count ?? 1) < 2} aria-label="Frames to scan">
-                <option value="current">Current frame</option>
-                <option value="all">All frames</option>
-              </select>
-            </label>
-            {alignInfo?.stitched_scan.available && <button className="cx-button" onClick={startStitched} disabled={!ready.ok || scanning} title="Three scans with the film nudged back and forward, stitched and cropped to 36 × 24 mm">{stitchArmed ? `Move film ±${alignInfo.settings.offset_mm} mm and scan?` : 'Stitched scan'}</button>}
-            <button className="cx-button primary" onClick={startScan} disabled={!ready.ok || controlsBusy || !!moving || (!!workspace && (!can('scan') || optionsChanged))}><Icon name="scan" />{scanAll ? 'Scan all frames' : 'Scan frame'}</button>
+            {alignInfo?.find_borders?.available && <button className="cx-button" onClick={findBorders} disabled={!ready.ok || controlsBusy || !!moving || optionsChanged} title="Find borders using quick full-window previews and small film moves">Auto find borders</button>}
+            <button className="cx-button primary" onClick={() => startScan(false)} disabled={!ready.ok || controlsBusy || !!moving || (!!workspace && (!can('scan') || optionsChanged))}><Icon name="scan" />Scan frame</button>
+            <button className="cx-button" onClick={() => startScan(true)} disabled={!ready.ok || controlsBusy || !!moving || (status?.max_count ?? 1) < 2 || (!!workspace && (!can('scan') || optionsChanged))} title={nativeMode ? 'Find borders on every frame, then scan the roll at full resolution' : 'Scan and advance until the end of the film'}>Scan all frames</button>
+            {nativeMode && <details className="cx-roll-menu">
+              <summary className="cx-button">Roll options <span aria-hidden="true">⌄</span></summary>
+              <div className="cx-roll-menu-popover">
+                <label className="cx-field"><span>After scanning</span><select value={endAction} onChange={(event) => setEndAction(event.target.value as RollEndAction)} disabled={controlsBusy || !!moving}><option value="return_to_frame_1">Return to frame 1</option><option value="hold_at_end">Keep film in scanner</option><option value="eject_forward">Eject forward</option></select></label>
+                <label className="cx-field"><span>Expected frames · optional</span><input type="number" min="1" max="40" value={expectedFrames} onChange={(event) => setExpectedFrames(event.target.value)} disabled={controlsBusy || !!moving} /></label>
+                <label className="cx-field"><span>Preview scope</span><select value={previewScope} onChange={(event) => setPreviewScope(event.target.value as 'one' | 'all')} disabled={controlsBusy || !!moving}><option value="all">Entire roll</option><option value="one">Current frame</option></select></label>
+                <div className="cx-roll-preview-actions">
+                  <button className="cx-button" onClick={() => void startRollPreview(300)} disabled={!ready.ok || controlsBusy || !!moving || !can('prescan') || optionsChanged}>Quick · 300 dpi</button>
+                  <button className="cx-button" onClick={() => void startRollPreview(600)} disabled={!ready.ok || controlsBusy || !!moving || !can('prescan') || optionsChanged}>Detailed · 600 dpi</button>
+                </div>
+                <button className="cx-button primary" onClick={() => void scanFavoritePreviews()} disabled={!ready.ok || controlsBusy || !!moving || !favoritePreviews.length || optionsChanged}>
+                  Scan favorites · 1800 dpi ({favoritePreviews.length})
+                </button>
+                <p className="cx-help">Both modes run automatic border finding. Star the frames you want, then scan only those at full quality. Wider frames use overlapping recovery.</p>
+                <p className="cx-help">Detailed 600 dpi uses the usual scan area and can clip edges; the border check uses the full window. Measured: about 20 seconds per 300 dpi pass and 65 seconds per 1800 dpi scan. 600 dpi timing is not measured.</p>
+              </div>
+            </details>}
             {mode === 'live' && workspace && !can('scan') && !scanning && <span className="cx-scan-reason" role="status">{reason('scan')}</span>}
           </div>
         </header>
 
         <div className="cx-workspace">
           <section className="cx-stage" aria-label="Viewer">
-            <div className="cx-viewer">
+            <div className="cx-viewer" ref={viewerElement}>
               {showLive && live
                 ? <LivePreview live={live} negative={status?.settings.film_type !== 'positive'} />
                 : current
-                ? <div className="cx-image" style={{ transform }}>
+                ? <div className="cx-image" style={{ transform, width: visibleWidth * actualZoom, height: visibleHeight * actualZoom }}>
                     {cropped ? <svg className="cx-cropped-image" role="img" aria-label={`${current.title}, cropped`} width={imageWidth * (crop.right - crop.left)} height={imageHeight * (crop.bottom - crop.top)} viewBox={`${crop.left * imageWidth} ${crop.top * imageHeight} ${(crop.right - crop.left) * imageWidth} ${(crop.bottom - crop.top) * imageHeight}`}>
                       <image href={imageSrc} width={imageWidth} height={imageHeight} preserveAspectRatio="none" filter="url(#cx-adjust)" onError={() => setPreviewError(true)} />
-                    </svg> : <img src={imageSrc} alt={current.title} style={{ filter: showOriginal ? 'none' : 'url(#cx-adjust)' }} draggable={false} onError={() => setPreviewError(true)} />}
+                    </svg> : <img src={imageSrc} alt={current.title} style={{ filter: showOriginal ? 'none' : 'url(#cx-adjust)' }} draggable={false}
+                      onLoad={(event) => setImageSize({ url: imageSrc, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+                      onError={() => setPreviewError(true)} />}
+                    {showBorders && !viewingSource && current.alignment && <FrameBorders capture={current} />}
                   </div>
                 : <div className="cx-empty"><Icon name="film" size={24} /><strong>No scans yet</strong><span>{ready.ok ? 'Scan the frame that is in the loader now, or the next several frames in a row.' : ready.detail}</span></div>}
-              {session && scanning && <ScanProgress session={session} onCancel={stopScan} now={now} />}
+              {session && scanning && <ScanProgress session={session} onCancel={stopScan} now={now}
+                liveProgress={showLive && live ? live.rows.length / liveHeight(live) : undefined}
+                previewRows={showLive && live ? live.rows.length : undefined} />}
+              {session?.awaiting_end_confirmation && !scanning && <div className="cx-refused-advance" role="status">
+                <p>The scanner stopped after {session.completed} {session.completed===1 ? 'frame' : 'frames'}{session.expected_frames ? ` (${session.expected_frames} expected)` : ''}. Saved frames are safe; check whether the strip ended here.</p>
+                <button className="cx-button" disabled={resolvingAdvance} onClick={() => void resolveStoppedAdvance('retry_advance')}>Retry advance</button>
+                <button className="cx-button" disabled={resolvingAdvance} onClick={() => void resolveStoppedAdvance('confirm_end')}>{session.end_action==='return_to_frame_1' ? 'Confirm end · return to frame 1' : session.end_action==='eject_forward' ? 'Confirm end · eject forward' : 'Confirm end and finish'}</button>
+                <button className="cx-button" disabled={resolvingAdvance} onClick={() => void resolveStoppedAdvance('abort')}>Keep film and stop</button>
+              </div>}
               {previewError && <p className="cx-preview-error" role="alert">The selected film profile preview could not be loaded. Check the profile and try again.</p>}
-              {showOriginal && current && !showLive && <span className="cx-original-badge">Original · full frame</span>}
-              {current && <span className="cx-edge cx-viewer-edge">{viewingSource ? `${frameLabel(current)} · source ${sourceView} of 3` : frameLabel(current)}</span>}
-            </div>
+              {current && <span className="cx-sr-only cx-viewer-edge">{viewingSource ? `${frameLabel(current)} · source ${sourceView} of ${current.derived?.sources?.length ?? 0}` : frameLabel(current)}</span>}
             <div className="cx-toolbar" role="toolbar" aria-label="View">
               <div className="cx-group">
-                <button className="cx-icon" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(.5, +(z - .25).toFixed(2)))}><Icon name="minus" /></button>
-                <span className="cx-zoom">{Math.round(zoom * 100)}%</span>
-                <button className="cx-icon" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(3, +(z + .25).toFixed(2)))}><Icon name="plus" /></button>
-                <button className="cx-icon" aria-label="Fit to window" onClick={() => setZoom(1)}><Icon name="fit" /></button>
+                <ToolButton icon="minus" label="Zoom out" explanation="Show more of the frame." disabled={!current || showLive} onClick={() => { setZoom(Math.max(.01, actualZoom / 1.25)); setFitView(false); }} />
+                <ToolButton icon="fit" label="Actual size (100%)" explanation="One image pixel per screen pixel. Click to return to 100%." disabled={!current || showLive} value={current && !showLive ? `${Math.round(actualZoom * 100)}%` : '—'} onClick={() => { setZoom(1); setFitView(false); }} />
+                <ToolButton icon="plus" label="Zoom in" explanation="Inspect the image more closely." disabled={!current || showLive} onClick={() => { setZoom(Math.min(8, actualZoom * 1.25)); setFitView(false); }} />
+                <ToolButton icon="fit" label="Fit to window" explanation="Fit the entire image, including rotated and cropped frames." disabled={!current || showLive} pressed={fitView} onClick={() => { setZoom(1); setFitView(true); }} />
+                {current?.alignment && <ToolButton icon="borders" label="Show borders" explanation="Green borders are detected; amber borders are estimates." pressed={showBorders} onClick={() => setShowBorders((value) => !value)} />}
+                <ToolButton icon="compare" label={showOriginal ? 'Show adjustments' : 'Show original'} explanation={showOriginal ? 'Return to your edited preview.' : 'Compare with the unchanged scan.'} pressed={showOriginal} disabled={!current} onClick={() => setShowOriginal((value) => !value)} />
               </div>
               <div className="cx-group" role="group" aria-label="Film">
-                {/* Only Forward One Frame is offered: CyberView's backward command hung the AFL in testing. */}
-                <button className="cx-text-button" disabled={!ready.ok || controlsBusy || !!moving || (workspace ? !can('next') : status?.supports_next === false)} title={workspace && !can('next') ? reason('next') : undefined} onClick={() => workspace ? sendAction('next') : moveFilm()}>Next frame</button>
-                {moving && <span className="cx-meta" role="status">{moving}</span>}
+                <ToolButton icon="previous" label="Previous frame" explanation={!ready.ok ? ready.detail : workspace && !can('previous') ? reason('previous') : 'Move the loaded film back one frame.'} disabled={!ready.ok || controlsBusy || !!moving || !can('previous')} onClick={() => setPendingAction('previous')} />
+                <ToolButton icon="next" label="Next frame" explanation={!ready.ok ? ready.detail : workspace && !can('next') ? reason('next') : 'Move the loaded film forward one frame.'} disabled={!ready.ok || controlsBusy || !!moving || (workspace ? !can('next') : status?.supports_next === false)} onClick={() => workspace ? sendAction('next') : moveFilm()} />
+                {moving && <span className="cx-sr-only" role="status">{moving}</span>}
               </div>
               <div className="cx-group">
-                <button className="cx-icon" aria-label="Rotate 90 degrees" disabled={!current || rollApplying} onClick={() => updateAdjust({ rotation: (adjust.rotation + 90) % 360 })}><Icon name="rotate" /></button>
-                <button className="cx-icon" aria-label="Mirror" aria-pressed={adjust.mirror} disabled={!current || rollApplying} onClick={() => updateAdjust({ mirror: !adjust.mirror })}><Icon name="mirror" /></button>
-                <button className="cx-icon" aria-label={current?.favorite ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={!!current?.favorite} disabled={!current} onClick={toggleFavorite}><Icon name="star" /></button>
+                <ToolButton icon="rotate" label="Rotate 90 degrees" explanation="Rotate the edit clockwise. The scan stays unchanged." disabled={!current || rollApplying} onClick={() => updateAdjust({ rotation: (adjust.rotation + 90) % 360 })} />
+                <ToolButton icon="mirror" label="Mirror" explanation="Flip the edit horizontally." pressed={adjust.mirror} disabled={!current || rollApplying} onClick={() => updateAdjust({ mirror: !adjust.mirror })} />
+                <ToolButton icon="star" label={current?.favorite ? 'Remove from favorites' : 'Add to favorites'} explanation="Keep this frame in your favorites." pressed={!!current?.favorite} disabled={!current} onClick={toggleFavorite} />
               </div>
             </div>
+            </div>
+            {showBorders && current?.alignment && <p className="cx-border-help" role="status"><span className="cx-border-key">Detected</span><span className="cx-border-key estimated">Estimated</span>{current.border_preview && current.derived?.requires_wider_capture ? <span>Frame extends beyond the current scan window.</span> : null}</p>}
             {current?.purpose === 'stitched' && (current.derived?.sources?.length ?? 0) > 0 && <div className="cx-sources" role="group" aria-label="Source scans of this stitched frame">
               <span className="cx-meta">Built from {current.derived!.sources!.length} scans</span>
               <button className={sourceView === null ? 'active' : ''} aria-pressed={sourceView === null} onClick={() => setSourceView(null)}>Stitched</button>
@@ -836,15 +1152,30 @@ export function CyberScanSkin() {
                 <span>{source.label}</span>
               </button>)}
             </div>}
-            <div className="cx-compare-bar"><button className="cx-text-button" aria-pressed={showOriginal} disabled={!current} onClick={() => setShowOriginal((value) => !value)}>{showOriginal ? 'Show adjustments' : 'Show original'}</button><span className="cx-meta">{showOriginal ? 'Original image before edits' : 'Edited preview'}</span></div>
+            {current?.purpose === 'stitched' && current.alignment && current.alignment.confidence !== 'frame_found' && <p className="cx-help" role="status">{ALIGN_LABEL[current.alignment.confidence]}. {current.alignment.note || 'The full frame has not been located; review the crop manually.'}</p>}
             <div className="cx-strip" aria-label="Frames on this roll">
               {rollCaptures.length === 0 && !scanning && <span className="cx-meta cx-strip-empty">{roll ? `${roll} has no frames yet` : 'No frames on this roll yet'}</span>}
               {rollCaptures.map((c) => <button key={c.id} className={c.id === current?.id ? 'active' : ''} aria-pressed={c.id === current?.id} aria-label={frameLabel(c)} onClick={() => { setSelected(c.id); setSourceView(null); }}>
                 <img src={rendered(c, 'thumb')} alt="" loading="lazy" />
                 <span className="cx-frame-label">{frameLabel(c)}</span>
               </button>)}
-              {scanning && session && session.purpose !== 'prescan' && Array.from({ length: session.until_end ? 1 : Math.max(0, session.count - session.completed) }, (_, i) => <div key={i} className="cx-strip-pending" aria-hidden="true"><span className="cx-frame-label">Frame {rollCaptures.length + i + 1}</span></div>)}
+              {scanning && session && !['prescan', 'roll_preview'].includes(session.purpose || '') && Array.from({ length: session.until_end ? 1 : Math.max(0, session.count - session.completed) }, (_, i) => <div key={i} className="cx-strip-pending" aria-hidden="true"><span className="cx-frame-label">Frame {rollCaptures.length + i + 1}</span></div>)}
             </div>
+            {rollPreviewFrames.length > 0 && <section className="cx-roll-preview-sheet" aria-label="Low-resolution roll previews">
+              <div className="cx-roll-preview-head"><strong>Roll preview</strong><span>{rollPreviewFrames.length} frames · {rollPreviewFrames[0]?.dpi} dpi</span><span>{favoritePreviews.length} starred for full scan</span></div>
+              <div className="cx-roll-preview-list">
+                {rollPreviewFrames.map((preview) => <div key={preview.id} className={`cx-roll-preview-card${preview.id === current?.id ? ' active' : ''}`}>
+                  <button className="cx-roll-preview-select" aria-label={`View preview frame ${preview.index}`} onClick={() => { setSelected(preview.id); setSourceView(null); }}>
+                    <img src={rendered(preview, 'thumb')} alt="" loading="lazy" />
+                    <span>Frame {String(preview.index).padStart(2, '0')}</span>
+                  </button>
+                  <button className="cx-roll-preview-star" aria-label={preview.favorite ? `Unstar preview frame ${preview.index}` : `Star preview frame ${preview.index} for full scan`} aria-pressed={!!preview.favorite} disabled={controlsBusy || !!moving} onClick={() => void toggleFavoriteFor(preview)}>
+                    <Icon name="star" />{preview.favorite ? 'Starred' : 'Favorite'}
+                  </button>
+                  <small>{(preview.derived?.border_alignment || preview.alignment)?.confidence === 'frame_found' ? preview.derived?.single_pass_eligible ? 'Borders found · fits one scan' : 'Borders found · wider scan' : 'Border needs review'}</small>
+                </div>)}
+              </div>
+            </section>}
           </section>
 
           <aside className="cx-inspector" aria-label="Adjustments">
@@ -855,19 +1186,27 @@ export function CyberScanSkin() {
               {mode === 'demo' && <p className="cx-help">Sample photos are shown here. Scanner controls are disabled.</p>}
               {workspaceError && <p className="cx-help" role="status">Scanner settings unavailable: {workspaceError}</p>}
               {!nativeMode && mode !== 'demo' && <p className="cx-help">CyberView capture scans the current frame or the next several, and moves to the next frame from the toolbar. Native capture in Settings adds prescan, focus and film-base controls.</p>}
-              {can('prescan') && <button className="cx-button cx-prescan" onClick={startPrescan} disabled={!ready.ok || controlsBusy || !!moving || optionsChanged}>Prescan frame</button>}
+              {can('prescan') && <button className="cx-button cx-scanner-action" onClick={startPrescan} disabled={!ready.ok || controlsBusy || !!moving || optionsChanged}>Prescan frame · 300 dpi</button>}
+              {alignInfo?.stitched_scan.available && <button className="cx-button cx-scanner-action" onClick={startStitched} disabled={!ready.ok || controlsBusy || !!moving || optionsChanged} title="Recover edges outside a single scan window using overlapping full-resolution captures">{stitchArmed ? 'Move film and recover edges?' : 'Recover full frame'}</button>}
               {workspace?.prescan && <button className="cx-last-prescan" onClick={() => setSelected(workspace.prescan?.id || null)}>
                 <img src={rendered(workspace.prescan, 'thumb')} alt="" /><span><strong>Last prescan</strong><small>View the acquired preview</small></span>
               </button>}
-              {(['previous', 'eject_forward', 'eject_backward', 'goto'] as ActionName[]).some(can) && <>
+              {(['eject_forward', 'eject_backward', 'goto'] as ActionName[]).some(can) && <>
                 <div className="cx-control-title">Film transport</div>
-                <div className="cx-control-grid">
-                  {(['previous', 'eject_forward', 'eject_backward'] as ActionName[]).filter(can).map((action) => <button key={action} className="cx-button" disabled={!ready.ok || controlsBusy || !!moving} onClick={() => setPendingAction(action)}>{ACTION_NAMES[action]}</button>)}
+                <div className="cx-control-grid cx-eject-grid">
+                  {(['eject_forward', 'eject_backward'] as ActionName[]).map((action) => can(action)
+                    ? <button key={action} className="cx-button" disabled={!ready.ok || controlsBusy || !!moving} onClick={() => setPendingAction(action)}>{ACTION_NAMES[action]}</button>
+                    : action === 'eject_backward' && nativeMode
+                      ? <button key={action} className="cx-button cx-unverified-control" disabled title={reason(action)} aria-label="Eject backward. A supervised hardware test is required."><span>{ACTION_NAMES[action]}</span><small>Test required</small></button>
+                      : null)}
                 </div>
-                {can('goto') && <label className="cx-inline-number">Frame <input type="number" min="1" max="72" value={targetFrame} onChange={(event) => setTargetFrame(Math.max(1, Math.min(72, Number(event.target.value) || 1)))} disabled={controlsBusy} />
+                <p className="cx-help">Choose which direction the strip should leave. Keep hold of the film as it exits. Backward eject stays disabled until it has been tested on this scanner.</p>
+                {can('goto') && <label className="cx-inline-number">Frame <input type="number" min="1" max="40" value={targetFrame} onChange={(event) => setTargetFrame(Math.max(1, Math.min(40, Number(event.target.value) || 1)))} disabled={controlsBusy} />
                   <button className="cx-button" type="button" disabled={!ready.ok || controlsBusy || !!moving} onClick={() => setPendingAction('goto')}>Go to frame</button>
                 </label>}
               </>}
+              {can('realign') && <button className="cx-button" disabled={!ready.ok || controlsBusy || !!moving} onClick={() => setPendingAction('realign')}>Realign frame</button>}
+              {nativeMode && <button className="cx-button" disabled={!ready.ok || controlsBusy || !!moving} onClick={() => void api('/api/cyberview/frame-origin', { method: 'POST', body: JSON.stringify({ frame: 1 }) }).then(() => { setMessage({ text: 'Current position labeled frame 1. Film did not move.', tone: 'info' }); return refresh(); }).catch((error: Error) => setMessage({ text: error.message, tone: 'error' }))}>Label current frame as 1</button>}
               {nativeMode && (['next', 'previous', 'goto'] as ActionName[]).some((a) => workspace?.capabilities.actions[a]?.evidence === 'verified_on_device' && !can(a)) &&
                 <p className="cx-help">Scan or prescan a frame first; film moves are enabled after one scan in the session.</p>}
               {(['autofocus', 'calibrate', 'focus'] as ActionName[]).some(can) && <>
@@ -875,7 +1214,7 @@ export function CyberScanSkin() {
                 <div className="cx-control-grid">
                   {(['autofocus', 'calibrate'] as ActionName[]).filter(can).map((action) => <button key={action} className="cx-button" disabled={!ready.ok || controlsBusy || !!moving} onClick={() => setPendingAction(action)}>{ACTION_NAMES[action]}</button>)}
                 </div>
-                {can('focus') && <label className="cx-inline-number">Focus step <input type="number" min="0" max="200" value={targetFocus} onChange={(event) => setTargetFocus(Math.max(0, Math.min(200, Number(event.target.value) || 0)))} disabled={controlsBusy} />
+                {can('focus') && <label className="cx-inline-number">Focus step <input type="number" min={focusMin} max={focusMax} value={targetFocus} onChange={(event) => setTargetFocus(Math.max(focusMin, Math.min(focusMax, Number(event.target.value) || focusMin)))} disabled={controlsBusy} />
                   <button className="cx-button" type="button" disabled={!ready.ok || controlsBusy || !!moving} onClick={() => setPendingAction('focus')}>Set focus</button>
                 </label>}
               </>}
@@ -885,17 +1224,23 @@ export function CyberScanSkin() {
                 <fieldset disabled={!workspace || controlsBusy || !!moving} className="cx-scan-options">
                   <label>Resolution <select aria-label="Scan resolution" value={options.dpi} onChange={(event) => changeOptions({ dpi: Number(event.target.value) as ScanOptions['dpi'] })}>{(workspace?.capabilities.resolutions || [1800]).map((dpi) => <option value={dpi} key={dpi}>{dpi} dpi</option>)}</select></label>
                   <label>Depth <select aria-label="Scan depth" value={options.bits} onChange={(event) => changeOptions({ bits: Number(event.target.value) as 8 | 16 })}>{(workspace?.capabilities.depths || [16]).map((bits) => <option value={bits} key={bits}>{bits}-bit per channel</option>)}</select></label>
+                  <label>Repeated scans <select aria-label="Repeated scans" value={repeatSamples} onChange={(event) => setRepeatSamples(Number(event.target.value) as 1 | 2 | 4)}><option value={1}>1 scan</option><option value={2}>2 scans</option><option value={4}>4 scans</option></select></label>
+                  <p className="cx-help">Repeated scans apply to Scan frame, Scan all, and favorites. Scan selected settings captures one image.</p>
+                  <label className="cx-native-check"><input type="checkbox" checked={!!options.auto_exposure} disabled={!workspace?.capabilities.actions.auto_exposure?.available} onChange={(event) => changeOptions({ auto_exposure: event.target.checked })} />Vendor auto exposure</label>
+                  <p className="cx-help">Wide frames keep the same fixed exposure across both tiles to avoid a seam. Single-tile scans can use vendor auto exposure.</p>
                   <label>Color <select aria-label="Scan color" value={options.channel} onChange={(event) => changeOptions({ channel: event.target.value as ScanOptions['channel'] })}>{(workspace?.capabilities.channels || ['rgb']).map((channel) => <option value={channel} key={channel}>{({rgb:'Color RGB',gray:'Grayscale',bw:'Black and white'} as Record<string,string>)[channel] || channel}</option>)}</select></label>
-                  <label>Film <select aria-label="Film type" value={options.film} onChange={(event) => changeOptions({ film: event.target.value as ScanOptions['film'] })}>{(workspace?.capabilities.films || ['negative']).map((film) => <option value={film} key={film}>{film === 'negative' ? 'Negative' : film === 'positive' ? 'Positive / slide' : film}</option>)}</select></label>
+                  <label>Film <select aria-label="Scanner film type" value={filmType} onChange={(event) => void chooseFilmType(event.target.value as FilmType)}><option value="color_negative">Color negative</option><option value="bw_negative">Black &amp; white negative</option><option value="positive">Positive / slide</option></select></label>
                   <div className="cx-option-group"><span>Scan area <small>inches</small></span><div className="cx-area-grid">{(['left','top','right','bottom'] as const).map((edge) => <label key={edge}>{edge}<input aria-label={`Scan area ${edge}`} type="number" min="0" max={edge === 'left' || edge === 'right' ? '1.436666' : '.95'} step=".001" value={options.crop[edge]} onChange={(event) => changeOptions({ crop: { ...options.crop, [edge]: Number(event.target.value) } })} /></label>)}</div></div>
                   <div className="cx-option-group"><span>Scanner exposure <small>per channel · %</small></span><div className="cx-area-grid cx-exposure-grid">{['Red','Green','Blue'].map((name, channel) => <label key={name}>{name}<input aria-label={`${name} scan exposure`} type="number" min="50" max="200" step="1" value={options.exposure[channel]} onChange={(event) => { const exposure = [...options.exposure]; exposure[channel] = Number(event.target.value); changeOptions({ exposure }); }} /></label>)}</div></div>
                 </fieldset>
                 <button className="cx-button cx-apply-settings" onClick={applyOptions} disabled={!workspace || controlsBusy || !!moving || !optionsChanged}>Apply scan settings</button>
+                <button className="cx-button cx-apply-settings" onClick={() => void scanSelectedSettings()} disabled={!ready.ok || !workspace || controlsBusy || !!moving || optionsChanged || !can('scan')}>Scan selected settings</button>
+                <p className="cx-help">Captures the selected scan area. Use Scan frame for automatic border coverage.</p>
                 {optionsChanged && workspace && <p className="cx-help">Apply these changes before scanning or prescanning.</p>}
                 {workspace && !can('scan') && <p className="cx-help" role="status">{reason('scan')}</p>}
               </details>}
             </details>
-            <div className="cx-panel-head"><h2>Adjust</h2><button className="cx-text-button" onClick={() => updateAdjust({ ...NEUTRAL, negative_response: adjust.negative_response ?? 1.6, rotation: adjust.rotation, mirror: adjust.mirror, invert: adjust.invert, film_base: adjust.film_base, film_profile: adjust.film_profile })} disabled={!current || rollApplying || autoLevelBusy}>Reset</button></div>
+            <div className="cx-panel-head"><h2>Adjust</h2><button className="cx-text-button" onClick={() => updateAdjust({ ...NEUTRAL, saturation: current?.film_type === 'bw_negative' ? -100 : 0, negative_response: adjust.negative_response ?? 1.6, rotation: adjust.rotation, mirror: adjust.mirror, invert: adjust.invert, film_base: adjust.film_base, film_profile: adjust.film_profile, vendor_input_balance: adjust.vendor_input_balance, vendor_auto_gamma_tables: null })} disabled={!current || rollApplying || autoLevelBusy}>Reset</button></div>
             <fieldset disabled={!current || rollApplying || autoLevelBusy}>
               <Slider label="Exposure" value={adjust.exposure} min={-2} max={2} step={.05} unit=" EV" digits={2} onChange={(v) => updateAdjust({ exposure: v })} />
               <Slider label="Contrast" value={adjust.contrast} min={-100} max={100} step={1} onChange={(v) => updateAdjust({ contrast: v })} />
@@ -903,38 +1248,51 @@ export function CyberScanSkin() {
               <Slider label="Temperature" value={adjust.temperature} min={-100} max={100} step={1} onChange={(v) => updateAdjust({ temperature: v })} />
               <label className="cx-native-check"><input type="checkbox" checked={!!adjust.invert} disabled={vendorProfile} onChange={(e) => updateAdjust({ invert: e.target.checked, auto_color: null })} />Invert negative</label>
               {current?.image_kind === 'vendor-calibrated-transmission' && <button type="button" className="cx-button" disabled={mode !== 'live' || !!current.demo} onClick={balanceNegative}>Balance negative</button>}
-              <label className="cx-native-check" title="CyberView's automatic colour (Auto Gamma), computed from this frame"><input type="checkbox" checked={!!adjust.auto_color} disabled={!current || !!current.demo || mode !== 'live'} onChange={(e) => toggleAutoColor(e.target.checked)} />Auto colour</label>
+              <label className="cx-native-check" title="Balance this frame's colour and tone automatically; originals are preserved"><input type="checkbox" checked={!!adjust.vendor_auto_gamma_tables || !!adjust.auto_color} disabled={!current || !!current.demo || mode !== 'live' || autoLevelBusy} onChange={(e) => vendorProfile ? void vendorAutoTone(e.target.checked) : toggleAutoColor(e.target.checked)} />Auto colour</label>
               <label className="cx-native-check"><input type="checkbox" checked={!!adjust.monochrome} onChange={(e) => updateAdjust({ monochrome: e.target.checked })} />Threshold black and white</label>
               <details className="cx-subpanel cx-image-controls"><summary>Variations</summary>
                 <p className="cx-help">Make a small change to the current edit.</p>
                 <div className="cx-variations">{['Lighter', 'Darker', 'Warmer', 'Cooler', 'More red', 'More green', 'More blue'].map((kind) => <button type="button" key={kind} className="cx-button" onClick={() => variation(kind)}>{kind}</button>)}</div>
               </details>
+              <details className="cx-subpanel cx-image-controls"><summary>Cleanup &amp; detail</summary>
+                <p className="cx-help">Optional software adjustments; these do not reproduce CyberView ROC or GEM exactly.</p>
+                <Slider label="Color restoration" value={adjust.color_restoration ?? 0} min={0} max={1} step={.05} digits={2} onChange={(value) => updateAdjust({ color_restoration: value })} />
+                <Slider label="Grain reduction" value={adjust.grain_reduction ?? 0} min={0} max={1} step={.05} digits={2} onChange={(value) => updateAdjust({ grain_reduction: value })} />
+                <Slider label="Sharpening" value={adjust.sharpening ?? 0} min={0} max={1} step={.05} digits={2} onChange={(value) => updateAdjust({ sharpening: value })} />
+              </details>
               <details className="cx-subpanel cx-image-controls"><summary>Film &amp; colour</summary>
+              {current?.image_kind === 'vendor-calibrated-transmission' && current.film_type !== 'positive' && <>
+                <button type="button" className="cx-button" disabled={mode !== 'live' || !!current.demo || autoLevelBusy} onClick={() => void vendorAutoTone(true)}>Recalculate auto colour</button>
+                <p className="cx-help">Off by default. Optional colour and tone adjustment; favorited scans retain the preview's choice.</p>
+              </>}
               <label className="cx-profile-field">Film rendering profile
                 <select aria-label="Film rendering profile" value={adjust.film_profile || ''} disabled={mode !== 'live' || !!current?.demo} onChange={(event) => {
                   const profile = profiles.find((p) => p.id === event.target.value);
-                  updateAdjust({ film_profile: event.target.value || null, auto_color: null,
-                    ...(profile?.kind === 'vendor-negative' ? { invert: true } : {}),
+                  updateAdjust({ film_profile: event.target.value || null, auto_color: null, vendor_auto_gamma_tables: null,
+                    ...(profile?.kind === 'vendor-negative' ? { invert: true,
+                      vendor_input_balance: (adjust.film_base || [1,1,1]).every((value) => value > .02 && value < .99),
+                      black_point: 0, white_point: 1, gamma: 1, rgb_balance: [1,1,1], curve: [0,.25,.5,.75,1] } : { vendor_input_balance: false }),
                     ...(profile?.kind === 'reference-tone' ? { negative_response: profile.input_response ?? .5, invert: true } : {}) });
                 }}>
-                  <option value="">None</option>
+                  <option value="">Basic conversion (fallback)</option>
                   {adjust.film_profile && !profiles.some((profile) => profile.id === adjust.film_profile) && <option value={adjust.film_profile}>Saved profile · {adjust.film_profile.slice(0, 8)}</option>}
                   {profiles.map((profile) => <option value={profile.id} key={profile.id} disabled={!!profile.kind && current?.image_kind !== 'vendor-calibrated-transmission'}>{profile.name}{profile.maker ? ` · ${profile.maker}` : ''}</option>)}
                 </select>
               </label>
+              {!adjust.film_profile && <p className="cx-help">New color negatives use the manufacturer’s generic conversion when its local tables are available. Use Balance negative to refresh this scan.</p>}
               <p className="cx-help">Profiles apply to this edit. Their color response is an approximation, not a calibrated scanner profile.</p>
               {profiles.find((p) => p.id === adjust.film_profile)?.kind === 'reference-tone' &&
                 <p className="cx-help">Experimental reference appearance. For an older scan, use Balance negative first, then select this profile. Other film and scenes still need comparison.</p>}
               {profileError && <p className="cx-help" role="status">{profileError}</p>}
-              {vendorProfile && <p className="cx-help">Uses the AFL model curve and this film stock’s colour term. Best with a scan acquired at balanced exposure. This method is still being compared with CyberView.</p>}
+              {vendorProfile && <p className="cx-help">Uses the scanner’s recovered model curves and manufacturer film conversion. Measured film-base normalization is recorded separately; no photographic reference is fitted.</p>}
               {adjust.invert && !vendorProfile && <>
                 <p className="cx-help">Film base may be suggested from the brightest area. Review it here; this is a starting point without scanner colour calibration.</p>
-                <Slider label="Negative response" value={adjust.negative_response ?? 1.6} min={.1} max={3} step={.05} digits={2} onChange={(v) => updateAdjust({ negative_response: v, auto_color: null })} />
+                <Slider label="Negative response" value={adjust.negative_response ?? 1.6} min={.1} max={3} step={.05} digits={2} onChange={(v) => updateAdjust({ negative_response: v, auto_color: null, vendor_auto_gamma_tables: null })} />
                 {['Red', 'Green', 'Blue'].map((name, channel) => <label key={name} className="cx-base-field">{name} base
                   <input type="number" min="0.01" max="1" step="0.01" value={adjust.film_base?.[channel] ?? 1} onChange={(e) => {
                     const value = Number(e.target.value);
                     if (!Number.isFinite(value) || value < .01 || value > 1) return;
-                    const base = [...(adjust.film_base ?? [1, 1, 1])]; base[channel] = value; updateAdjust({ film_base: base, auto_color: null });
+                    const base = [...(adjust.film_base ?? [1, 1, 1])]; base[channel] = value; updateAdjust({ film_base: base, auto_color: null, vendor_auto_gamma_tables: null });
                   }} />
                 </label>)}
               </>}
@@ -973,8 +1331,9 @@ export function CyberScanSkin() {
                   <button type="button" className="cx-button" onClick={autoAlign} disabled={!current || current.demo || mode !== 'live' || aligning}>{aligning ? 'Aligning…' : 'Auto align 35 mm'}</button>
                   <label className="cx-inline-number">Bleed <input aria-label="Crop bleed in millimetres" type="number" min="-2" max="2" step=".25" value={alignInfo?.settings.bleed_mm ?? 0} disabled={!alignInfo} onChange={(event) => { const v = Number(event.target.value); if (Number.isFinite(v) && v >= -2 && v <= 2) saveAlign({ bleed_mm: v }); }} /> mm</label>
                 </div>
-                <p className="cx-help">Finds the frame edges and crops exactly {36 + 2 * (alignInfo?.settings.bleed_mm ?? 0)} × {24 + 2 * (alignInfo?.settings.bleed_mm ?? 0)} mm. Negative bleed trims inside the edges.</p>
+                <p className="cx-help">Crops at detected borders. Missing edges use a nominal 36 × 24 mm size; stitched auto crop requires both side borders. Negative bleed trims inside the edges.</p>
                 {current?.alignment && <p className="cx-help" role="status">{ALIGN_LABEL[current.alignment.confidence]}{current.alignment.exact ? ` · ${current.alignment.crop_mm.join(' × ')} mm` : ''}{current.alignment.skew_deg != null ? ` · skew ${current.alignment.skew_deg.toFixed(2)}°` : ''}{current.alignment.note ? `. ${current.alignment.note}` : ''}</p>}
+                {current?.coverage_verification?.vertical_containment && current.coverage_verification.vertical_containment.status !== 'verified' && <p className="cx-help" role="status">Full acquired height kept; top and bottom borders are not verified.</p>}
                 <label className="cx-native-check"><input type="checkbox" checked={!!alignInfo?.settings.auto} disabled={!alignInfo} onChange={(e) => saveAlign({ auto: e.target.checked })} />Align new scans automatically</label>
                 <p className="cx-help">Manual crop, in percent of the scan. The original stays intact.</p>
                 <div className="cx-area-grid">{(['left','top','right','bottom'] as const).map((edge) => <label key={edge}>{edge} %<input aria-label={`Image crop ${edge} percent`} type="number" min="0" max="100" step="1" value={Math.round(crop[edge] * 100)} onChange={(event) => {
@@ -987,7 +1346,6 @@ export function CyberScanSkin() {
                 <button type="button" className="cx-text-button" onClick={() => updateAdjust({ crop: { left: 0, top: 0, right: 1, bottom: 1 } })}>Reset crop</button>
               </details>
             </fieldset>
-            <p className="cx-help">Applied to previews and exports. The original TIFF is never changed.</p>
             <button className="cx-button cx-apply-settings" disabled={!current || !!current.demo || mode !== 'live' || rollApplying} onClick={() => setConfirmRoll(true)}>{rollApplying ? 'Applying color…' : 'Apply color to roll'}</button>
 
             <div className="cx-panel-head"><h2>Export</h2></div>
@@ -1003,7 +1361,9 @@ export function CyberScanSkin() {
               <dl className="cx-facts">
                 <dt>Size</dt><dd>{current.width} × {current.height}</dd>
                 <dt>Resolution</dt><dd>{current.dpi} dpi</dd>
-                <dt>Depth</dt><dd>{current.bits}-bit per channel</dd>
+                <dt>Container depth</dt><dd>{current.bits}-bit per channel</dd>
+                <dt>Sensor precision</dt><dd>{current.precision_measurement?.summary || (current.effective_bits != null ? `${current.effective_bits} bits (estimated)` : 'Not measured')}</dd>
+                {current.precision_measurement?.channels?.every((channel) => channel.code_lattice_bits_ceiling != null) && <><dt>Source code grid</dt><dd>{current.precision_measurement.channels.map((channel) => `${channel.code_lattice_bits_ceiling?.toFixed(1)} bits`).join(' / ')} · not sensor precision</dd></>}
                 {current.image_kind === 'vendor-calibrated-transmission' && <><dt>Original</dt><dd>Transmission · not inverted</dd></>}
                 <dt>Film term</dt><dd>{current.cyberview?.film_term || 'Unknown'}</dd>
                 <dt>Auto exposure</dt><dd>{current.cyberview?.auto_exposure == null ? 'Unmeasured' : current.cyberview.auto_exposure ? 'On' : 'Off'}</dd>
@@ -1015,14 +1375,17 @@ export function CyberScanSkin() {
       </>}
 
       {view === 'library' && <section className="cx-page">
-        <header className="cx-page-head"><div><p className="cx-eyebrow">THE COLLECTION</p><h1>Every roll has <em>a story.</em></h1></div><span className="cx-meta">{captures.length} {captures.length === 1 ? 'frame' : 'frames'}</span></header>
-        {captures.length === 0 && <p className="cx-help">Scans appear here once saved.</p>}
-        {Object.entries(captures.reduce<Record<string, Capture[]>>((groups, c) => { (groups[c.roll || 'Untitled roll'] ||= []).push(c); return groups; }, {})).map(([name, list]) =>
+        <header className="cx-page-head"><div><p className="cx-eyebrow">THE CONTACT SHEET / {filmLook.code}</p><h1>Every roll has <em>a story.</em></h1></div><span className="cx-collection-count"><strong>{String(archiveCaptures.length).padStart(2, '0')}</strong><span>{demo ? 'SAMPLE' : 'ARCHIVED'} IMAGES</span></span></header>
+        {archiveCaptures.length === 0 && <p className="cx-help">Scans appear here once saved.</p>}
+        {Object.entries(archiveCaptures.reduce<Record<string, Capture[]>>((groups, c) => { (groups[c.roll || 'Untitled roll'] ||= []).push(c); return groups; }, {})).map(([name, list]) =>
           <div key={name} className="cx-roll">
-            <h2>{name}<span className="cx-meta">{list.length} · {shortDate(list[0].created_at)}</span></h2>
+            <div className="cx-roll-heading"><h2>{name}<span className="cx-meta">{list.length} · {shortDate(list[0].created_at)}</span></h2>
+              {mode === 'live' && <button className="cx-delete-roll" disabled={controlsBusy || !!moving} onClick={() => void deleteArchiveRoll(name, list[0].roll || '')}>Delete roll</button>}
+            </div>
             <div className="cx-grid">
               {list.map((c) => <button key={c.id} onClick={() => { setRoll(c.roll || ''); setSelected(c.id); setSourceView(null); setView('scan'); }} aria-label={`Open ${c.title}`}>
                 <img src={rendered(c, 'thumb')} alt="" loading="lazy" />
+                {c.purpose === 'roll_preview' && <b className="cx-archive-preview-badge">PREVIEW · {c.dpi} DPI</b>}
                 <span><span className="cx-edge">{edgeNumber(c.index)}</span>{c.favorite && <Icon name="star" size={14} />}</span>
               </button>)}
             </div>
@@ -1112,6 +1475,13 @@ export function CyberScanSkin() {
         </div>
       </section>}
     </main>
+
+    {fullscreenPhoto && <div className="cx-photo-fullscreen" role="dialog" aria-modal="true" aria-label="Fullscreen photograph" ref={fullscreenDialog}>
+      <button className="cx-icon cx-photo-fullscreen-close" aria-label="Close fullscreen photograph" onClick={closeFullscreenPhoto}><Icon name="close" size={21} /></button>
+      <div className="cx-cinema-frame" style={{ aspectRatio: fullscreenAspect, width: `min(calc(100vw - 100px),calc((100dvh - 180px) * ${fullscreenAspect}))` }}><img src={rendered(fullscreenPhoto, 'preview')} alt={fullscreenPhoto.title}
+        onLoad={(event) => { const image = event.currentTarget; if (image.naturalHeight > 0) setFullscreenAspect(image.naturalWidth / image.naturalHeight); }} /></div>
+      <button className="cx-button cx-photo-fullscreen-edit" onClick={() => { setRoll(fullscreenPhoto.roll || ''); setSelected(fullscreenPhoto.id); setSourceView(null); closeFullscreenPhoto(); setView('scan'); }}>Open in scanner <span aria-hidden="true">↗</span></button>
+    </div>}
 
     {message && <div className={'cx-toast ' + message.tone} role={message.tone === 'error' ? 'alert' : 'status'}>
       <Icon name={message.tone === 'error' ? 'alert' : 'check'} /><span>{message.text}</span>

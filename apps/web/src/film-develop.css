@@ -1,0 +1,21 @@
+/* Keep the developing companion in the chosen film family, without changing timers. */
+.roll-list-item { display: flex; align-items: center; gap: 10px; border-top: 1px solid #e0d4c5; }
+.roll-list .roll-list-select { flex: 1; width: auto; border: 0; border-top: 0; padding: 15px 0; }
+.roll-list .roll-delete { flex: none; width: auto; border: 1px solid #ddcfc0; border-radius: 4px; padding: 7px 9px; background: transparent; color: #a33d32; font-size: 10px; }
+.roll-list .roll-delete:hover:not(:disabled) { border-color: #a33d32; background: rgba(163,61,50,.08); }
+.text-button.danger { color: #a33d32; }
+.text-button.danger:hover:not(:disabled) { background: rgba(163,61,50,.10); color: #822b23; }
+.app[data-film-type='bw_negative'] { background: #eceee8; color: #232b27; --dev-accent: #35483b; --dev-sidebar: #141a17; --dev-active: #2c3830; --dev-muted: #b9c5b7; }
+.app[data-film-type='positive'] { background: #edf0ee; color: #223341; --dev-accent: #3b7187; --dev-sidebar: #13212c; --dev-active: #2c4454; --dev-muted: #b6ccd4; }
+.app[data-film-type='bw_negative'] .sidebar,.app[data-film-type='positive'] .sidebar { background: var(--dev-sidebar); }
+.app[data-film-type='bw_negative'] .sidebar-note,.app[data-film-type='positive'] .sidebar-note { color: var(--dev-muted); }
+.app[data-film-type='bw_negative'] .sidebar nav button,.app[data-film-type='positive'] .sidebar nav button { color: var(--dev-muted); }
+.app[data-film-type='bw_negative'] .sidebar nav button.active,.app[data-film-type='positive'] .sidebar nav button.active { background: var(--dev-active); color: #f5f5ed; }
+.app[data-film-type='bw_negative'] .brand-mark,.app[data-film-type='bw_negative'] .brand-dot,
+.app[data-film-type='positive'] .brand-mark,.app[data-film-type='positive'] .brand-dot { color: var(--dev-muted); }
+.app[data-film-type='bw_negative'] .orange,.app[data-film-type='bw_negative'] .eyebrow,
+.app[data-film-type='positive'] .orange,.app[data-film-type='positive'] .eyebrow { color: var(--dev-accent); }
+.app[data-film-type='bw_negative'] button.primary,.app[data-film-type='positive'] button.primary { background: var(--dev-accent); color: #fff; }
+.app[data-film-type='bw_negative'] input,.app[data-film-type='bw_negative'] select,
+.app[data-film-type='positive'] input,.app[data-film-type='positive'] select { accent-color: var(--dev-accent); }
+.app[data-film-type='bw_negative'] .topbar,.app[data-film-type='positive'] .topbar { border-color: #cbd1ca; }

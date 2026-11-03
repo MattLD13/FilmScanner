@@ -1,16 +1,17 @@
 """Auto-align: stitch nudged scans, find the 35 mm frame, crop exactly 36 x 24 mm."""
 import numpy as np
 import pytest
+from services.imaging import film_type_detection
 
 from services.imaging import frame_align as fa
 
 DPI = 600  # small images keep the tests fast; geometry scales with dpi
 
 
-def strip(frames=3, gap_mm=2.0, rebate_mm=1.0, seed=0, transmission=True):
+def strip(frames=3, gap_mm=2.0, rebate_mm=1.0, seed=0, transmission=True, frame_size=(36, 24)):
     """A negative strip as transmission: bright bare base between frames, textured pictures."""
     rng = np.random.default_rng(seed)
-    fw, fh = fa.mm_to_px(36, DPI), fa.mm_to_px(24, DPI)
+    fw, fh = fa.mm_to_px(frame_size[0], DPI), fa.mm_to_px(frame_size[1], DPI)
     gap, reb = fa.mm_to_px(gap_mm, DPI), fa.mm_to_px(rebate_mm, DPI)
     width = int(round(frames * fw + (frames + 1) * gap)); height = int(round(fh + 2 * reb))
     img = np.full((height, width, 3), [.85, .55, .35])  # orange mask base, bright in transmission
@@ -46,14 +47,93 @@ def test_single_full_window_finds_both_edges_and_crops_exactly():
     assert abs(result['skew_deg']) < .3
 
 
+@pytest.mark.parametrize('supported_rebate',[True,False])
+def test_high_resolution_rebate_hysteresis_requires_strong_uniform_seeds(supported_rebate):
+    dpi=1800;height=200;width=2755
+    y=np.linspace(-1,1,height)[:,None]
+    image=np.repeat((.29+.035*np.sin(np.arange(width)/51))[None,:,None],height,axis=0)
+    image=np.repeat(image,3,axis=2)
+    image[:,:66]=.89
+    # Deliberately narrow final rebate followed by white scanner-edge pixels.
+    # At1800DPI the true rebate is long enough but the strict spread test is
+    # fragmented by harmless fluctuations around its .1 cutoff.
+    image[:,2705:2734]=.87+y[:,:,None]*.096
+    for column in range(2705,2734):
+        if supported_rebate and column%3!=0:image[:,column]=.87+y*.08
+    image[:,2734:2739]=.87+y[:,:,None]*.2
+    image[:,2739:]=.994
+    result=fa._edges_along(image @ fa.LUMA,np.ones((height,width),bool),1,fa.mm_to_px(36,dpi),dpi)
+    if supported_rebate:
+        assert result['found']=='both'
+        assert abs(result['end']-2705)<=4
+    else:
+        assert result['found']!='both', 'A weak-only patch must not establish an exposure border'
+
+
+def test_film_detection_accounts_for_relative_channel_exposure_without_changing_pixels():
+    image,_,_=strip(frame_size=(34.5,24),frames=1)
+    exposure=[100,155,260]
+    acquired=image*np.array(exposure)/100
+    acquired=np.clip(acquired,0,1)
+    original=acquired.copy()
+    result=film_type_detection.detect(acquired,DPI,exposure=exposure)
+    assert result['film_type']=='color_negative' and result['confidence']>=.8
+    assert result['exposure_normalization']['applied'] is True
+    assert np.array_equal(acquired,original)
+    with pytest.raises(ValueError,match='exposures'):
+        film_type_detection.detect(acquired,DPI,exposure=[100,0,100])
+
+
+def test_rebate_witness_requires_both_edges_and_minimum_acquired_margin():
+    alignment = {'x': {'found': 'both', 'start': 30, 'end': 570}}
+    safe = fa.rebate_witness(alignment, 600, DPI, minimum_mm=.5)
+    assert safe['verified'] and safe['left_margin_mm'] == pytest.approx(1.27)
+    assert not fa.rebate_witness({'x': {'found': 'both', 'start': 2, 'end': 598}}, 600, DPI, .5)['verified']
+    assert not fa.rebate_witness({'x': {'found': 'start', 'start': 30}}, 600, DPI, .5)['verified']
+
+
 def test_positive_polarity_and_bleed():
     img, lefts, top = strip(transmission=False)
     x0 = int(round(lefts[1] - fa.mm_to_px(1, DPI)))
     scan = window(img, x0, int(round(fa.mm_to_px(38.5, DPI))))
     tight = fa.align_35mm(scan, DPI, transmission=False, bleed_mm=-.5)
     assert tight['confidence'] == 'frame_found'
-    assert tight['crop_mm'][0] == pytest.approx(35, abs=.05) and tight['crop_mm'][1] == pytest.approx(23, abs=.05)
+    # Border localization is within two pixels; bleed trims the measured bounds.
+    assert tight['crop_mm'] == pytest.approx([35, 23], abs=2 * fa.MM_PER_INCH / DPI)
+    assert tight['crop_basis'] == {'x': 'detected_borders', 'y': 'detected_borders'}
     assert tight['crop_px']['left'] == pytest.approx(lefts[1] - x0 + fa.mm_to_px(.5, DPI), abs=2)
+
+
+@pytest.mark.parametrize('frame_size', [(35.4, 23.6), (36.6, 24.4), (37.2, 24.0)])
+def test_crop_uses_actual_frame_borders_instead_of_forcing_nominal_dimensions(frame_size):
+    img, lefts, top = strip(frame_size=frame_size)
+    x0 = int(round(lefts[1] - fa.mm_to_px(1, DPI)))
+    scan = window(img, x0, int(round(fa.mm_to_px(39, DPI))))
+    result = fa.align_35mm(scan, DPI, transmission=True)
+    assert result['exact'] and result['confidence'] == 'frame_found'
+    assert result['crop_basis'] == {'x': 'detected_borders', 'y': 'detected_borders'}
+    assert result['crop_mm'] == pytest.approx(frame_size, abs=2 * fa.MM_PER_INCH / DPI)
+    c = result['crop_px']
+    assert c['left'] == result['x']['start']
+    assert c['left'] + c['width'] == result['x']['end']
+    assert c['top'] == result['y']['start']
+    assert c['top'] + c['height'] == result['y']['end']
+
+
+@pytest.mark.parametrize('transmission', [True, False])
+def test_two_frame_strip_with_central_gap_finds_a_complete_frame(transmission):
+    img, lefts, top = strip(frames=2, transmission=transmission)
+    before = img.copy()
+    result = fa.align_35mm(img, DPI, transmission=transmission)
+    assert result['confidence'] == 'frame_found' and result['exact']
+    assert min(abs(result['x']['start'] - left) for left in lefts) <= 2
+    assert result['x']['end'] - result['x']['start'] == pytest.approx(fa.mm_to_px(36, DPI), abs=2)
+    assert result['crop_px']['left'] == pytest.approx(result['x']['start'], abs=2)
+    assert len(result['x']['frames']) == 2
+    for detected, left in zip(result['x']['frames'], lefts):
+        assert detected['start'] == pytest.approx(left, abs=2)
+        assert detected['end'] == pytest.approx(left + fa.mm_to_px(36, DPI), abs=2)
+    np.testing.assert_array_equal(img, before)
 
 
 def test_three_nudged_scans_are_stitched_from_image_content():
@@ -119,12 +199,13 @@ def test_nominal_exact_dimensions_do_not_hide_missing_acquired_pixels():
     assert 'not applied' in result['note']
 
 
+@pytest.mark.filterwarnings('error::RuntimeWarning')
 def test_uncovered_mosaic_margin_outside_crop_does_not_make_crop_inexact():
     img, lefts, top = strip(seed=13)
     x0 = int(round(lefts[1] - fa.mm_to_px(1, DPI)))
     scan = window(img, x0, int(round(fa.mm_to_px(38.5, DPI))))
     mask = np.ones(scan.shape[:2], bool)
-    mask[:2, :2] = False
+    mask[:, :4] = False
     result = fa.align_35mm(scan, DPI, True, covered=mask)
     assert result['exact'] and result['missing_pixels'] == 0
     assert result['coverage_fraction'] == 1

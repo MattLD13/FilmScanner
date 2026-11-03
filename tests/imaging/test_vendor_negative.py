@@ -58,6 +58,38 @@ def test_cached_vendor_profile_hash_and_source_precision_survive_restart(tmp_pat
         store.close()
 
 
+def test_explicit_input_balance_is_separate_from_legacy_vendor_recipes():
+    profile=vendor_negative.create(*fixture_data(),'fixture.ft','Fixture')
+    values=np.array([[[.10,.08,.04],[.60,.45,.25]]])
+    base=[.7,.5,.3]
+    original=values.copy()
+    edit=Adjustments(invert=True,film_profile=profile['id'],film_base=base,vendor_input_balance=True)
+    expected=vendor_negative.apply(vendor_negative.exposure_normalized_input(values,base),profile)
+    assert np.array_equal(before_levels(values,edit,profile),expected)
+    legacy=Adjustments(invert=True,film_profile=profile['id'],film_base=base)
+    assert np.array_equal(before_levels(values,legacy,profile),vendor_negative.apply(values,profile))
+    assert np.array_equal(values,original)
+    assert not np.array_equal(expected,before_levels(values,legacy,profile))
+    with pytest.raises(ValueError,match='film base'):
+        vendor_negative.exposure_normalized_input(values,[1,1,1])
+
+
+def test_default_vendor_profile_uses_manufacturer_generic_and_never_reference_fit(tmp_path,monkeypatch):
+    monkeypatch.setenv('FRAME_FILMTERM_DIRS',str(tmp_path/'not-installed'))
+    store=Store(tmp_path/'library')
+    try:
+        assert vendor_negative.default_profile(store) is None
+        film,gamma=fixture_data()
+        film=film.replace(b'Synthetic negative',b'Generic Negative')
+        generic=vendor_negative.create(film,gamma,'Generic Negative.ft','GAMMA')
+        filmterms.remember(store,generic)
+        assert vendor_negative.default_profile(store)['id']==generic['id']
+        assert generic['kind']=='vendor-negative'
+        assert 'reference' not in generic
+    finally:
+        store.close()
+
+
 def test_scan08_lut_boundaries_and_legacy_profile_reproduction():
     profile = vendor_negative.create(*fixture_data(), 'fixture.ft', 'Fixture')
     values = np.repeat(np.array([0, 1, 15, 16, 17, 31, 32, 65535], np.uint16)[None, :, None], 3, axis=-1)

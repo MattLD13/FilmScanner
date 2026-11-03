@@ -12,9 +12,9 @@ static const char *mode(void) { const char *s = getenv("FRAME_NATIVE_FIXTURE_MOD
 static DWORD position=0,focus_value=0;static int film_loaded=1;
 static int validate(const AflScanRequest *request) {
     const AflScanBlock *s=&request->scan;
-    if (request->flags || !s->dpi || !(s->mode==2||s->mode==3||s->mode==6||s->mode==7) || s->reserved || s->requested_lines!=255 || !s->callback || s->left<0 || s->right<=s->left || s->bottom<=s->top || s->option33!=3 || s->option34!=1 || !(s->film_class==0x20||s->film_class==0x10) || s->option38!=1 || s->option3c!=0x80) return 0;
+    if (request->flags>1 || !s->dpi || !(s->mode==2||s->mode==3||s->mode==6||s->mode==7) || s->reserved || s->requested_lines!=255 || !s->callback || s->left<0 || s->right<=s->left || s->bottom<=s->top || s->option33!=3 || s->option34!=1 || !(s->film_class==0x20||s->film_class==0x10) || s->option38!=1 || s->option3c!=0x80) return 0;
     for(unsigned c=0;c<3;c++) {
-      if(s->gain[c]||s->exposure[c]<50||s->exposure[c]>200||s->offset[c]!=100||!s->lut[c]) return 0;
+      if(s->gain[c]||s->exposure[c]<50||s->exposure[c]>400||s->offset[c]!=100||!s->lut[c]) return 0;
       for(unsigned i=0;i<4096;i++) if(s->lut[c][i]!=i)return 0;
     }
     return 1;
@@ -58,9 +58,13 @@ __declspec(dllexport) int __cdecl ScannerDeviceIO(int selector, void *parameter)
     if(selector==15){*(DWORD *)parameter=focus_value;return 1;}
     if(selector==14){focus_value=22;return 1;}
     if(selector==17){WORD *v=parameter;v[0]=100;v[1]=120;v[2]=150;return 1;}
+    if(selector==23){if(!strcmp(mode(),"realign-slips"))position+=1;return 1;}
     if (selector == 0x20) {
         AflScanRequest *request = parameter; AflStrip strip; WORD pixels[7*3*3]; DWORD rows = 0;
         if (!opened || !status_seen || !request || !validate(request)) return 0;
+        /* Fixture only: observable proof that the exact flag reaches selector32.
+         * The true module may use a local request; these are not hardware gains. */
+        if(request->flags==1){request->scan.exposure[0]=101;request->scan.exposure[1]=123;request->scan.exposure[2]=157;}
         status_seen = 0; /* Every acquisition needs a fresh status query. */
         if (!strcmp(mode(),"no-image")) return 1;
         if (!strcmp(mode(),"wide")) { /* full-width strips, enough lines for the live preview */
@@ -85,6 +89,7 @@ __declspec(dllexport) int __cdecl ScannerDeviceIO(int selector, void *parameter)
                 pixels[(y*strip.width+x)*3+c] = (WORD)(((rows+y)*100+x*7+c) << 4);
             rows += strip.lines; strip.remaining_lines = strip.height-rows; strip.last = rows == strip.height;
             if (!strcmp(mode(),"bad-remaining")) strip.remaining_lines++;
+            if (!strcmp(mode(),"legacy-auto-preview")) strip.remaining_lines=0x00640064;
             BYTE bytes[7*3*3*2];int channels=(strip.mode==3||strip.mode==7)?3:1,bits=(strip.mode==6||strip.mode==7)?16:8;
             for(DWORD sample=0;sample<strip.lines*strip.width*(DWORD)channels;sample++) {
                 if(bits==16)((WORD *)bytes)[sample]=pixels[sample];else bytes[sample]=(BYTE)(pixels[sample]>>8);

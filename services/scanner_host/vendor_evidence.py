@@ -108,6 +108,7 @@ def inspect_installation(root: Path | None = None) -> dict:
     proved = set(workspace.validation().get('actions', []))
     configurations = workspace.validation().get('configurations', [])
     dpis = sorted({c['dpi'] for c in configurations})
+    repeats_recorded=any(o.get('operation')=='Stationary original acquisitions and optically aligned repeat mean' for o in workspace.validation().get('observations',[]))
 
     def native_feature(fid, name, action, detail_ok, detail_pending):
         ok = action in proved
@@ -136,12 +137,19 @@ def inspect_installation(root: Path | None = None) -> dict:
                            'Exists in the module (selector 14); not tested.'),
             native_feature('dmin', 'Film-base measurement', 'calibrate', 'Native only. Measures red, green and blue film base.',
                            'Exists in the module (selector 17); not tested.'),
-            {'id': 'auto_exposure', 'name': 'Vendor auto exposure', 'evidence': 'static_only', 'available': False,
-             'detail': 'Scan flag bit 0 runs a 300 dpi pre-pass and sets exposure. Needs one supervised scan.'},
-            {'id': 'scan_area', 'name': 'Custom scan area and other resolutions', 'evidence': 'static_only', 'available': False,
-             'detail': 'Any area up to 2586 by 1708 pixels; 360, 450 and 900 dpi buckets exist. Untested.'},
-            {'id': 'multisample', 'name': 'Multi-scan averaging', 'evidence': 'static_only', 'available': False,
-             'detail': 'Not in the AFL module. CyberScan X could average repeated native scans itself.'},
+            native_feature('auto_exposure','Vendor auto exposure','auto_exposure',
+                'Exact flag-1 preview/rescan tested at recorded RGB300/1800 geometries; internal gains are not inferred from the caller block.',
+                'Flag-1 path exists but remains disabled until physical validation.'),
+            native_feature('goto','Go to frame','goto','Bounded vendor relative-counter moves; not an absolute encoder.',
+                'Requires a supervised positioning test.'),
+            native_feature('manual_focus','Manual focus','focus','Only the focus interval recorded in native validation is enabled.',
+                'Requires an adjacent-step physical test.'),
+            native_feature('realign','Vendor frame realignment','realign','Initialized-session selector23; a new optical preview is required afterward.',
+                'Requires physical validation before enabling.'),
+            {'id':'scan_area','name':'Acquisition modes and scan areas','evidence':'recorded_on_device' if configurations else 'static_only',
+             'available':native and bool(configurations),'detail':'Only individually recorded resolution/depth/channel/film/window combinations are enabled.'},
+            {'id':'multisample','name':'Optically aligned repeated-scan averaging','evidence':'recorded_on_device' if repeats_recorded else 'static_only',
+             'available':native,'detail':'Implemented in FRAME with preserved source TIFFs and acquired contribution counts; repeated scans require fixed exposure.'},
             {'id': 'infrared', 'name': 'Infrared dust removal', 'evidence': 'unavailable', 'available': False,
              'detail': 'The AFL module has no infrared channel; CyberView ICE settings belong to other models.'},
         ],

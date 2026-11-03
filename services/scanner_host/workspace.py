@@ -34,6 +34,7 @@ class ScanOptions(BaseModel):
     crop: ScanCrop = Field(default_factory=ScanCrop)
     exposure: list[int] = Field(default_factory=lambda: [100, 100, 100], min_length=3, max_length=3)
     focus: int | None = Field(default=None, ge=0, le=200)
+    auto_exposure: bool = False
 
     @field_validator('exposure')
     @classmethod
@@ -51,8 +52,20 @@ class ScanOptions(BaseModel):
 
 
 DEFAULT_OPTIONS = ScanOptions().model_dump()
+FULL_WINDOW_CROP = {'left': 0., 'top': 0., 'right': 2586 / 1800, 'bottom': .95}
 VALIDATION = Path(__file__).with_name('native_validation.json')
-ACTIONS = ('scan', 'prescan', 'next', 'previous', 'eject_forward', 'eject_backward', 'goto', 'autofocus', 'focus', 'calibrate', 'nudge')
+ACTIONS = ('scan', 'prescan', 'next', 'previous', 'eject_forward', 'eject_backward', 'goto', 'autofocus', 'focus', 'calibrate', 'nudge', 'realign', 'auto_exposure')
+
+
+def border_preview_options(options: dict) -> dict:
+    return ScanOptions(**(options | {'dpi': 300, 'bits': 8, 'channel': 'rgb',
+                                     'crop': FULL_WINDOW_CROP, 'focus': None, 'auto_exposure': False})).model_dump()
+
+
+def full_frame_scan_options(options: dict) -> dict:
+    """Full-resolution acquisition window used after a preview proves both rebates fit."""
+    return ScanOptions(**(options | {'dpi': 1800, 'bits': 16, 'channel': 'rgb',
+                                     'crop': FULL_WINDOW_CROP, 'focus': None})).model_dump()
 
 
 def validation() -> dict:
@@ -71,17 +84,42 @@ def clamp_exposure(values) -> list[int]:
     return [int(min(high, max(low, round(v)))) for v in values]
 
 
+def focus_limits() -> list[int] | None:
+    """Measured focus interval, or the legacy model bound when none is recorded.
+
+    Malformed evidence must disable the operation instead of broadening it to
+    the model's entire parameter interval.
+    """
+    values=validation().get('focus_range',[0,200])
+    if (not isinstance(values,(list,tuple)) or len(values)!=2 or
+            any(type(value) is not int for value in values) or
+            not 0<=values[0]<=values[1]<=200):
+        return None
+    return list(values)
+
+
 def validated_options(options: dict) -> bool:
     """A configuration is proven, or a proven one with a film-base exposure inside the
     validated ``exposure_range`` (recorded only after a supervised scan)."""
     normalized = ScanOptions(**options).model_dump()
+    if normalized['auto_exposure']:
+        if 'auto_exposure' not in validation().get('actions', []):
+            return False
+        # The command flag is validated separately from the acquisition geometry.
+        normalized = normalized | {'auto_exposure': False}
+        recorded_auto=validation().get('auto_exposure_configurations')
+        if recorded_auto is not None:
+            seeds=dict(normalized,exposure=[100,100,100])
+            if seeds not in [ScanOptions(**(entry | {'auto_exposure':False})).model_dump() for entry in recorded_auto]:
+                return False
     if normalized == DEFAULT_OPTIONS:
         return True
-    proven = validation().get('configurations', [])
+    # Older evidence predates the optional flag; omitted means false, never true.
+    proven = [ScanOptions(**item).model_dump() for item in validation().get('configurations', [])]
     if normalized in proven:
         return True
     low, high = validation().get('exposure_range', [100, 100])
-    if all(low <= v <= high for v in normalized['exposure']):
+    if normalized['film']=='negative' and all(low <= v <= high for v in normalized['exposure']):
         neutral = dict(normalized, exposure=[100, 100, 100])
         return neutral == DEFAULT_OPTIONS or neutral in proven
     return False
@@ -93,6 +131,9 @@ def capabilities(bridge, options: dict) -> dict:
     available = {'scan', 'next'} if not native else {'scan'} | proved
     if native and not validated_options(options):
         available.discard('scan')
+    focus_range=focus_limits()
+    if native and focus_range is None:
+        available.discard('focus')
     if not native and options != DEFAULT_OPTIONS:
         available.discard('scan')
     prescan = dict(options, dpi=300, bits=8, channel='rgb', focus=None)
@@ -105,10 +146,18 @@ def capabilities(bridge, options: dict) -> dict:
                         'reason': '' if enabled else ('Choose native capture for acquisition settings and prescan.' if not native else
                             'This configuration still needs a supervised scanner test.' if name == 'scan' else
                             'A supervised device test is required before this control is enabled.')}
-        if native and name in ('next','previous','goto') and enabled and not getattr(bridge,'frame_initialized',False):
+        if native and name=='focus' and focus_range is None:
+            result[name]['reason']='The recorded focus range is invalid; this control is disabled.'
+        if native and name in ('next','previous','goto','realign') and enabled and not getattr(bridge,'frame_initialized',False):
             result[name]={'available':False,'evidence':'verified_on_device',
                           'reason':'Complete a prescan or scan in this session before moving film.'}
+        if native and getattr(bridge,'transport_position_uncertain',False) and (
+                name in ('next','previous','goto','nudge','realign','calibrate') or
+                (name=='scan' and options['dpi']!=300)):
+            result[name]={'available':False,'evidence':'verified_on_device',
+                          'reason':'Film position needs checking. Prescan the current frame, then label the checked frame before scanning or moving again.'}
     return {'actions': result, 'resolutions': [300, 360, 450, 600, 900, 1800], 'depths': [8, 16],
             'channels': ['rgb', 'gray', 'bw'], 'films': ['negative', 'positive'],
+            'focus_range':focus_range if focus_range is not None else [],
             'native': native, 'binary_output': 'Host threshold applied to acquired 8-bit grayscale',
             'settings_validation': result['scan']}

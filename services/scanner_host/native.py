@@ -30,6 +30,21 @@ class NativeAflBridge(CyberViewBridge):
         self.device_test_approved = device_test_approved
         self.options = workspace.ScanOptions().model_dump()
         self.frame_initialized = False
+        self.last_frame_position = None
+        self.transport_position_uncertain = False
+        self.position_safety_changed = None
+        self._sensor_fault_seen = False
+        self._sensor_fault_returned = False
+        self._sensor_cancel_sent = False
+
+    def set_position_uncertain(self, uncertain: bool, basis: str):
+        self.transport_position_uncertain=bool(uncertain)
+        if self.position_safety_changed:
+            self.position_safety_changed(self.transport_position_uncertain,basis)
+
+    def require_known_position(self):
+        if self.transport_position_uncertain:
+            raise ScannerError('POSITION_UNCERTAIN: A film move was not confirmed. Acquire a 300 dpi prescan and label the checked current frame before scanning or seeking again.')
 
     @property
     def supports_next(self):
@@ -54,6 +69,21 @@ class NativeAflBridge(CyberViewBridge):
                 event = json.loads(raw.decode('utf-8', 'replace').lstrip('\ufeff'))
             except json.JSONDecodeError:
                 continue
+            kind=event.get('event')
+            if kind=='error' and event.get('code')=='position_sensor':
+                self._sensor_fault_seen=True
+                self._sensor_fault_returned=False
+                self._sensor_cancel_sent=False
+                self.frame_initialized=False
+                self.last_frame_position=None
+                self.set_position_uncertain(True,'native_position_sensor_failure')
+            elif kind=='ready' and self._sensor_fault_seen:
+                self._sensor_fault_returned=True
+            if kind=='frame_position' or (kind=='command_done' and event.get('name') in ('next','previous','goto','nudge','realign')):
+                position=event.get('position')
+                self.last_frame_position=position if isinstance(position,int) and not isinstance(position,bool) and 1<=position<=40 else None
+            elif kind=='command_done' and event.get('name','').startswith('eject_'):
+                self.last_frame_position=None
             if self.quarantined and event.get('event') == 'ready':
                 # The timed-out vendor call has returned after cancellation.
                 # Discard its old response stream before accepting another command.
@@ -74,7 +104,7 @@ class NativeAflBridge(CyberViewBridge):
 
     def _serve_args(self) -> list[str]:
         args = ['serve', '--allow-experimental-device-io', '--timeout', str(int(self.first_image_timeout))]
-        if workspace.validation().get('configurations'):
+        if workspace.validation().get('configurations') or 'auto_exposure' in workspace.validation().get('actions', []):
             args.append('--allow-experimental-settings')
         controls = workspace.validation().get('actions', [])
         if controls:
@@ -85,6 +115,7 @@ class NativeAflBridge(CyberViewBridge):
         if not self.enabled:
             raise ScannerError('Native startup may home the film transport. Explicit device-test approval is required before enabling this backend.')
         self.frame_initialized = False
+        self.last_frame_position = None
         if self.exe.suffix == '.exe':
             # Keep CyberScan's own verified driver copy, so CyberView X can be uninstalled.
             await asyncio.to_thread(driver.ensure)
@@ -99,7 +130,7 @@ class NativeAflBridge(CyberViewBridge):
         pass
 
     def acquisition_settings(self) -> dict:
-        return {'found': True, 'film_term': None, 'auto_exposure': None, 'auto_gamma': False,
+        return {'found': True, 'film_term': None, 'auto_exposure': self.options.get('auto_exposure', False), 'auto_gamma': False,
                 'crop_inches': [self.options['crop'][k] for k in ('left','top','right','bottom')], 'scan_depth': self.options['bits']*3,
                 'acquisition': self.options.copy(),
                 'image_kind': self.image_kind, 'lut': 'identity-4096',
@@ -107,6 +138,8 @@ class NativeAflBridge(CyberViewBridge):
 
     async def configure(self, options):
         values = workspace.ScanOptions(**options).model_dump()
+        if values['dpi']!=300:
+            self.require_known_position()
         if not workspace.validated_options(values):
             raise ScannerError('This acquisition configuration has not been validated on the scanner')
         if values['focus'] is not None:
@@ -116,11 +149,15 @@ class NativeAflBridge(CyberViewBridge):
     def _settings_line(self):
         o=self.options
         fields=[o['dpi'],o['bits'],o['channel'],o['film'],*[o['crop'][k] for k in ('left','top','right','bottom')],*o['exposure']]
+        if o.get('auto_exposure'):
+            fields.append(1)
         return 'settings ' + ' '.join(str(v) for v in fields)
 
     async def scan(self, out, count, on_event, until_end=False):
         if self.quarantined:
             raise ScannerError('The native driver is still handling a timed-out operation; wait for it to return before retrying')
+        if self.options['dpi']!=300 or count>1:
+            self.require_known_position()
         if count != 1 and not self.supports_next:
             raise ScannerError('Native acquisition currently supports only the current frame')
         # Base scan owns the operation lock and cancellation state. Its startup
@@ -131,6 +168,18 @@ class NativeAflBridge(CyberViewBridge):
         return result
 
     async def _exchange(self,line,until,on_event,limit=None):
+        if line.startswith('film '):
+            # The base multi-frame scan also dispatches film moves directly.
+            # It must share the same latch as dedicated transport controls.
+            self.require_known_position()
+            self.last_frame_position=None
+            self.frame_initialized=False
+            self.set_position_uncertain(True,'batch_motor_command_pending')
+            result=await super()._exchange(line,until,on_event,limit)
+            if not result[1] and not self.cancel_requested:
+                self.set_position_uncertain(False,'batch_motor_command_acknowledged')
+                self.frame_initialized=True
+            return result
         if line.startswith('scan '):
             _, error = await super()._exchange(self._settings_line(), 'configured', None, 30)
             if error:
@@ -140,10 +189,22 @@ class NativeAflBridge(CyberViewBridge):
         return await super()._exchange(line,until,on_event,limit)
 
     async def _stuck(self) -> None:
-        # SCAN08's sensor loop has no timeout and never returns to the bridge, so the
-        # process is ended; the scanner needs a power cycle afterwards anyway.
-        await self._kill()
+        # A sensor error is not evidence that the vendor call or firmware stopped.
+        # Keep its process/mutex alive, just as on a native read timeout.
         self.frame_initialized = False
+        self.last_frame_position = None
+        self.set_position_uncertain(True,'native_position_sensor_failure')
+        self._sensor_fault_seen=True
+        if self._sensor_fault_returned:
+            # The reader already observed this command's terminal ready event.
+            # Consume its stale scan_done/ready tail without starting any new I/O.
+            self.events=asyncio.Queue()
+            self.quarantined=False
+            return
+        self.quarantined=self.open
+        if self.open and not self._sensor_cancel_sent:
+            self._sensor_cancel_sent=True
+            await self._send('cancel')
 
     async def release(self) -> None:
         if self.quarantined and self.open:
@@ -151,6 +212,7 @@ class NativeAflBridge(CyberViewBridge):
         process = self.process
         if not process or process.returncode is not None:
             await self._ended()
+            self.last_frame_position=None
             return
         await self._send('quit')
         try:
@@ -160,6 +222,7 @@ class NativeAflBridge(CyberViewBridge):
             raise ScannerError('The native driver did not close. Its session remains reserved; no forced termination was performed.') from None
         await self._ended()
         self.frame_initialized = False
+        self.last_frame_position=None
         if self.reader:
             self.reader.cancel()
 
@@ -171,8 +234,17 @@ class NativeAflBridge(CyberViewBridge):
     async def control(self,action,on_event=None,value=None):
         if action not in workspace.validation().get('actions', []):
             raise ScannerError('This native scanner control has not been validated')
+        if action=='focus':
+            limits=workspace.focus_limits()
+            if limits is None:
+                raise ScannerError('The recorded focus range is invalid; no focus command was sent')
+            if type(value) is not int or not limits[0]<=value<=limits[1]:
+                raise ScannerError(f'Focus must be between the validated steps {limits[0]} and {limits[1]}')
         if self.busy:
             raise ScannerError('Another scanner operation is in progress')
+        motion=action in ('next','previous','goto','nudge','realign','calibrate','eject_forward','eject_backward')
+        if motion and not action.startswith('eject_'):
+            self.require_known_position()
         async with self.lock:
             self.scanning=True;self.cancel_requested=False
             try:
@@ -181,8 +253,19 @@ class NativeAflBridge(CyberViewBridge):
                 line = ('focus auto' if action=='autofocus' else f'focus {value}' if action=='focus' else
                         'calibrate' if action=='calibrate' else f'film goto {value}' if action=='goto' else
                         f'film nudge {value}' if action=='nudge' else f'film {action}')
+                if action in ('next','previous','goto','nudge','realign','eject_forward','eject_backward','calibrate'):
+                    # A failed/in-flight move must not leave a stale counter
+                    # eligible for a later software-origin reset.
+                    self.last_frame_position=None
+                    self.frame_initialized=False
+                    self.set_position_uncertain(True,'motor_command_pending')
                 _,error=await super()._exchange(line,'command_done',on_event,self.first_image_timeout)
                 if error:raise ScannerError(error.get('message','Scanner control failed'))
+                if motion:
+                    if self.cancel_requested:
+                        raise ScannerError('POSITION_UNCERTAIN: Film movement was interrupted; final position remains uncertain')
+                    self.set_position_uncertain(False,'motor_command_acknowledged')
+                    self.frame_initialized=not action.startswith('eject_')
                 if action.startswith('eject_'):
                     self.frame_initialized=False
             finally:self.scanning=False

@@ -27,7 +27,9 @@ def main():
         ini.write_text('[TOOLBAR FILMTERM]\nFilm Type=0\nFilm Term Name=Kodak 200\n[SETUPDLG DEFAULT PAGE]\nAuto Exposure=1\n',
                        encoding='latin-1')
         env = {'FRAME_DATA_DIR': temporary, 'FRAME_NATIVE_BRIDGE': str(fake), 'FRAME_CYBERVIEW_INI': str(ini),
-               'FAKE_CVBRIDGE_LIVE_DELAY': '0.12'}
+               # Keep the half-transfer state observable even while Chromium is
+               # taking screenshots or other workflow tests are using the CPU.
+               'FAKE_CVBRIDGE_LIVE_DELAY': '0.12', 'FAKE_CVBRIDGE_DELAY': '1.5'}
         with patch.dict(os.environ, env):
             from services.api import main as api_main
             api_main.app.state.store.close()
@@ -58,21 +60,45 @@ def main():
                         page.get_by_role('button', name='Scan frame', exact=True).click()
                         canvas = page.get_by_role('img', name='Frame 1 as the scanner reads it')
                         expect(canvas).to_be_visible(timeout=15000)
-                        expect(page.get_by_text('Live from the scanner · uncorrected')).to_be_visible()
-                        page.wait_for_timeout(1500)
+                        expect(page.get_by_text('Live preview', exact=True)).to_be_visible()
+                        expect(page.locator('.cx-zoom')).to_have_text('—')
+                        mini = page.locator('.cx-progress-frame')
+                        expect(mini).to_be_visible()
+                        page.wait_for_function("Number(document.querySelector('.cx-progress-frame')?.dataset.progress) > 0")
+                        first_progress = float(mini.get_attribute('data-progress'))
+                        expect(page.locator('.cx-line-count')).to_contain_text('preview lines')
+                        first_lines = int(page.locator('.cx-line-count').inner_text().split()[0])
+                        page.wait_for_timeout(900)
+                        next_progress = float(mini.get_attribute('data-progress'))
+                        assert 0 < first_progress < next_progress < 1, (first_progress, next_progress)
+                        next_lines = int(page.locator('.cx-line-count').inner_text().split()[0])
+                        assert next_lines > first_lines, (first_lines, next_lines)
+                        assert mini.get_attribute('data-phase') == 'scanning'
+                        expect(page.locator('.cx-progress-line')).to_be_visible()
+                        assert float(page.locator('.cx-progress-line').evaluate('element => parseFloat(element.style.top)')) > 0
+                        # Reduced motion stops decoration; actual received-row position
+                        # remains visible and continues updating.
+                        page.emulate_media(reduced_motion='reduce')
+                        assert page.locator('.cx-frame-outline rect').evaluate('element => getComputedStyle(element).animationName') == 'none'
+                        assert page.locator('.cx-progress-line').evaluate('element => getComputedStyle(element).transitionDuration') == '0s'
                         # Film base is bright in transmission; the negative preview shows it dark.
                         pixel = canvas.evaluate('c => Array.from(c.getContext("2d").getImageData(1, 1, 1, 1).data)')
                         assert pixel[3] == 255 and sum(pixel[:3]) < 200, pixel
                         evidence = ROOT / '.local/frame-ui'
                         evidence.mkdir(parents=True, exist_ok=True)
                         page.screenshot(path=str(evidence / 'scan-live.png'))
+                        expect(page.locator('.cx-line-count')).to_have_text('20 / 40 lines', timeout=10000)
+                        expect(page.locator('.cx-progress-text .cx-meta')).to_contain_text('50%')
+                        page.screenshot(path=str(evidence / 'scan-line-count.png'))
                         expect(canvas).to_be_hidden(timeout=20000)
                         expect(page.get_by_role('button', name='Frame 1', exact=True)).to_be_visible()
                         assert not errors, errors
                         browser.close()
                     print(json.dumps({'result': 'passed', 'mode': 'fake direct-capture bridge; no device access',
                                       'verified': ['live preview appears while the frame is read',
-                                                   'negative preview inverted', 'saved frame replaces the preview'],
+                                                   'negative preview inverted', 'saved frame replaces the preview',
+                                                   'miniature and beam follow received rows', 'reduced motion keeps actual progress',
+                                                   'individual preview-line count and exact transfer lines with percentage'],
                                       'screenshot': '.local/frame-ui/scan-live.png',
                                       'javascript_exceptions': errors}))
                 finally:

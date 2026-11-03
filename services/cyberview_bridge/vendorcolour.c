@@ -32,12 +32,18 @@ static const BYTE expected_sha[32] = {
     0x0e,0x31,0x00,0x4e,0xea,0x4a,0x7a,0x49,0xa6,0x8b,0x32,0xb5,0x22,0xfd,0x28,0xbb};
 static char settings[MAX_PATH], backup[MAX_PATH];
 static HANDLE mutex;
+static int settings_checked, settings_existed;
 
 static void finish(int code) {
     fflush(stdout);
     if (backup[0]) {
         if (!CopyFileA(backup, settings, FALSE)) code = 90;
         else DeleteFileA(backup);
+    } else if (settings_checked && !settings_existed && settings[0]) {
+        /* DllMain may create a default INI even in a CPU-only worker. Restore
+         * absence as well as existing contents; never remove a preexisting INI. */
+        if (!DeleteFileA(settings) && GetLastError() != ERROR_FILE_NOT_FOUND &&
+            GetLastError() != ERROR_PATH_NOT_FOUND) code = 90;
     }
     if (mutex) { ReleaseMutex(mutex); CloseHandle(mutex); }
     TerminateProcess(GetCurrentProcess(), (UINT)code);
@@ -112,7 +118,12 @@ int main(int argc, char **argv) {
     if (!mutex || WaitForSingleObject(mutex, 0) != WAIT_OBJECT_0) return error("oracle_busy", 2);
     if (FAILED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, settings))) return error("settings_path", 2);
     strcat_s(settings, sizeof settings, "\\PIE\\MF\\CyberViewX.ini");
-    if (GetFileAttributesA(settings) != INVALID_FILE_ATTRIBUTES) {
+    DWORD settings_attributes = GetFileAttributesA(settings);
+    if (settings_attributes == INVALID_FILE_ATTRIBUTES && GetLastError() != ERROR_FILE_NOT_FOUND &&
+        GetLastError() != ERROR_PATH_NOT_FOUND) return error("settings_access", 2);
+    settings_checked = 1;
+    settings_existed = settings_attributes != INVALID_FILE_ATTRIBUTES;
+    if (settings_existed) {
         sprintf_s(backup, sizeof backup, "%s.colour-%lu-backup", settings, GetCurrentProcessId());
         if (!CopyFileA(settings, backup, TRUE)) { backup[0] = 0; return error("settings_backup", 2); }
     }

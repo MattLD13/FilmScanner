@@ -27,7 +27,8 @@ def main():
     fake = ROOT / 'tests/scanner/fake_cvbridge.py'
     with tempfile.TemporaryDirectory(prefix='frame-native-ui-') as temporary:
         env = {'FRAME_DATA_DIR': temporary, 'FRAME_CVBRIDGE': str(fake), 'FRAME_NATIVE_BRIDGE': str(fake),
-               'FAKE_CVBRIDGE_MODE': 'strip', 'FRAME_FILMTERM_DIRS': str(Path(temporary) / 'absent')}
+               'FAKE_CVBRIDGE_MODE': 'strip', 'FAKE_CVBRIDGE_RESPECT_SETTINGS': '1',
+               'FRAME_FILMTERM_DIRS': str(Path(temporary) / 'absent')}
         with patch.dict(os.environ, env):
             from services.api import main as api_main
             # Importing main also creates an unused default app in this fixture
@@ -88,7 +89,8 @@ def main():
                         assert page.get_by_role('button', name='Use CyberView capture').count() == 0
                         page.get_by_role('button', name='Scan', exact=True).click()
                         expect(page.get_by_role('button', name='Next frame', exact=True)).to_be_disabled()
-                        assert page.get_by_label('Frames to scan').locator('option').all_inner_texts() == ['Current frame', 'All frames']
+                        assert page.get_by_label('Frames to scan').count() == 0
+                        expect(page.get_by_role('button', name='Scan all frames', exact=True)).to_be_disabled()
                         page.get_by_role('button', name='Scan frame', exact=True).click()
                         expect(page.get_by_label('Invert negative', exact=True)).to_be_checked(timeout=15000)
                         page.get_by_text('Film & colour', exact=True).click()
@@ -112,11 +114,11 @@ def main():
                         page.wait_for_timeout(1500)
                         error = page.get_by_role('alert').filter(has_text='near-neutral')
                         assert auto.is_checked() != before or error.count(), 'auto colour did not toggle or explain why'
-                        toggled = page.request.get(origin + '/api/cyberview/captures').json()['captures'][0]['adjustments']['auto_color']
-                        assert (toggled is not None) == auto.is_checked(), toggled
+                        toggled = page.request.get(origin + '/api/cyberview/captures').json()['captures'][0]['adjustments']
+                        assert bool(toggled['auto_color'] or toggled.get('vendor_auto_gamma_tables')) == auto.is_checked(), toggled
                         page.get_by_label('Film rendering profile', exact=True).select_option(profile_id)
                         page.wait_for_timeout(1000)
-                        assert page.locator('img[src*="profile-preview"]').count() >= 1
+                        assert page.locator('img[src*="processing-preview"]').count() >= 1
                         expect(auto).not_to_be_checked()
                         response = page.request.get(origin + '/api/cyberview/captures').json()
                         capture = response['captures'][0]
@@ -148,23 +150,174 @@ def main():
                             assert json.loads(tif.pages[0].description)['film_profile_engine'] == vendor_negative.VERSION
                         page.wait_for_function("() => { const img = document.querySelector('.cx-image img'); return img && img.complete && img.naturalWidth > 0; }", timeout=15000)
                         page.get_by_role('button', name='Home', exact=True).click()
-                        saved_photo = page.get_by_role('img', name='Saved photograph', exact=False)
-                        expect(saved_photo).to_be_visible()
-                        assert '/rendered/preview' in saved_photo.get_attribute('src')
-                        page.wait_for_function("() => { const img = document.querySelector('.cx-feature-image img'); return img && img.complete && img.naturalWidth > 0; }", timeout=15000)
+                        # The helper now marks its images synthetic. Home must not
+                        # present them as real photographs from the user's library.
+                        assert capture['hardware'] is False
+                        expect(page.get_by_text('Your photographs', exact=False)).to_be_visible()
+                        assert page.get_by_role('img', name='Saved photograph', exact=False).count() == 0
                         page.get_by_role('button', name='Develop', exact=True).click()
                         expect(page.get_by_role('heading', name='Time to develop.')).to_be_visible()
                         expect(page.get_by_text('Developing records and scanned rolls are currently separate.')).to_be_visible()
                         page.get_by_role('button', name='Scan', exact=True).click()
                         expect(page.get_by_role('button', name='Scan frame', exact=True)).to_be_visible()
+                        # Exercise wider stitched geometry using only the synthetic helper.
+                        with patch.object(workspace, 'validation', return_value=json.loads(workspace.VALIDATION.read_text()) | {'actions': ['next', 'previous', 'nudge']}):
+                            response = page.request.post(origin + '/api/cyberview/stitched-scan', data={'acknowledged': True})
+                            assert response.ok, response.text()
+                            deadline = time.monotonic() + 60
+                            while time.monotonic() < deadline:
+                                result = page.request.get(origin + '/api/cyberview/status').json()['session']
+                                if result['state'] in ('complete', 'error', 'cancelled'):
+                                    break
+                                time.sleep(.1)
+                            assert result['state'] == 'complete', result
+                            page.reload()
+                            page.get_by_role('button', name='Scan', exact=True).click()
+                            page.get_by_role('button', name='Frame 2 · stitched', exact=True).click()
+                            expect(page.locator('.cx-cropped-image')).to_be_visible()
+                            evidence_dir = ROOT / '.local' / 'frame-ui-current'
+                            evidence_dir.mkdir(parents=True, exist_ok=True)
+                            page.screenshot(path=str(evidence_dir / 'stitched.png'))
+                            page.get_by_role('button', name='Source scan 1: tile-1', exact=True).click()
+                            assert page.locator('.cx-cropped-image').count() == 0
+                            source = page.locator('.cx-image img')
+                            expect(source).to_be_visible()
+                            page.wait_for_function("() => { const img = document.querySelector('.cx-image img'); return img && img.complete && img.naturalWidth > 0; }")
+                            assert source.get_attribute('src').endswith('/sources/1/preview')
+                            page.screenshot(path=str(evidence_dir / 'source.png'))
+                            page.get_by_role('button', name='Stitched', exact=True).click()
+                            expect(page.locator('.cx-cropped-image')).to_be_visible()
+                            # Separate actions must send their own intent without stale menu state.
+                            intents = []
+                            def capture_intent(route):
+                                intents.append((route.request.url.rsplit('/', 1)[-1], route.request.post_data_json))
+                                route.fulfill(status=409, content_type='application/json', body='{"detail":"Synthetic request inspection"}')
+                            page.route('**/api/cyberview/scan', capture_intent)
+                            page.route('**/api/cyberview/scan-all-verified', capture_intent)
+                            expect(page.get_by_role('button', name='Scan all frames', exact=True)).to_be_enabled()
+                            page.get_by_role('button', name='Scan all frames', exact=True).click()
+                            expect(page.get_by_role('alert')).to_contain_text('Synthetic request inspection')
+                            page.locator('.cx-roll-menu summary').click()
+                            page.get_by_label('After scanning').select_option('hold_at_end')
+                            page.get_by_label('Expected frames · optional', exact=True).fill('6')
+                            page.get_by_role('button', name='Scan all frames', exact=True).click()
+                            page.wait_for_timeout(200)
+                            page.get_by_role('button', name='Scan frame', exact=True).click()
+                            page.wait_for_timeout(200)
+                            assert intents[0] == ('scan-all-verified', {'roll': '', 'end_action': 'return_to_frame_1', 'repeat_samples': 1, 'expected_frames': None})
+                            assert intents[1] == ('scan-all-verified', {'roll': '', 'end_action': 'hold_at_end', 'repeat_samples': 1, 'expected_frames': 6})
+                            assert intents[2][0] == 'scan' and intents[2][1]['count'] == 1 and not intents[2][1]['until_end'], intents
+                            page.unroute('**/api/cyberview/scan', capture_intent)
+                            page.unroute('**/api/cyberview/scan-all-verified', capture_intent)
+                            # A refused advance must expose reachable user actions.
+                            # Route only this UI scenario; no driver command is sent.
+                            stopped_status=page.request.get(origin+'/api/cyberview/status').json()
+                            stopped_status['session']=stopped_status['session'] | {
+                                'state':'complete','awaiting_end_confirmation':True,
+                                'purpose':'scan_all','end_action':'hold_at_end',
+                                'warning_code':'WARNING_EARLY_ADVANCE_REFUSED',
+                                'end_of_roll_note':'Stopped at a refused advance; confirm or retry.'}
+                            def stopped_snapshot(route):
+                                route.fulfill(status=200,content_type='application/json',body=json.dumps(stopped_status))
+                            resolved=[]
+                            def resolve_stop(route):
+                                resolved.append(route.request.post_data_json)
+                                stopped_status['session']=stopped_status['session'] | {'awaiting_end_confirmation':False}
+                                route.fulfill(status=200,content_type='application/json',body=json.dumps(stopped_status['session']))
+                            page.route('**/api/cyberview/status',stopped_snapshot)
+                            page.route('**/api/cyberview/refused-advance',resolve_stop)
+                            expect(page.get_by_role('button',name='Retry advance',exact=True)).to_be_visible(timeout=10000)
+                            expect(page.get_by_role('button',name='Confirm end and finish',exact=True)).to_be_visible()
+                            expect(page.get_by_role('button',name='Keep film and stop',exact=True)).to_be_visible()
+                            page.screenshot(path=str(evidence_dir/'refused-advance.png'))
+                            page.get_by_role('button',name='Confirm end and finish',exact=True).click()
+                            expect(page.get_by_role('button',name='Retry advance',exact=True)).not_to_be_visible()
+                            assert resolved==[{'session_id':stopped_status['session']['id'],'action':'confirm_end'}]
+                            page.unroute('**/api/cyberview/status',stopped_snapshot)
+                            page.unroute('**/api/cyberview/refused-advance',resolve_stop)
+                            page.get_by_role('button', name='Previous frame', exact=True).click()
+                            expect(page.get_by_role('dialog', name='Previous frame?', exact=True)).to_be_visible()
+                            navigation = []
+                            def capture_previous(route):
+                                navigation.append(route.request.post_data_json)
+                                route.fulfill(status=409, content_type='application/json', body='{"detail":"Previous frame request inspected"}')
+                            page.route('**/api/cyberview/film', capture_previous)
+                            page.get_by_role('button', name='Continue', exact=True).click()
+                            expect(page.get_by_role('alert')).to_contain_text('Previous frame request inspected')
+                            assert navigation == [{'action': 'previous', 'acknowledged': True}]
+                            page.unroute('**/api/cyberview/film', capture_previous)
+                            # Border finding uses real-sized low-resolution previews, not
+                            # three archival captures. Wider recovery follows the result.
+                            with patch.dict(os.environ, {'FAKE_CVBRIDGE_RESPECT_SETTINGS': '1',
+                                                         'FAKE_FRAME_WIDTH_MM': '37.2', 'FAKE_FRAME_OFFSET_MM': '0'}):
+                                changed = page.request.post(origin + '/api/cyberview/backend', data={
+                                    'backend': 'afl-native-experimental', 'acknowledged': True})
+                                assert changed.ok, changed.text()
+                                page.reload()
+                                page.get_by_role('button', name='Scan', exact=True).click()
+                                assert page.get_by_role('button', name='Stitched scan', exact=True).count() == 0
+                                page.get_by_role('button', name='Auto find borders', exact=True).click()
+                                expect(page.get_by_role('img', name='Frame borders: green detected, amber estimated')).to_be_visible(timeout=30000)
+                                # The capture event precedes the final session event;
+                                # review the overlay only after the preview task settles.
+                                page.wait_for_function("async () => { const r = await fetch('/api/cyberview/status'); const s = (await r.json()).session; return s?.state === 'complete'; }")
+                                expect(page.get_by_role('button', name='Scan frame', exact=True)).to_be_enabled()
+                                expect(page.locator('.cx-border-help')).to_contain_text('beyond the current scan window')
+                                assert page.locator('.cx-border-overlay line[data-border^="x-"][data-detected="true"]').count() == 2
+                                assert page.locator('.cx-strip button').count() == 2, 'Border previews must not count as frames'
+                                assert page.locator('.cx-cropped-image').count() == 0
+                                page.screenshot(path=str(evidence_dir / 'auto-borders.png'))
+                                recovery = []
+                                def capture_recovery(route):
+                                    recovery.append(route.request.post_data_json)
+                                    route.fulfill(status=409, content_type='application/json', body='{"detail":"Wider capture request inspected"}')
+                                page.route('**/api/cyberview/scan-frame', capture_recovery)
+                                with page.expect_request(lambda request: request.method == 'POST' and '/api/cyberview/' in request.url) as capture_request:
+                                    page.get_by_role('button', name='Scan frame', exact=True).click()
+                                assert capture_request.value.url.endswith('/scan-frame'), capture_request.value.url
+                                expect(page.get_by_role('alert')).to_contain_text('Wider capture request inspected')
+                                assert len(recovery) == 1 and recovery[0]['acknowledged']
+                                page.unroute('**/api/cyberview/scan-frame', capture_recovery)
+                        # Changing film material persists without opening/commanding
+                        # the scanner and does not reprocess an existing photograph.
+                        saved_before = page.request.get(origin + '/api/cyberview/captures').json()['captures']
+                        for kind, label in [('bw_negative', 'Black & white'), ('positive', 'Slide')]:
+                            page.get_by_role('radio', name=label, exact=True).click()
+                            expect(page.get_by_role('radio', name=label, exact=True)).to_be_checked()
+                            expect(page.get_by_role('radio', name=label, exact=True)).to_be_enabled()
+                            expect(page.locator('.cx-app')).to_have_attribute('data-film-type', kind)
+                            saved_workspace = page.request.get(origin + '/api/cyberview/workspace').json()
+                            assert saved_workspace['film_type'] == kind
+                        page.reload()
+                        expect(page.get_by_role('radio', name='Slide', exact=True)).to_be_checked()
+                        saved_after = page.request.get(origin + '/api/cyberview/captures').json()['captures']
+                        assert [c['adjustments'] for c in saved_before] == [c['adjustments'] for c in saved_after]
+                        page.get_by_role('button', name='Develop', exact=True).click()
+                        expect(page.locator('.app')).to_have_attribute('data-film-type', 'positive')
+                        expect(page.get_by_role('heading', name='Time to develop.')).to_be_visible()
+                        page.get_by_role('button', name='Scan', exact=True).click()
+                        expect(page.get_by_role('radio', name='Slide', exact=True)).to_be_checked()
+                        page.get_by_role('radio', name='Color negative', exact=True).check()
+                        expect(page.get_by_role('radio', name='Color negative', exact=True)).to_be_enabled()
+                        def reject_film_change(route):
+                            route.fulfill(status=409, content_type='application/json', body='{"detail":"Synthetic film selection failure"}')
+                        page.route('**/api/cyberview/film-type', reject_film_change)
+                        page.get_by_role('radio', name='Black & white', exact=True).click()
+                        expect(page.get_by_role('alert')).to_contain_text('Synthetic film selection failure')
+                        expect(page.get_by_role('radio', name='Color negative', exact=True)).to_be_checked()
+                        expect(page.locator('.cx-app')).to_have_attribute('data-film-type', 'color_negative')
+                        page.unroute('**/api/cyberview/film-type', reject_film_change)
                         assert not errors, errors
                         browser.close()
                     print(json.dumps({'result': 'passed', 'mode': 'synthetic pipe helper; no device access',
-                                      'verified': ['FRAME Home with saved edited photo', 'Develop and return to scanner',
-                                                   'direct capture by default', 'auto colour toggle', 'current-frame-only controls',
+                                      'verified': ['FRAME Home excludes synthetic captures from real-photo collection', 'Develop and return to scanner',
+                                                   'direct capture by default', 'auto colour toggle', 'separate scan buttons and request intents',
+                                                   'stitched crop and natural source geometry',
+                                                   'quick border previews, overlays and automatic wider-capture routing',
                                                    'native capture provenance', 'negative inversion', 'manual film base',
                                                    'negative balance and response preview', 'private reference profile preview/export',
-                                                   '16-bit export', 'immutable original'],
+                                                   '16-bit export', 'immutable original', 'three film themes with API persistence',
+                                                   'unchanged saved edits', 'Develop theme handoff', 'failed selection rollback'],
                                       'javascript_exceptions': errors}))
                 finally:
                     server.should_exit = True

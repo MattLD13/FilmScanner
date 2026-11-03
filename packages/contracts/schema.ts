@@ -1,5 +1,16 @@
 /** Portable v1 records. Times are UTC epoch milliseconds; image paths are relative. */
 export type FilmType = 'color_negative' | 'bw_negative' | 'positive';
+export type RollEndAction = 'return_to_frame_1' | 'hold_at_end' | 'eject_forward';
+/** Optical film containment is distinct from retaining the vendor's full window. */
+export interface FrameCoverageVerification {
+  verified?: boolean;
+  scope?: string;
+  x_containment_verified?: boolean;
+  y_containment_verified?: boolean;
+  y_containment?: 'verified' | 'vendor_window_limited' | 'unverified';
+  full_acquired_height_retained?: boolean;
+  vertical_containment?: { status: string; reason?: string | null };
+}
 export type ScannerEvidence = 'verified_on_device' | 'recorded_on_device' | 'observed_vendor_call' | 'static_only' | 'unavailable';
 /** Read passively from SCAN08.dll's own %TEMP% log and calibration cache; no device I/O. */
 export interface VendorScannerReport {
@@ -14,12 +25,24 @@ export interface CyberScanOptions {
   dpi: 300 | 360 | 450 | 600 | 900 | 1800; bits: 8 | 16;
   channel: 'rgb' | 'gray' | 'bw'; film: 'negative' | 'positive';
   crop: {left: number; top: number; right: number; bottom: number};
-  exposure: number[]; focus?: number | null;
+  exposure: number[]; focus?: number | null; auto_exposure?: boolean;
+}
+export interface FrameBorderEvidence {
+  found: 'both' | 'start' | 'end' | 'none';
+  start?: number; end?: number; measured_mm?: number;
+}
+export interface FrameAlignment {
+  confidence: 'frame_found' | 'one_edge' | 'centered'; exact: boolean;
+  crop_applied?: boolean; crop_mm: number[]; skew_deg: number | null; bleed_mm: number;
+  crop_px?: {left: number; top: number; width: number; height: number};
+  edges_x?: FrameBorderEvidence; edges_y?: FrameBorderEvidence;
+  note?: string | null;
 }
 export interface CyberScanWorkspace<TCapture = unknown> {
   settings: CyberScanOptions;
+  film_type?: FilmType;
   capabilities: {actions: Record<string, {available: boolean; evidence: string; reason?: string}>;
-    resolutions: number[]; depths: number[]; channels: string[]; films: string[];
+    resolutions: number[]; depths: number[]; channels: string[]; films: string[]; focus_range?: number[];
     settings_validation?: {available: boolean; reason?: string}};
   prescan: TCapture | null;
 }
@@ -89,6 +112,9 @@ export interface CyberScanAdjustments {
   exposure: number; contrast: number; saturation: number; temperature: number;
   rotation: number; mirror: boolean; invert?: boolean; film_base?: number[];
   negative_response?: number; black_point?: number; white_point?: number; gamma?: number;
+  vendor_input_balance?: boolean;
+  vendor_auto_gamma_tables?: number[][] | null;
+  color_restoration?: number; grain_reduction?: number; sharpening?: number;
   rgb_balance?: number[]; curve?: number[];
   crop?: { left: number; top: number; right: number; bottom: number };
   monochrome?: boolean; film_profile?: string | null; auto_color?: number[] | null;

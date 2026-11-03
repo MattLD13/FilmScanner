@@ -128,8 +128,8 @@ def test_auto_colour_toggle_ignores_uncovered_stitch_margins(tmp_path, bridge):
         record['coverage_path'] = 'coverage.png'
         Image.fromarray(np.uint8(mask) * 255).save(app.state.store.path(record['coverage_path']))
         record['adjustments'] = Adjustments().model_dump()
-        record['adjustments']['auto_color'] = auto_color_for(to_float(values), mask)
-        assert record['adjustments']['auto_color'] != auto_color_for(to_float(values))
+        record['adjustments']['auto_color'] = auto_color_for(to_float(values), mask,dpi=record['dpi'])
+        assert record['adjustments']['auto_color'] != auto_color_for(to_float(values),dpi=record['dpi'])
         app.state.store.save('cv_captures', record)
         endpoint = '/api/cyberview/captures/negative/auto-color'
         assert client.post(endpoint, json={'enabled': False}).status_code == 200
