@@ -20,6 +20,11 @@ function isAllowedUrl(target, origin) {
   }
 }
 
+function isAllowedFullscreen(permission, requestingUrl, contentsUrl, origin, isMainFrame) {
+  return permission === 'fullscreen' && isMainFrame === true &&
+    isAllowedUrl(requestingUrl, origin) && isAllowedUrl(contentsUrl, origin);
+}
+
 // Every request the window makes must stay on the loopback service (HTTP or its event WebSocket),
 // or be an in-page data/blob URL. The shell therefore never opens a TLS connection itself.
 function isServiceRequest(target, origin) {
@@ -84,6 +89,6 @@ function workspaceRoot(dirname = __dirname) {
 }
 
 module.exports = {
-  DEFAULT_PORT, LOOPBACK, findFreePort, isAllowedUrl, isServiceRequest, probeFrame, serviceCommand,
+  DEFAULT_PORT, LOOPBACK, findFreePort, isAllowedUrl, isAllowedFullscreen, isServiceRequest, probeFrame, serviceCommand,
   serviceOrigin, waitForHealth, workspaceRoot,
 };

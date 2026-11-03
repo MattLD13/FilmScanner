@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
-  DEFAULT_PORT, findFreePort, isAllowedUrl, isServiceRequest, probeFrame, serviceCommand, serviceOrigin,
+  DEFAULT_PORT, findFreePort, isAllowedUrl, isAllowedFullscreen, isServiceRequest, probeFrame, serviceCommand, serviceOrigin,
   waitForHealth, workspaceRoot,
 } = require('./service');
 
@@ -76,8 +76,12 @@ function stopService() {
 }
 
 function harden(allowedOrigin) {
-  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  // Only FRAME's top-level local page may enter user-triggered fullscreen.
+  // Automatic fullscreen, devices, media and every other permission stay denied.
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) =>
+    callback(isAllowedFullscreen(permission, details.requestingUrl, contents.getURL(), allowedOrigin, details.isMainFrame)));
+  session.defaultSession.setPermissionCheckHandler((contents, permission, requestingOrigin, details) =>
+    isAllowedFullscreen(permission, details.requestingUrl || requestingOrigin, contents?.getURL(), allowedOrigin, details.isMainFrame));
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     callback({ cancel: !isServiceRequest(details.url, allowedOrigin) });
   });

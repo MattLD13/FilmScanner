@@ -5,7 +5,7 @@ const net = require('node:net');
 const path = require('node:path');
 const test = require('node:test');
 const {
-  findFreePort, isAllowedUrl, isServiceRequest, probeFrame, serviceCommand, serviceOrigin, waitForHealth, workspaceRoot,
+  findFreePort, isAllowedUrl, isAllowedFullscreen, isServiceRequest, probeFrame, serviceCommand, serviceOrigin, waitForHealth, workspaceRoot,
 } = require('../src/service');
 
 function serve(handler) {
@@ -22,6 +22,20 @@ test('only the service origin is navigable', () => {
     'file:///C:/Windows/', 'javascript:alert(1)', 'not a url']) {
     assert.equal(isAllowedUrl(url, origin), false, url);
   }
+});
+
+test('fullscreen is limited to FRAME main-frame user-triggered permission', () => {
+  const origin = serviceOrigin(8765), page = origin + '/?workspace=frame';
+  assert.equal(isAllowedFullscreen('fullscreen', page, page, origin, true), true);
+  for (const permission of ['automatic-fullscreen', 'camera', 'media', 'usb', 'serial', 'unknown']) {
+    assert.equal(isAllowedFullscreen(permission, page, page, origin, true), false);
+  }
+  for (const source of ['https://example.com', 'http://127.0.0.1:9999', 'file:///C:/', undefined]) {
+    assert.equal(isAllowedFullscreen('fullscreen', source, page, origin, true), false);
+    assert.equal(isAllowedFullscreen('fullscreen', page, source, origin, true), false);
+  }
+  assert.equal(isAllowedFullscreen('fullscreen', page, page, origin, false), false);
+  assert.equal(isAllowedFullscreen('fullscreen', page, page, origin, undefined), false);
 });
 
 test('window requests stay on the loopback service and never reach TLS hosts', () => {
