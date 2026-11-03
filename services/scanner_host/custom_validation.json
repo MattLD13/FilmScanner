@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "vid_pid": "2770:0119",
+  "evidence": "docs/custom-driver.md",
+  "operations": ["identify", "status_read_page0"],
+  "observations": [
+    {
+      "date": "2026-10-31",
+      "path": "Independent Python/Windows usbscan.sys; no vendor DLLs",
+      "descriptor_hex": "7027190100010000",
+      "status_page": 0,
+      "status_register": "8B",
+      "observed_status_hex": "3f",
+      "status_sequence": "WRITE_REGISTERS B0:9700; WRITE_REGISTERS B0:8b; READ_REGISTERS 07:1 byte",
+      "limits": "Existing initialized device state only. No independent cold initialization, calibration, motor control, exposure control, bulk image transfer or acquisition is verified."
+    }
+  ]
+}

@@ -17,6 +17,7 @@
     "cyberscan": "npm --prefix apps/desktop-shell start -- --cyberscan",
     "build:bridge": "powershell -NoProfile -ExecutionPolicy Bypass -File services/cyberview_bridge/build.ps1",
     "build:native": "powershell -NoProfile -ExecutionPolicy Bypass -File services/native_bridge/build.ps1",
+    "driver:console": "python -m services.scanner_host.custom_driver",
     "test:desktop": "npm --prefix apps/desktop-shell test",
     "smoke:desktop": "npm --prefix apps/desktop-shell run smoke"
   }
