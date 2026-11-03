@@ -91,6 +91,37 @@ def test_complete_develop_scan_edit_archive_restart(tmp_path):
         assert state['frames'][0]['sha256'] == original_hash
 
 
+def test_delete_roll_removes_records_and_original_files_but_blocks_active_development(tmp_path):
+    app = create_app(tmp_path)
+    with TestClient(app) as client:
+        login(client)
+        roll = new_roll(client)
+        session = client.post('/api/development', json={'roll_id': roll['id'], 'acknowledged': True, 'temperature': 20}).json()
+        blocked = client.delete(f"/api/rolls/{roll['id']}")
+        assert blocked.status_code == 409 and 'development session' in blocked.json()['detail']
+        assert client.post(f"/api/development/{session['id']}/abort").status_code == 200
+
+        ready(client, roll)
+        scan(client, roll, frame_count=2, speed='fast')
+        completed = wait_scan(client)
+        assert completed['scan']['status'] == 'complete'
+        frame = completed['frames'][0]
+        edited = client.post(f"/api/frames/{frame['id']}/edit", json={'exposure': .5, 'contrast': 1.2, 'rotation': 0, 'invert': True})
+        assert edited.status_code == 200
+        export = client.get(f"/api/frames/{frame['id']}/export?format=jpeg")
+        assert export.status_code == 200
+        roll_dir = tmp_path / roll['id']
+        assert roll_dir.exists() and (roll_dir / frame['original_path'].split('/', 1)[1]).is_file()
+
+        deleted = client.delete(f"/api/rolls/{roll['id']}")
+        assert deleted.status_code == 200, deleted.text
+        assert deleted.json()['deleted'] and deleted.json()['frames_deleted'] == 2
+        assert not roll_dir.exists()
+        state = client.get('/api/state').json()
+        assert not state['rolls'] and not state['frames'] and not state['scan']
+        assert not state['development']
+
+
 def test_jam17_recovery_preserves_first16(tmp_path):
     app = create_app(tmp_path)
     with TestClient(app) as client:

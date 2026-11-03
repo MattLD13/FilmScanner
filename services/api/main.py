@@ -8,6 +8,7 @@ import math
 import os
 from pathlib import Path
 import secrets
+import shutil
 import time
 import uuid
 
@@ -271,6 +272,56 @@ def create_app(data_dir=None):
         store.save('rolls', item)
         await publish({'type': 'roll_created', 'roll_id': item['id']})
         return item
+
+    @app.delete('/api/rolls/{roll_id}')
+    async def delete_roll(roll_id: str):
+        roll = get('rolls', roll_id)
+        if runtime['task'] and not runtime['task'].done() and runtime.get('scan_id'):
+            try:
+                active_scan = store.get('scans', runtime['scan_id'])
+            except KeyError:
+                active_scan = None
+            if active_scan and active_scan.get('roll_id') == roll_id:
+                raise HTTPException(409, 'Stop or recover the active scan before deleting this roll')
+        development = [item for item in store.all('development') if item.get('roll_id') == roll_id]
+        if any(item.get('status') not in ('completed', 'aborted') for item in development):
+            raise HTTPException(409, 'Complete or abort the development session before deleting this roll')
+        frames = [item for item in store.all('frames') if item.get('roll_id') == roll_id]
+        frame_ids = {item['id'] for item in frames}
+        scans = [item for item in store.all('scans') if item.get('roll_id') == roll_id]
+        exports = [item for item in store.all('exports') if item.get('frame_id') in frame_ids]
+        entities = ([('rolls', roll_id)] + [('frames', item['id']) for item in frames] +
+                    [('scans', item['id']) for item in scans] + [('development', item['id']) for item in development] +
+                    [('exports', item['id']) for item in exports])
+
+        # Move the roll's private file tree aside first, then remove its records in
+        # one SQLite transaction. If the database step fails, restore the directory.
+        roll_dir = store.path(roll_id)
+        if roll_dir.parent != store.root or roll_dir.name != roll['id']:
+            raise HTTPException(409, 'The roll storage path is not a safe direct child of the library')
+        staged = store.root / f'.delete-roll-{uuid.uuid4().hex}'
+        moved = False
+        if roll_dir.exists():
+            try:
+                os.replace(roll_dir, staged)
+                moved = True
+            except OSError as exc:
+                raise HTTPException(507, f'Roll files could not be staged for deletion: {exc}')
+        try:
+            store.delete_many(entities)
+        except Exception as exc:
+            if moved and staged.exists():
+                os.replace(staged, roll_dir)
+            raise HTTPException(500, f'Roll records could not be deleted: {exc}')
+        cleanup_pending = False
+        if moved:
+            try:
+                shutil.rmtree(staged)
+            except OSError:
+                cleanup_pending = True
+        await publish({'type': 'roll_deleted', 'roll_id': roll_id})
+        return {'deleted': True, 'roll_id': roll_id, 'frames_deleted': len(frames),
+                'cleanup_pending': cleanup_pending}
 
     @app.post('/api/rolls/{roll_id}/ready')
     async def ready(roll_id: str):

@@ -68,6 +68,12 @@ class Store:
                                 [(kind,item['id'],json.dumps(item)) for item in items])
         return items
 
+    def delete_many(self, entities):
+        """Delete a group of typed entities atomically by their stored IDs."""
+        with self._lock, self.db:
+            self.db.executemany('DELETE FROM entities WHERE kind=? AND id=?',
+                                [(kind, entity_id) for kind, entity_id in entities])
+
     def close(self):
         with self._lock:
             self.db.close()
